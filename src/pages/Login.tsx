@@ -1,42 +1,50 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { Shield, User, Lock, Sun } from "lucide-react";
+import { Sun, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"player" | "official">("player");
-  const [playerId, setPlayerId] = useState("");
-  const [username, setUsername] = useState("");
+  const [memberId, setMemberId] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handlePlayerLogin = () => {
-    setLoading(true);
-    setError("");
-    const result = login(playerId);
-    if (result.success) {
-      navigate("/dashboard");
-    } else {
-      setError(result.error || "Invalid Player ID");
-    }
-    setLoading(false);
-  };
+  // Detect if the ID is a player (contains P) or official
+  const isPlayer = useMemo(() => {
+    const afterDash = memberId.split("-")[1] || "";
+    return afterDash.toUpperCase().includes("P");
+  }, [memberId]);
 
-  const handleOfficialLogin = () => {
+  const isOfficialId = useMemo(() => {
+    const upper = memberId.toUpperCase();
+    if (!upper.startsWith("SCF-")) return false;
+    const afterDash = upper.split("-")[1] || "";
+    // Official IDs are like SCF-001, SCF-002 — no P
+    return afterDash.length > 0 && !afterDash.includes("P") && /^\d+$/.test(afterDash);
+  }, [memberId]);
+
+  const handleLogin = () => {
     setLoading(true);
     setError("");
-    const result = login(username, pin);
-    if (result.success) {
-      navigate("/dashboard");
+    if (isPlayer) {
+      const result = login(memberId);
+      if (result.success) {
+        navigate("/dashboard");
+      } else {
+        setError(result.error || "Invalid Player ID");
+      }
     } else {
-      setError(result.error || "Invalid credentials");
+      const result = login(memberId, pin);
+      if (result.success) {
+        navigate("/dashboard");
+      } else {
+        setError(result.error || "Invalid credentials");
+      }
     }
     setLoading(false);
   };
@@ -47,6 +55,7 @@ const Login = () => {
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full bg-primary/3 blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full navy-bg opacity-20 blur-3xl" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_0%,_hsl(var(--background))_70%)]" />
       </div>
 
@@ -76,72 +85,56 @@ const Login = () => {
 
         {/* Login Card */}
         <div className="bg-card border border-border rounded-xl p-6 card-glow">
-          <Tabs value={tab} onValueChange={(v) => { setTab(v as "player" | "official"); setError(""); }}>
-            <TabsList className="grid w-full grid-cols-2 bg-secondary mb-6">
-              <TabsTrigger value="player" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-body">
-                <User className="w-4 h-4 mr-2" />
-                Player
-              </TabsTrigger>
-              <TabsTrigger value="official" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-body">
-                <Shield className="w-4 h-4 mr-2" />
-                Official
-              </TabsTrigger>
-            </TabsList>
+          <h3 className="font-heading text-sm text-primary text-center mb-6 tracking-wider">MEMBER LOGIN</h3>
 
-            <TabsContent value="player" className="space-y-4">
-              <div>
-                <label className="text-sm text-muted-foreground font-body mb-1.5 block">Player ID</label>
-                <Input
-                  placeholder="e.g. SCF-P01"
-                  value={playerId}
-                  onChange={(e) => setPlayerId(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === "Enter" && handlePlayerLogin()}
-                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-body"
-                />
-              </div>
-              <Button
-                onClick={handlePlayerLogin}
-                disabled={!playerId || loading}
-                className="w-full font-body font-semibold text-base"
-              >
-                Enter Portal
-              </Button>
-            </TabsContent>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-muted-foreground font-body mb-1.5 block">Enter Your ID</label>
+              <Input
+                placeholder="e.g. SCF-P01 or SCF-001"
+                value={memberId}
+                onChange={(e) => { setMemberId(e.target.value.toUpperCase()); setError(""); setPin(""); }}
+                onKeyDown={(e) => e.key === "Enter" && isPlayer && handleLogin()}
+                className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-body"
+              />
+              <p className="text-xs text-muted-foreground mt-1 font-body">
+                {isPlayer ? "🟢 Player ID detected — no PIN needed" : isOfficialId ? "🔐 Official ID — enter PIN below" : "Type your member ID to continue"}
+              </p>
+            </div>
 
-            <TabsContent value="official" className="space-y-4">
-              <div>
-                <label className="text-sm text-muted-foreground font-body mb-1.5 block">Username</label>
-                <Input
-                  placeholder="e.g. COACH-FAB"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value.toUpperCase())}
-                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-body"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-muted-foreground font-body mb-1.5 block">4-Digit PIN</label>
-                <div className="relative">
-                  <Input
-                    type="password"
-                    placeholder="••••"
-                    maxLength={4}
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                    onKeyDown={(e) => e.key === "Enter" && handleOfficialLogin()}
-                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-body tracking-[0.5em] text-center"
-                  />
-                  <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                </div>
-              </div>
-              <Button
-                onClick={handleOfficialLogin}
-                disabled={!username || pin.length !== 4 || loading}
-                className="w-full font-body font-semibold text-base"
-              >
-                Access Dashboard
-              </Button>
-            </TabsContent>
-          </Tabs>
+            <AnimatePresence>
+              {isOfficialId && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <label className="text-sm text-muted-foreground font-body mb-1.5 block">4-Digit PIN</label>
+                  <div className="relative">
+                    <Input
+                      type="password"
+                      placeholder="••••"
+                      maxLength={4}
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                      onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                      className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-body tracking-[0.5em] text-center"
+                    />
+                    <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <Button
+              onClick={handleLogin}
+              disabled={!memberId || (isOfficialId && pin.length !== 4) || loading}
+              className="w-full font-body font-semibold text-base"
+            >
+              Enter Portal
+            </Button>
+          </div>
 
           {error && (
             <motion.p

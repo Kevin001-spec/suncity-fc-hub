@@ -1,37 +1,53 @@
-import { useState } from "react";
+import { useRef } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTeamData } from "@/contexts/TeamDataContext";
 import { Navigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Target, Footprints, Gamepad2, Upload, CheckCircle, Clock, XCircle, AlertTriangle } from "lucide-react";
-
-const months = [
-  { key: "dec-2025", label: "Dec 2025" },
-  { key: "jan-2026", label: "Jan 2026" },
-  { key: "feb-2026", label: "Feb 2026" },
-];
+import { Target, Footprints, Gamepad2, Upload, CheckCircle, Clock, AlertTriangle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { contributionMonths } from "@/data/team-data";
 
 const PlayerProfile = () => {
   const { user } = useAuth();
-  const [excuseRequested, setExcuseRequested] = useState(false);
-  const [contributions, setContributions] = useState<Record<string, string>>(
-    user?.contributions || {}
-  );
+  const { members, profilePics, requestContribution, setExcused, setProfilePic } = useTeamData();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!user) return <Navigate to="/" replace />;
 
-  const handlePayRequest = (monthKey: string) => {
-    setContributions((prev) => ({ ...prev, [monthKey]: "pending" }));
+  // Get live data from context
+  const liveMember = members.find((m) => m.id === user.id) || user;
+
+  const handlePayRequest = (monthKey: string, monthLabel: string) => {
+    requestContribution(user.id, user.name, monthKey, monthLabel);
+    toast({ title: "Request Sent", description: `Payment request for ${monthLabel} sent to Finance Officer.` });
+  };
+
+  const handleExcuse = () => {
+    setExcused(user.id, true);
+    toast({ title: "Excuse Submitted", description: "You are excused from the next game." });
+  };
+
+  const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProfilePic(user.id, reader.result as string);
+      toast({ title: "Profile Updated", description: "Your profile picture has been updated." });
+    };
+    reader.readAsDataURL(file);
   };
 
   const statCards = [
-    { icon: Target, label: "Goals", value: user.goals || 0 },
-    { icon: Footprints, label: "Assists", value: user.assists || 0 },
-    { icon: Gamepad2, label: "Games", value: user.gamesPlayed || 0 },
+    { icon: Target, label: "Goals", value: liveMember.goals || 0 },
+    { icon: Footprints, label: "Assists", value: liveMember.assists || 0 },
+    { icon: Gamepad2, label: "Games", value: liveMember.gamesPlayed || 0 },
   ];
 
   return (
@@ -39,20 +55,21 @@ const PlayerProfile = () => {
       <Navbar />
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         {/* Profile Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
           <div className="relative inline-block">
             <Avatar className="w-24 h-24 border-2 border-primary mx-auto">
+              {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} />}
               <AvatarFallback className="bg-secondary text-primary font-heading text-2xl">
                 {user.name.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <button className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-colors">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
               <Upload className="w-4 h-4" />
             </button>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
           </div>
           <h2 className="font-heading text-2xl text-foreground mt-4">{user.name}</h2>
           <div className="flex items-center justify-center gap-2 mt-1">
@@ -61,18 +78,13 @@ const PlayerProfile = () => {
               <Badge className="bg-primary text-primary-foreground font-body">Captain</Badge>
             )}
           </div>
-          {user.squadNumber && (
-            <p className="text-muted-foreground font-body text-sm mt-1">Squad #{user.squadNumber}</p>
+          {liveMember.squadNumber && (
+            <p className="text-muted-foreground font-body text-sm mt-1">Squad #{liveMember.squadNumber}</p>
           )}
         </motion.div>
 
         {/* Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-3 gap-4"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-3 gap-4">
           {statCards.map(({ icon: Icon, label, value }) => (
             <Card key={label} className="bg-card border-border card-glow text-center">
               <CardContent className="pt-6 pb-4">
@@ -85,18 +97,14 @@ const PlayerProfile = () => {
         </motion.div>
 
         {/* Monthly Contributions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <Card className="bg-card border-border card-glow">
             <CardHeader>
               <CardTitle className="font-heading text-lg text-foreground">Monthly Contributions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {months.map(({ key, label }) => {
-                const status = contributions[key] || "unpaid";
+              {contributionMonths.map(({ key, label }) => {
+                const status = liveMember.contributions[key] || "unpaid";
                 return (
                   <div key={key} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                     <span className="font-body text-foreground">{label}</span>
@@ -115,7 +123,7 @@ const PlayerProfile = () => {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => handlePayRequest(key)}
+                          onClick={() => handlePayRequest(key, label)}
                           className="font-body text-xs border-primary/30 text-primary hover:bg-primary/10"
                         >
                           Mark as Paid
@@ -130,11 +138,7 @@ const PlayerProfile = () => {
         </motion.div>
 
         {/* Excuse Request */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
           <Card className="bg-card border-border card-glow">
             <CardHeader>
               <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
@@ -143,14 +147,14 @@ const PlayerProfile = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {excuseRequested ? (
+              {liveMember.excused ? (
                 <div className="flex items-center gap-2 text-primary font-body">
                   <CheckCircle className="w-4 h-4" />
                   You are excused from the next game
                 </div>
               ) : (
                 <Button
-                  onClick={() => setExcuseRequested(true)}
+                  onClick={handleExcuse}
                   variant="outline"
                   className="font-body border-primary/30 text-primary hover:bg-primary/10"
                 >

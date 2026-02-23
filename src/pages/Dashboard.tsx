@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTeamData } from "@/contexts/TeamDataContext";
 import { Navigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
-import { Sun, Trophy, Calendar, Users, BookOpen, ChevronRight } from "lucide-react";
+import {
+  Sun, Trophy, Calendar, Users, BookOpen, ChevronRight, Download,
+  Flame, Shield, Star, Heart, Swords, Handshake,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  allMembers, initialGameScores, initialCalendarEvents, teamBackground,
-  type TeamMember, type GameScore,
-} from "@/data/team-data";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { type TeamMember, type GameScore, teamBackground } from "@/data/team-data";
+import useEmblaCarousel from "embla-carousel-react";
 
 const fadeUp = {
   initial: { opacity: 0, y: 20 },
@@ -19,7 +22,7 @@ const fadeUp = {
 };
 
 // Player Card Modal
-const PlayerCard = ({ member, onClose }: { member: TeamMember; onClose: () => void }) => (
+const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profilePic?: string; onClose: () => void }) => (
   <motion.div
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
@@ -35,6 +38,7 @@ const PlayerCard = ({ member, onClose }: { member: TeamMember; onClose: () => vo
     >
       <div className="text-center">
         <Avatar className="w-20 h-20 mx-auto mb-4 border-2 border-primary">
+          {profilePic && <AvatarImage src={profilePic} />}
           <AvatarFallback className="bg-secondary text-primary font-heading text-xl">
             {member.name.slice(0, 2).toUpperCase()}
           </AvatarFallback>
@@ -46,9 +50,6 @@ const PlayerCard = ({ member, onClose }: { member: TeamMember; onClose: () => vo
         </Badge>
         {member.squadNumber && (
           <p className="text-muted-foreground font-body text-sm mt-2">Squad #{member.squadNumber}</p>
-        )}
-        {member.position && (
-          <p className="text-muted-foreground font-body text-sm">{member.position}</p>
         )}
         <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-border">
           <div>
@@ -69,7 +70,6 @@ const PlayerCard = ({ member, onClose }: { member: TeamMember; onClose: () => vo
   </motion.div>
 );
 
-// Score Card
 const ScoreCard = ({ game }: { game: GameScore }) => (
   <div className="flex items-center justify-between py-3 border-b border-border last:border-0">
     <div className="font-body">
@@ -96,8 +96,133 @@ const ScoreCard = ({ game }: { game: GameScore }) => (
   </div>
 );
 
+// Story section icons
+const storyIcons: Record<string, typeof Flame> = {
+  origin: Flame,
+  struggle: Shield,
+  coachImpact: Star,
+  acknowledgements: Heart,
+  values: Swords,
+  contributions: Handshake,
+};
+
+const storyTitles: Record<string, string> = {
+  origin: "THE BEGINNING",
+  struggle: "THE STRUGGLE",
+  coachImpact: "COACH FABIAN'S IMPACT",
+  acknowledgements: "ACKNOWLEDGEMENTS",
+  values: "OUR VALUES",
+  contributions: "COMMITMENT",
+};
+
+const storyAccents: Record<string, string> = {
+  origin: "border-l-primary",
+  struggle: "border-l-destructive",
+  coachImpact: "border-l-green-500",
+  acknowledgements: "border-l-pink-500",
+  values: "navy-border border-l-[hsl(220,60%,40%)]",
+  contributions: "border-l-primary",
+};
+
+// Creative story section with highlighted quotes
+const StorySection = ({ sectionKey, text }: { sectionKey: string; text: string }) => {
+  const Icon = storyIcons[sectionKey] || BookOpen;
+  const title = storyTitles[sectionKey] || sectionKey;
+  const accent = storyAccents[sectionKey] || "border-l-primary";
+
+  // Split text into sentences for better readability
+  const sentences = text.split(". ").filter(Boolean);
+  const highlightIdx = Math.floor(sentences.length / 2);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      whileInView={{ opacity: 1, x: 0 }}
+      viewport={{ once: true }}
+      className={`border-l-4 ${accent} pl-4 py-3 rounded-r-lg navy-accent`}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+          <Icon className="w-4 h-4 text-primary" />
+        </div>
+        <h4 className="font-heading text-xs text-primary tracking-wider">{title}</h4>
+      </div>
+      <div className="space-y-2 font-body text-sm text-secondary-foreground leading-relaxed">
+        {sentences.map((sentence, i) => {
+          const s = sentence.endsWith(".") ? sentence : sentence + ".";
+          if (i === highlightIdx) {
+            return (
+              <p key={i} className="text-foreground font-medium italic border-l-2 border-primary/30 pl-3 my-3">
+                "{s.trim()}"
+              </p>
+            );
+          }
+          return <p key={i}>{s.trim()}</p>;
+        })}
+      </div>
+    </motion.div>
+  );
+};
+
+// Media Gallery with swipe
+const MediaGallery = () => {
+  const { mediaItems } = useTeamData();
+  const [emblaRef] = useEmblaCarousel({ loop: true, align: "start" });
+
+  if (mediaItems.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-40 rounded-lg border border-dashed border-border text-muted-foreground font-body text-sm">
+        No media uploaded yet — Officials can upload from their profile
+      </div>
+    );
+  }
+
+  // Group by date
+  const grouped = mediaItems.reduce((acc, item) => {
+    const dateKey = item.date.split("T")[0];
+    if (!acc[dateKey]) acc[dateKey] = [];
+    acc[dateKey].push(item);
+    return acc;
+  }, {} as Record<string, typeof mediaItems>);
+
+  return (
+    <div className="space-y-4">
+      {Object.entries(grouped).map(([date, items]) => (
+        <div key={date}>
+          <p className="text-xs text-muted-foreground font-body mb-2">
+            📅 {new Date(date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          </p>
+          <div className="overflow-hidden" ref={emblaRef}>
+            <div className="flex gap-3">
+              {items.map((item) => (
+                <div key={item.id} className="flex-[0_0_200px] min-w-0">
+                  <div className="relative group">
+                    <img
+                      src={item.url}
+                      alt={item.caption || "Team photo"}
+                      className="w-full h-40 object-cover rounded-lg border border-border"
+                    />
+                    <a
+                      href={item.url}
+                      download
+                      className="absolute inset-0 flex items-center justify-center bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
+                    >
+                      <Download className="w-6 h-6 text-primary" />
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const { user } = useAuth();
+  const { members, gameScores, calendarEvents, profilePics } = useTeamData();
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
 
   if (!user) return <Navigate to="/" replace />;
@@ -131,9 +256,11 @@ const Dashboard = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {initialGameScores.map((game) => (
-                  <ScoreCard key={game.id} game={game} />
-                ))}
+                {gameScores.length === 0 ? (
+                  <p className="text-muted-foreground text-sm font-body">No results yet</p>
+                ) : (
+                  gameScores.slice(0, 5).map((game) => <ScoreCard key={game.id} game={game} />)
+                )}
               </CardContent>
             </Card>
           </motion.div>
@@ -147,36 +274,38 @@ const Dashboard = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {initialCalendarEvents.map((event) => (
-                  <div key={event.id} className="flex items-start gap-3 py-2 border-b border-border last:border-0">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <span className="text-primary font-heading text-xs">
-                        {new Date(event.date).getDate()}
-                      </span>
+                {calendarEvents.length === 0 ? (
+                  <p className="text-muted-foreground text-sm font-body">No events scheduled</p>
+                ) : (
+                  calendarEvents.slice(0, 5).map((event) => (
+                    <div key={event.id} className="flex items-start gap-3 py-2 border-b border-border last:border-0">
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-primary font-heading text-xs">
+                          {new Date(event.date).getDate()}
+                        </span>
+                      </div>
+                      <div className="font-body">
+                        <p className="text-foreground font-medium text-sm">{event.title}</p>
+                        <p className="text-xs text-muted-foreground">{event.description}</p>
+                      </div>
                     </div>
-                    <div className="font-body">
-                      <p className="text-foreground font-medium text-sm">{event.title}</p>
-                      <p className="text-xs text-muted-foreground">{event.description}</p>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </CardContent>
             </Card>
           </motion.div>
         </div>
 
-        {/* Media Carousel Placeholder */}
+        {/* Media Gallery */}
         <motion.div {...fadeUp} transition={{ delay: 0.3 }}>
           <Card className="bg-card border-border card-glow">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-foreground font-heading text-lg">
-                📸 Today's Media
+                📸 Team Gallery
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-center h-40 rounded-lg border border-dashed border-border text-muted-foreground font-body text-sm">
-                No media uploaded today — Officials can upload from their profile
-              </div>
+              <MediaGallery />
             </CardContent>
           </Card>
         </motion.div>
@@ -192,13 +321,14 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {allMembers.map((member) => (
+                {members.map((member) => (
                   <button
                     key={member.id}
                     onClick={() => setSelectedMember(member)}
                     className="flex items-center gap-2 p-2.5 rounded-lg bg-secondary/50 hover:bg-secondary border border-transparent hover:border-primary/20 transition-all group text-left"
                   >
                     <Avatar className="w-8 h-8 border border-border group-hover:border-primary/30 transition-colors">
+                      {profilePics[member.id] && <AvatarImage src={profilePics[member.id]} />}
                       <AvatarFallback className="bg-muted text-primary font-heading text-xs">
                         {member.name.slice(0, 2).toUpperCase()}
                       </AvatarFallback>
@@ -215,48 +345,31 @@ const Dashboard = () => {
           </Card>
         </motion.div>
 
-        {/* Team Background */}
+        {/* Our Story — Creative Redesign */}
         <motion.div {...fadeUp} transition={{ delay: 0.5 }}>
-          <Card className="bg-card border-border card-glow">
-            <CardHeader className="pb-3">
+          <Card className="bg-card border-border card-glow overflow-hidden">
+            <CardHeader className="pb-3 border-b border-border">
               <CardTitle className="flex items-center gap-2 text-foreground font-heading text-lg">
                 <BookOpen className="w-5 h-5 text-primary" />
                 Our Story
               </CardTitle>
+              <p className="text-xs text-muted-foreground font-body mt-1">The journey of Sun City FC — from dusty fields to league glory</p>
             </CardHeader>
-            <CardContent className="space-y-6 font-body text-secondary-foreground leading-relaxed">
-              <div>
-                <h4 className="font-heading text-sm text-primary mb-2 tracking-wider">THE BEGINNING</h4>
-                <p className="text-sm">{teamBackground.origin}</p>
-              </div>
-              <div>
-                <h4 className="font-heading text-sm text-primary mb-2 tracking-wider">THE STRUGGLE</h4>
-                <p className="text-sm">{teamBackground.struggle}</p>
-              </div>
-              <div>
-                <h4 className="font-heading text-sm text-primary mb-2 tracking-wider">COACH FABIAN'S IMPACT</h4>
-                <p className="text-sm">{teamBackground.coachImpact}</p>
-              </div>
-              <div>
-                <h4 className="font-heading text-sm text-primary mb-2 tracking-wider">ACKNOWLEDGEMENTS</h4>
-                <p className="text-sm">{teamBackground.acknowledgements}</p>
-              </div>
-              <div>
-                <h4 className="font-heading text-sm text-primary mb-2 tracking-wider">OUR VALUES</h4>
-                <p className="text-sm">{teamBackground.values}</p>
-              </div>
-              <div>
-                <h4 className="font-heading text-sm text-primary mb-2 tracking-wider">COMMITMENT</h4>
-                <p className="text-sm">{teamBackground.contributions}</p>
-              </div>
+            <CardContent className="space-y-6 pt-6">
+              {Object.entries(teamBackground).map(([key, text]) => (
+                <StorySection key={key} sectionKey={key} text={text} />
+              ))}
             </CardContent>
           </Card>
         </motion.div>
       </main>
 
-      {/* Player Card Modal */}
       {selectedMember && (
-        <PlayerCard member={selectedMember} onClose={() => setSelectedMember(null)} />
+        <PlayerCard
+          member={selectedMember}
+          profilePic={profilePics[selectedMember.id]}
+          onClose={() => setSelectedMember(null)}
+        />
       )}
     </div>
   );
