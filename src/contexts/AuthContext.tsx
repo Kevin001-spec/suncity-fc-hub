@@ -23,7 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("suncity_user", JSON.stringify(member));
       return { success: true };
     }
-    return { success: false, error: "Invalid credentials. Check your ID or Username/PIN." };
+    return { success: false, error: "Invalid credentials. Check your ID or PIN." };
   }, []);
 
   const logout = useCallback(() => {

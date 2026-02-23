@@ -19,15 +19,11 @@ const Navbar = () => {
   const links = [
     { path: "/dashboard", label: "Dashboard", icon: Home },
     { path: "/profile", label: "My Profile", icon: User },
+    { path: "/stats", label: "Stats", icon: BarChart3 },
   ];
 
-  // Officials get stats access
-  if (user.role !== "player") {
-    links.push({ path: "/stats", label: "Stats", icon: BarChart3 });
-  }
-
   return (
-    <nav className="sticky top-0 z-50 bg-card/80 backdrop-blur-xl border-b border-border">
+    <nav className="sticky top-0 z-50 backdrop-blur-xl border-b border-border" style={{ backgroundColor: "hsl(220 70% 12% / 0.85)" }}>
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
         <div className="flex items-center gap-3">
           <Sun className="w-6 h-6 text-primary" />

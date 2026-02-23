@@ -41,6 +41,10 @@
     --gold-dark: 40 80% 30%;
     --gold-glow: 45 100% 55%;
 
+    --navy: 220 60% 20%;
+    --navy-light: 220 50% 30%;
+    --navy-dark: 220 70% 12%;
+
     --sidebar-background: 40 8% 9%;
     --sidebar-foreground: 43 90% 75%;
     --sidebar-primary: 45 93% 47%;
@@ -89,5 +93,21 @@
 
   .text-shadow-gold {
     text-shadow: 0 0 20px hsl(45 93% 47% / 0.5);
+  }
+
+  .navy-gradient {
+    background: linear-gradient(135deg, hsl(220 60% 20%), hsl(220 50% 30%));
+  }
+
+  .navy-border {
+    border-color: hsl(220 60% 20%);
+  }
+
+  .navy-bg {
+    background-color: hsl(220 60% 20%);
+  }
+
+  .navy-accent {
+    background-color: hsl(220 70% 12% / 0.5);
   }
 }
