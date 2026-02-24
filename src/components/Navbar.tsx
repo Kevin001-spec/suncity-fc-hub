@@ -1,8 +1,9 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Sun, LogOut, Home, User, BarChart3 } from "lucide-react";
+import { LogOut, Home, User, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import suncityBadge from "@/assets/suncity-badge.png";
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -26,7 +27,7 @@ const Navbar = () => {
     <nav className="sticky top-0 z-50 backdrop-blur-xl border-b border-border" style={{ backgroundColor: "hsl(220 70% 12% / 0.85)" }}>
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
         <div className="flex items-center gap-3">
-          <Sun className="w-6 h-6 text-primary" />
+          <img src={suncityBadge} alt="Suncity FC" className="w-8 h-8 object-contain" />
           <span className="font-heading text-sm font-bold gold-text hidden sm:block">SUNCITY FC</span>
         </div>
 

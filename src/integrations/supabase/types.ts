@@ -14,7 +14,379 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      attendance: {
+        Row: {
+          created_at: string
+          day: string
+          id: string
+          player_id: string
+          status: string
+          updated_by: string | null
+          week_start: string
+        }
+        Insert: {
+          created_at?: string
+          day: string
+          id?: string
+          player_id: string
+          status?: string
+          updated_by?: string | null
+          week_start: string
+        }
+        Update: {
+          created_at?: string
+          day?: string
+          id?: string
+          player_id?: string
+          status?: string
+          updated_by?: string | null
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_events: {
+        Row: {
+          created_at: string
+          date: string
+          description: string | null
+          id: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          description?: string | null
+          id?: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          description?: string | null
+          id?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      contributions: {
+        Row: {
+          id: string
+          member_id: string
+          month_key: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          member_id: string
+          month_key: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          member_id?: string
+          month_key?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contributions_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          date: string
+          description: string
+          id: string
+          record_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          date: string
+          description: string
+          id?: string
+          record_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date?: string
+          description?: string
+          id?: string
+          record_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_expenses_record_id_fkey"
+            columns: ["record_id"]
+            isOneToOne: false
+            referencedRelation: "financial_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_records: {
+        Row: {
+          closing_balance: number
+          contributions: number
+          contributor_note: string | null
+          contributors: number
+          created_at: string
+          id: string
+          month: string
+          opening_balance: number
+        }
+        Insert: {
+          closing_balance?: number
+          contributions?: number
+          contributor_note?: string | null
+          contributors?: number
+          created_at?: string
+          id?: string
+          month: string
+          opening_balance?: number
+        }
+        Update: {
+          closing_balance?: number
+          contributions?: number
+          contributor_note?: string | null
+          contributors?: number
+          created_at?: string
+          id?: string
+          month?: string
+          opening_balance?: number
+        }
+        Relationships: []
+      }
+      game_scorers: {
+        Row: {
+          game_id: string
+          id: string
+          player_id: string
+        }
+        Insert: {
+          game_id: string
+          id?: string
+          player_id: string
+        }
+        Update: {
+          game_id?: string
+          id?: string
+          player_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_scorers_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "game_scores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_scorers_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_scores: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          opponent: string
+          our_score: number
+          their_score: number
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          opponent: string
+          our_score?: number
+          their_score?: number
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          opponent?: string
+          our_score?: number
+          their_score?: number
+        }
+        Relationships: []
+      }
+      lineup_positions: {
+        Row: {
+          id: string
+          label: string
+          player_id: string | null
+          position_id: string
+        }
+        Insert: {
+          id?: string
+          label: string
+          player_id?: string | null
+          position_id: string
+        }
+        Update: {
+          id?: string
+          label?: string
+          player_id?: string | null
+          position_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lineup_positions_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      media_items: {
+        Row: {
+          caption: string | null
+          created_at: string
+          date: string
+          id: string
+          uploaded_by: string
+          url: string
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          date: string
+          id?: string
+          uploaded_by: string
+          url: string
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          uploaded_by?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      members: {
+        Row: {
+          assists: number
+          created_at: string
+          excused: boolean
+          excused_days: string[] | null
+          excused_type: string | null
+          games_played: number
+          goals: number
+          id: string
+          name: string
+          phone: string | null
+          pin: string | null
+          position: string | null
+          profile_pic_url: string | null
+          role: string
+          squad_number: number | null
+          username: string | null
+        }
+        Insert: {
+          assists?: number
+          created_at?: string
+          excused?: boolean
+          excused_days?: string[] | null
+          excused_type?: string | null
+          games_played?: number
+          goals?: number
+          id: string
+          name: string
+          phone?: string | null
+          pin?: string | null
+          position?: string | null
+          profile_pic_url?: string | null
+          role?: string
+          squad_number?: number | null
+          username?: string | null
+        }
+        Update: {
+          assists?: number
+          created_at?: string
+          excused?: boolean
+          excused_days?: string[] | null
+          excused_type?: string | null
+          games_played?: number
+          goals?: number
+          id?: string
+          name?: string
+          phone?: string | null
+          pin?: string | null
+          position?: string | null
+          profile_pic_url?: string | null
+          role?: string
+          squad_number?: number | null
+          username?: string | null
+        }
+        Relationships: []
+      }
+      pending_approvals: {
+        Row: {
+          id: string
+          month_key: string
+          month_label: string
+          player_id: string
+          player_name: string
+          rejection_note: string | null
+          requested_at: string
+        }
+        Insert: {
+          id?: string
+          month_key: string
+          month_label: string
+          player_id: string
+          player_name: string
+          rejection_note?: string | null
+          requested_at?: string
+        }
+        Update: {
+          id?: string
+          month_key?: string
+          month_label?: string
+          player_id?: string
+          player_name?: string
+          rejection_note?: string | null
+          requested_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_approvals_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
