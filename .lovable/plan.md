@@ -1,192 +1,298 @@
 
 
-# Suncity FC System — Major Update Plan
+# Suncity FC — Comprehensive System Overhaul
 
-This is a large update covering login redesign, bug fixes, state management, UI improvements, financial detail, gallery, stats, theme changes, 3D lineup builder, and more.
-
----
-
-## 1. Login Page Redesign — Single Smart Input (No Tabs)
-
-Remove the Player/Official tabs entirely. Replace with a single "Enter Your ID" input field.
-
-- When user types an ID containing "P" (like SCF-P01), the system knows it's a player — no PIN field appears, login proceeds with ID only.
-- When user types an official ID (like SCF-001) with a number after the dash (no "P"), a PIN input field smoothly appears below.
-- Officials log in with their official ID (SCF-001, SCF-002, etc.) + PIN — not their username anymore.
-- The `authenticateMember` function will be updated to support official login by official ID + PIN.
+This plan addresses every item raised, organized by priority. The single most critical fix is **data persistence** — currently all data lives in React state and vanishes on page refresh. Everything else builds on top of that foundation.
 
 ---
 
-## 2. Fix Stats Page 404
+## CRITICAL FIX: Data Persistence via Supabase
 
-The Navbar links to `/stats` but no route exists in App.tsx. A new Stats page will be created and the route added. This page will show:
-- All players grouped by position (if set) with goals, assists, games played.
-- Monthly contribution status grid (Dec 2025 - May 2026) for every member.
-- Financial summary (visible to everyone — not deep finance, just the overview).
-- Export button for officials to download a .txt file of contribution statuses.
+**The root cause of data vanishing on refresh**: All scores, events, media, contributions, profile pics, and stats are stored in React `useState` — which resets when the page reloads. This must be migrated to Supabase tables.
 
----
+### Database Tables to Create
 
-## 3. Shared Global State — Fix "Updates Don't Reflect" Issue
+```text
+members           — id, name, role, username, pin, phone, squad_number, position, goals, assists, games_played, excused, excused_type, excused_days, profile_pic_url, created_at
+contributions     — id, member_id, month_key, status (paid/pending/unpaid/rejected), updated_at
+pending_approvals — id, player_id, player_name, month_key, month_label, requested_at, rejection_note
+financial_records — id, month, contributors, contributor_note, opening_balance, contributions, closing_balance
+financial_expenses — id, record_id, description, amount, date
+game_scores       — id, date, opponent, our_score, their_score, created_at
+game_scorers      — id, game_id, player_id (tracks who scored in each game)
+calendar_events   — id, date, title, description, created_at
+media_items       — id, url, caption, date, uploaded_by, created_at
+lineup_positions  — id, position_id, player_id, label
+attendance        — id, week_start, day, player_id, status (present/absent/excused/no_activity), updated_by
+```
 
-Currently all data (scores, events, contributions, finances) lives in isolated `useState` within each page. Changes made by officials on their profile don't show on the dashboard.
+### Supabase Storage Buckets
 
-**Solution**: Create a central `TeamDataContext` (React Context) that holds:
-- Game scores, calendar events, media items, financial records, player stats, contribution statuses, pending approvals, and lineup data.
-- All pages read from and write to this single source of truth.
-- Updates by officials immediately reflect everywhere (dashboard, profiles, stats).
+- `team-assets/player-profiles` — for profile pictures
+- `team-assets/team-media` — for gallery photos
 
----
+### RLS Policies
 
-## 4. Fix Approval/Reject Buttons
+- All tables readable by authenticated users (anon key with member validation via edge function)
+- Write policies restricted by role for each table
+- Since we're using custom auth (not Supabase Auth), we'll use an edge function to validate member identity and return data, or use public tables with application-level role checks
 
-Currently the approval buttons in OfficialProfile are static — they don't update any state. With the new `TeamDataContext`:
-- When a player clicks "Mark as Paid" on their profile, it creates a pending approval entry in the shared context.
-- When Fadhir or Coach clicks "Accept", the player's contribution status changes from "pending" to "paid" globally.
-- When they click "Reject", it reverts to "unpaid".
-- The approval entry is removed from the pending list.
+### Data Seeding
 
----
-
-## 5. Financial Overview — Detailed Monthly Breakdown
-
-Redesign the financial overview to match the PDF provided. Each month gets its own detailed card showing:
-- Month name, number of contributors, contributor note
-- Opening balance
-- Contributions received
-- Itemized expenses with dates (e.g., "Feb 15 — Field painting: KSh 200")
-- Total expenses
-- Closing balance
-- The Feb 2026 closing balance will be corrected to **-2,100** (4,800 - 6,900) based on the PDF data showing 750 — will use the PDF figure of **750** as the actual closing.
-
-The summary remarks from the PDF will also be included.
+All 39+ members, the Dec–Feb financial records, and contribution statuses will be seeded into the database via SQL INSERT statements.
 
 ---
 
-## 6. Rename "God" to "Brian(d)"
+## 1. New Members & Name Changes
 
-Simple data change in `team-data.ts` for player SCF-P16.
+**Add**: Kelly (SCF-P32), Edu (SCF-P33), Rodgers (SCF-P34)
+**Rename**: Travis → Mannasseh (SCF-P24)
+**Existing**: Brian(d) stays as-is (already done)
 
----
-
-## 7. Reset All Player Stats to 0
-
-Set goals, assists, and gamesPlayed to 0 for ALL players in the initial data. The Manager will update these in real time via a new stats management panel on their profile.
+Update `team-data.ts` and seed into the `members` table.
 
 ---
 
-## 8. Manager Stats Update Panel
+## 2. Contribution Status Corrections
 
-Add a section to the Manager's (and Coach's) profile where they can:
-- See a list of all players
-- Enter/update goals, assists, and games played for each player
-- Changes save to the shared context and reflect everywhere immediately
+Update the following contribution statuses (arrange by highest paid to lowest, officials on top):
 
----
+| Player | Ticks (from Dec onward) |
+|--------|------------------------|
+| Bronze | 3 (Dec, Jan, Feb) |
+| Darren | 3 |
+| Wakili | 3 |
+| Olise | 3 |
+| Mugi J.r | 3 |
+| Collo | 2 (Dec, Jan) |
+| Denoh | 2 |
+| Fad | 2 |
+| Sam | 2 |
+| Amos | 2 |
+| Kibe | 2 |
+| Davie | 2 |
+| Francis | 1 (Dec) |
+| Kanja | 1 |
+| Morgan | 1 |
+| Brian | 1 |
+| Joshua | 1 |
+| Krish | Feb only (remove Dec tick, place in Feb) |
 
-## 9. Profile Picture Upload (Working File Picker)
-
-For both players and officials:
-- The upload button will trigger a proper file input that opens the device file picker.
-- Selected images are converted to base64 data URLs and stored in the shared context.
-- Profile pictures appear on the member's profile, in the team roster on the dashboard, and in player cards.
-- Default avatar icons (generated initials) remain as fallback.
-
----
-
-## 10. Media Gallery — Swipeable with Date Grouping
-
-Replace the placeholder gallery section with a real swipeable carousel:
-- Officials upload photos via file picker (multiple files supported).
-- Photos are grouped by upload date with clear date headers.
-- Users can swipe left/right to browse photos seamlessly.
-- Built using the already-installed `embla-carousel-react` library.
-- Any player can view and download photos.
-
----
-
-## 11. Monthly Contribution Status Section (Visible to All)
-
-Add a section (accessible from Stats page or a dedicated area) showing:
-- A grid of all members vs months (Dec 2025 - May 2026)
-- Each cell shows a tick emoji, dash, or pending icon
-- Financial summary below with opening/closing balances per month
-- Not on the main dashboard but easily navigable
+All others not listed: only Dec tick or none as currently set.
 
 ---
 
-## 12. "Our Story" Section — Creative Redesign
+## 3. Contribution Approval → Financial Summary Auto-Update
 
-Keep the exact same text but organize it creatively:
-- Break long paragraphs into shorter, highlighted segments
-- Add relevant icons (flame for origin, shield for struggle, star for coach, heart for acknowledgements, sword for values, handshake for commitment)
-- Use colored accent borders/highlights on each section
-- Add subtle navy blue accent dividers
-- Make it visually engaging with card-style sections, quotes pulled out, and key phrases highlighted in gold
+When Fadhir approves a contribution:
+1. Player's month gets ticked (already works in context)
+2. The `financialRecords` for that month gets its `contributions` field incremented by **KSh 100** (the monthly contribution amount)
+3. The `contributors` count for that month increments by 1
+4. The `closingBalance` recalculates automatically
+5. All of this persists in the database
 
----
-
-## 13. Export Monthly Contributions Button
-
-On the Stats page (officials only):
-- "Export Contributions" button
-- Generates and downloads a .txt file with clean formatting:
-  ```
-  SUNCITY FC — Monthly Contribution Status
-  =========================================
-  Player Name      | Dec 2025 | Jan 2026 | Feb 2026 | ...
-  Blaise           |    ✅     |    ✅     |    —     |
-  Bronze           |    ✅     |    —     |    —     |
-  ...
-  ```
+When rejected: player is notified with a toast/status showing "Rejected" — no financial update.
 
 ---
 
-## 14. Add Navy Blue to Theme
+## 4. Fadhir's Contribution Checkbox System
 
-Add navy blue as a secondary accent alongside the gold/black:
-- New CSS variable `--navy` added
-- Used for subtle backgrounds, dividers, card accents, and the Navbar
-- Creates a richer, more premium feel while keeping gold as the primary accent
-
----
-
-## 15. 3D Lineup Builder for Coach
-
-Create an interactive football pitch component on the Coach's profile:
-- A top-down 2D/3D-styled football field using CSS/SVG (realistic look with perspective transform for 3D feel)
-- 11 position markers on the field in a standard formation
-- Coach can click any position to open a player selector dropdown
-- Selected player's name and number appear at that position
-- Players can be swapped or removed
-- Built with CSS transforms for the 3D perspective effect and framer-motion for interactions
+Add a dedicated section on Fadhir's (and Coach's) profile:
+- A grid/table of ALL players × months (Dec–May)
+- Each cell is a checkbox
+- Checking = marks that player as "paid" for that month (updates DB + context)
+- Unchecking = marks as "unpaid"
+- Changes propagate in real-time to the player's profile and the stats page
+- This is independent of the approval workflow — Fadhir can directly manage status
 
 ---
 
-## 16. Bug Sweep and Error Prevention
+## 5. Officials Get Monthly Contribution Section
 
-- Fix all buttons that are clickable but non-functional
-- Ensure all form submissions properly validate and update shared state
-- Add proper error handling and user feedback (toast notifications) for all actions
-- Verify all routes work and navigation is consistent
-- Ensure file upload inputs are properly wired to onChange handlers
+All officials **except Fabian** will see the same monthly contribution tracker on their profile that players see — with the ability to press "Paid" and send approval to Fadhir.
+
+Fabian is **exempt** from the monthly contribution list entirely.
 
 ---
 
-## Technical Summary
+## 6. Clear Dashboard of Pre-loaded Data
 
-| Area | Files Changed/Created |
-|------|----------------------|
-| Login | `src/pages/Login.tsx` — rewrite to single smart input |
-| Data | `src/data/team-data.ts` — rename God, reset stats, fix finance data |
-| State | `src/contexts/TeamDataContext.tsx` — new shared state context |
-| Auth | `src/contexts/AuthContext.tsx` — update for official ID login |
-| Routes | `src/App.tsx` — add /stats route, wrap with TeamDataProvider |
-| Stats Page | `src/pages/Stats.tsx` — new page with contribution grid + export |
-| Dashboard | `src/pages/Dashboard.tsx` — use shared context, improved gallery + Our Story |
-| Player Profile | `src/pages/PlayerProfile.tsx` — working upload, shared contributions |
-| Official Profile | `src/pages/OfficialProfile.tsx` — working approvals, stats editor, file uploads |
-| Navbar | `src/components/Navbar.tsx` — minor fixes |
-| 3D Lineup | `src/components/LineupBuilder.tsx` — new component for coach |
-| Theme | `src/index.css` — add navy blue variables and accents |
+- Remove all sample game scores from `initialGameScores` (empty array)
+- Remove all sample calendar events from `initialCalendarEvents` (empty array)
+- Dashboard starts clean — officials add fresh data
+
+---
+
+## 7. Dashboard Rules
+
+**Recent Results**: Maximum 3 on dashboard, newest at top, oldest at bottom. When a 4th is added, the oldest drops off the dashboard (but stays in the Stats page permanently).
+
+**Upcoming Events**: Maximum 3 on dashboard. Events whose date has passed automatically disappear. Fix the glitch where events vanish prematurely — ensure date comparison uses end-of-day, not start-of-day.
+
+**Team Roster label**: Change "Team Roster" → "Team Members"
+
+---
+
+## 8. Stats Page Updates
+
+**Player Performance table**: Exclude Fabian (coach) and Kevin (manager) — they don't play.
+
+**Game History section (NEW)**: All recorded games appear permanently on the stats page in a scrollable list, newest on top. Each game entry shows:
+- Date, opponent, score, result badge
+- Goal scorers listed below (e.g., "Blaise ⚽, Olise ⚽")
+
+**Remove remarks** at the bottom of the stats page.
+
+**Export as .docx** (replace .txt): Use the `docx` npm library to generate a professional branded document with:
+- Suncity FC badge at the top
+- Formatted contribution grid
+- Professional styling
+
+---
+
+## 9. Game Score Entry — Goal Scorers
+
+When officials add a game score, add a section to select which players scored:
+- If "Our Score" is 2, show 2 player selector dropdowns
+- Each dropdown lists all players
+- The scorers are saved and displayed on both the dashboard and the stats page
+
+---
+
+## 10. Media & Gallery System — Supabase Storage
+
+**Upload flow**:
+- Profile pictures → `team-assets/player-profiles/{member_id}.jpg`
+- Gallery media → `team-assets/team-media/{timestamp}_{filename}`
+- Automatic routing based on which component triggers the upload
+
+**Gallery display**:
+- Grouped by upload date with clear date headers
+- Swipeable left/right using embla-carousel
+- Download button on each image
+- Clean, professional layout
+
+**Profile pictures persist** across refreshes because they're stored in Supabase Storage, not base64 in React state.
+
+---
+
+## 11. Weekly Attendance System (Manager)
+
+**New on Manager's (and Coach's) profile**: A weekly attendance tracker.
+
+- Table: All players × Mon–Fri
+- Manager ticks checkboxes for who attended each day
+- Manager can mark a day as "No Activity" (everyone marked accordingly)
+- Blank = Absent
+- Attendance percentage calculated **only after Friday**
+- When a new week starts (Monday), old data clears and fresh week begins
+- Old week data is archived in the database
+
+**Player profile**: Shows their attendance for the current week with fancy day-by-day indicators.
+
+**Stats page**: Shows attendance ranking — sorted by highest attendance percentage.
+
+**Excusal integration**: When a player requests an excuse for training, they select which days. Those days are auto-marked as "Excused" in the attendance (counts differently from absent).
+
+**Export**: Attendance data exportable as branded .docx file.
+
+---
+
+## 12. Player Excusal Update
+
+Update the excuse system so the player specifies:
+- **Game** or **Training**
+- If Training: select which days (Mon–Fri) they won't attend
+- Selected days auto-marked as "Excused" in the weekly attendance
+- If Game: marked as excused for next game (existing behavior)
+
+---
+
+## 13. Financial Summary — Live Updates
+
+The financial summary section (on Stats page and Fadhir's profile) already has the correct layout. The change is making it **reactive**:
+
+- When Fadhir records a transaction (money in/out), the relevant month's card updates immediately
+- When a contribution is approved, that month's contribution total increases by KSh 100
+- When a new month begins, a new month card auto-generates with opening balance = previous month's closing balance
+- Monthly contribution is **KSh 100** per player — this is hard-coded for calculations
+- All math (opening + contributions - expenses = closing) is always accurate
+
+---
+
+## 14. "Our Story" Section
+
+Already creatively redesigned with icons and sections. No content changes needed. Keeping as-is.
+
+---
+
+## 15. Team Badge Integration
+
+Copy the uploaded badge image to `src/assets/suncity-badge.png`. Use it:
+- On the login page (replace Sun icon)
+- On the dashboard header
+- In exported .docx documents
+- On the Navbar
+
+---
+
+## 16. Navy Blue Theme Enhancement
+
+Already implemented in CSS. Will ensure more navy blue accents appear in:
+- Card borders and section dividers
+- Navbar background blend
+- Subtle background panels
+
+---
+
+## 17. Export as .docx with Branding
+
+Install the `docx` npm package. Create a utility function that generates professional documents with:
+- Suncity FC badge as header image
+- Team name and motto
+- Formatted data tables
+- Professional footer with date and copyright
+- Used for both contribution export and attendance export
+
+---
+
+## 18. 3D Lineup Builder
+
+Already implemented and functional. No changes needed unless bugs are found during testing.
+
+---
+
+## Technical Implementation Order
+
+1. **Supabase migrations** — Create all tables, storage buckets, RLS policies
+2. **Seed data** — Insert all members, financial records, corrected contributions
+3. **Copy badge** — `src/assets/suncity-badge.png`
+4. **Install docx** — `npm install docx`
+5. **Update `team-data.ts`** — Add new members, rename Travis, fix contributions, clear sample data
+6. **Rewrite `TeamDataContext.tsx`** — All reads/writes go through Supabase instead of local state
+7. **Update `Dashboard.tsx`** — 3-item limits, event expiry, "Team Members" label, badge
+8. **Update `OfficialProfile.tsx`** — Goal scorers on score entry, Fadhir checkbox grid, attendance tracker, contribution section for non-Fabian officials
+9. **Update `PlayerProfile.tsx`** — Excusal type selection, attendance display, Supabase profile pic
+10. **Update `Stats.tsx`** — Remove remarks, exclude Fabian/Kevin, add permanent game history with scorers, attendance ranking, .docx export
+11. **Update `Login.tsx`** — Replace Sun icon with badge
+12. **Update `index.css`** — Minor navy blue enhancements
+
+### Files Changed/Created
+
+| File | Action |
+|------|--------|
+| `src/assets/suncity-badge.png` | Copy from upload |
+| `src/data/team-data.ts` | Add members, rename, fix contributions, clear samples |
+| `src/contexts/TeamDataContext.tsx` | Major rewrite for Supabase persistence |
+| `src/pages/Dashboard.tsx` | Limits, expiry, badge, label change |
+| `src/pages/OfficialProfile.tsx` | Checkbox grid, scorers, attendance, contributions |
+| `src/pages/PlayerProfile.tsx` | Excusal type, attendance, Supabase storage |
+| `src/pages/Stats.tsx` | Game history, attendance, .docx export, exclude coach/manager |
+| `src/pages/Login.tsx` | Badge image |
+| `src/components/Navbar.tsx` | Badge image |
+| `src/index.css` | Minor enhancements |
+| `package.json` | Add `docx` dependency |
+| Supabase migrations | Multiple table creation SQL files |
+
+This is a large implementation that will be done methodically to ensure every system works correctly and data persists permanently.
 
