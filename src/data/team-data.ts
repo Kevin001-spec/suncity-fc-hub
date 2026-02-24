@@ -14,6 +14,8 @@ export interface TeamMember {
   assists?: number;
   gamesPlayed?: number;
   excused?: boolean;
+  excusedType?: string;
+  excusedDays?: string[];
   contributions: Record<string, "paid" | "pending" | "unpaid">;
 }
 
@@ -23,6 +25,7 @@ export interface GameScore {
   opponent: string;
   ourScore: number;
   theirScore: number;
+  scorers?: string[]; // player IDs who scored
 }
 
 export interface CalendarEvent {
@@ -57,6 +60,12 @@ export interface PendingApproval {
   monthKey: string;
   monthLabel: string;
   requestedAt: string;
+}
+
+export interface AttendanceRecord {
+  playerId: string;
+  day: string;
+  status: "present" | "absent" | "excused" | "no_activity";
 }
 
 // Officials
@@ -111,39 +120,42 @@ export const officials: TeamMember[] = [
   },
 ];
 
-// Players - all stats reset to 0
+// Players - corrected contribution statuses, added Kelly, Edu, Rodgers, renamed Travis→Mannasseh
 export const players: TeamMember[] = [
-  { id: "SCF-P01", name: "Blaise", role: "player", squadNumber: 1, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "unpaid" } },
-  { id: "SCF-P02", name: "Bronze", role: "player", squadNumber: 2, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
-  { id: "SCF-P03", name: "Lawrence", role: "player", squadNumber: 3, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P04", name: "Darren", role: "player", squadNumber: 4, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "unpaid" } },
-  { id: "SCF-P05", name: "Yassin", role: "player", squadNumber: 5, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P06", name: "Wakili", role: "player", squadNumber: 6, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
-  { id: "SCF-P07", name: "Collo", role: "player", squadNumber: 7, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P08", name: "Fad", role: "player", squadNumber: 8, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
-  { id: "SCF-P09", name: "Sam", role: "player", squadNumber: 9, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P10", name: "Olise", role: "player", squadNumber: 10, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "unpaid" } },
-  { id: "SCF-P11", name: "Kibe", role: "player", squadNumber: 11, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P12", name: "Mugi J.r", role: "player", squadNumber: 12, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
-  { id: "SCF-P13", name: "Francis", role: "player", squadNumber: 13, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "unpaid" } },
-  { id: "SCF-P14", name: "Kanja", role: "player", squadNumber: 14, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P15", name: "Felix M", role: "player", squadNumber: 15, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
-  { id: "SCF-P16", name: "Brian(d)", role: "player", squadNumber: 16, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
-  { id: "SCF-P17", name: "Bivon", role: "player", squadNumber: 17, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "unpaid" } },
-  { id: "SCF-P18", name: "Mungai", role: "player", squadNumber: 18, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "unpaid" } },
-  { id: "SCF-P19", name: "Foden", role: "player", squadNumber: 19, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P20", name: "Njuguna", role: "player", squadNumber: 20, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
-  { id: "SCF-P21", name: "Amos", role: "player", squadNumber: 21, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
-  { id: "SCF-P22", name: "Bill", role: "player", squadNumber: 22, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "unpaid" } },
-  { id: "SCF-P23", name: "Einstein", role: "player", squadNumber: 23, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
-  { id: "SCF-P24", name: "Travis", role: "player", squadNumber: 24, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "unpaid" } },
-  { id: "SCF-P25", name: "Morgan", role: "player", squadNumber: 25, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P26", name: "Kayb", role: "player", squadNumber: 26, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
-  { id: "SCF-P27", name: "Davie", role: "player", squadNumber: 27, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P28", name: "Brian", role: "player", squadNumber: 28, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "unpaid" } },
-  { id: "SCF-P29", name: "William", role: "player", squadNumber: 29, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
-  { id: "SCF-P30", name: "Joshua", role: "player", squadNumber: 30, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "unpaid" } },
-  { id: "SCF-P31", name: "Krish", role: "player", squadNumber: 31, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "unpaid", "feb-2026": "unpaid" } },
+  { id: "SCF-P01", name: "Blaise", role: "player", squadNumber: 1, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P02", name: "Bronze", role: "player", squadNumber: 2, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-P03", name: "Lawrence", role: "player", squadNumber: 3, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P04", name: "Darren", role: "player", squadNumber: 4, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-P05", name: "Yassin", role: "player", squadNumber: 5, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P06", name: "Wakili", role: "player", squadNumber: 6, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-P07", name: "Collo", role: "player", squadNumber: 7, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
+  { id: "SCF-P08", name: "Fad", role: "player", squadNumber: 8, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
+  { id: "SCF-P09", name: "Sam", role: "player", squadNumber: 9, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
+  { id: "SCF-P10", name: "Olise", role: "player", squadNumber: 10, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-P11", name: "Kibe", role: "player", squadNumber: 11, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
+  { id: "SCF-P12", name: "Mugi J.r", role: "player", squadNumber: 12, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-P13", name: "Francis", role: "player", squadNumber: 13, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P14", name: "Kanja", role: "player", squadNumber: 14, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P15", name: "Felix M", role: "player", squadNumber: 15, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P16", name: "Brian(d)", role: "player", squadNumber: 16, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P17", name: "Bivon", role: "player", squadNumber: 17, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P18", name: "Mungai", role: "player", squadNumber: 18, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P19", name: "Foden", role: "player", squadNumber: 19, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P20", name: "Njuguna", role: "player", squadNumber: 20, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P21", name: "Amos", role: "player", squadNumber: 21, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
+  { id: "SCF-P22", name: "Bill", role: "player", squadNumber: 22, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P23", name: "Einstein", role: "player", squadNumber: 23, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P24", name: "Mannasseh", role: "player", squadNumber: 24, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P25", name: "Morgan", role: "player", squadNumber: 25, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P26", name: "Kayb", role: "player", squadNumber: 26, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P27", name: "Davie", role: "player", squadNumber: 27, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
+  { id: "SCF-P28", name: "Brian", role: "player", squadNumber: 28, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P29", name: "William", role: "player", squadNumber: 29, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P30", name: "Joshua", role: "player", squadNumber: 30, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P31", name: "Krish", role: "player", squadNumber: 31, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "feb-2026": "paid" } },
+  { id: "SCF-P32", name: "Kelly", role: "player", squadNumber: 32, goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
+  { id: "SCF-P33", name: "Edu", role: "player", squadNumber: 33, goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
+  { id: "SCF-P34", name: "Rodgers", role: "player", squadNumber: 34, goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
 ];
 
 export const allMembers: TeamMember[] = [...officials, ...players];
@@ -158,68 +170,17 @@ export const contributionMonths = [
   { key: "may-2026", label: "May 2026" },
 ];
 
-// Pre-loaded financial records from PDF
-export const initialFinancialRecords: FinancialRecord[] = [
-  {
-    month: "Dec 2025",
-    contributors: 35,
-    contributorNote: "35 players",
-    openingBalance: 0,
-    contributions: 3600,
-    expenses: [],
-    closingBalance: 3600,
-  },
-  {
-    month: "Jan 2026",
-    contributors: 19,
-    contributorNote: "19 players",
-    openingBalance: 3600,
-    contributions: 1900,
-    expenses: [
-      { description: "Ball purchased", amount: 2000, date: "Jan 16" },
-      { description: "Transport for ball", amount: 200, date: "Jan 16" },
-    ],
-    closingBalance: 3300,
-  },
-  {
-    month: "Feb 2026",
-    contributors: 15,
-    contributorNote: "15 players (to Feb 18)",
-    openingBalance: 3300,
-    contributions: 1500,
-    expenses: [
-      { description: "Field painting", amount: 200, date: "Feb 15" },
-      { description: "League registration", amount: 2000, date: "Feb 18" },
-      { description: "Jersey parcel fee", amount: 200, date: "Feb 18" },
-      { description: "Jersey kits", amount: 4500, date: "Feb 18" },
-    ],
-    closingBalance: 750,
-  },
-];
+// Monthly contribution amount
+export const CONTRIBUTION_AMOUNT = 100;
 
-// Financial summary remarks from PDF
-export const financialRemarks = [
-  "Above is an expenditure summary for each month.",
-  "In December we had the highest contributions of 35 players while the lowest was February with 15 players.",
-  "Looking at where we are now and looking at where we started, there has been eye catching developments.",
-  "Thanks 👍 to our coach @Fabian for all the developments and taking our team to another level of standards.",
-  "All Captains thank you for you're all strong at game, vocal and responsible as it should be, lets continue to lead that way (Ethan, Denoh, Victor, Lucario) — great work 👏",
-  "Thank you all for the unity and respect and let's continue to make Suncity a great team.",
-];
+// Pre-loaded financial records from PDF — empty initially, loaded from Supabase
+export const initialFinancialRecords: FinancialRecord[] = [];
 
-// Sample game scores
-export const initialGameScores: GameScore[] = [
-  { id: "g1", date: "2026-02-15", opponent: "Kanjuri United", ourScore: 3, theirScore: 1 },
-  { id: "g2", date: "2026-02-08", opponent: "Valley Stars", ourScore: 2, theirScore: 2 },
-  { id: "g3", date: "2026-01-25", opponent: "Highland FC", ourScore: 1, theirScore: 0 },
-];
+// Sample game scores — empty, loaded from Supabase
+export const initialGameScores: GameScore[] = [];
 
-// Sample calendar events
-export const initialCalendarEvents: CalendarEvent[] = [
-  { id: "e1", date: "2026-02-22", title: "League Match vs Riverside FC", description: "Kanjuri League Round 4" },
-  { id: "e2", date: "2026-02-25", title: "Team Training", description: "Evening training session" },
-  { id: "e3", date: "2026-03-01", title: "League Match vs Mountain Boys", description: "Kanjuri League Round 5" },
-];
+// Sample calendar events — empty, loaded from Supabase
+export const initialCalendarEvents: CalendarEvent[] = [];
 
 // Team background
 export const teamBackground = {
@@ -231,17 +192,15 @@ export const teamBackground = {
   contributions: "Regarding monthly contributions, old members are required to have five ticks, while new members must have three ticks. Everyone must be clear about their contributions, whether they are with the team financially or not. There will be no hiding behind others and no unnecessary excuses. For Sun City FC to grow stronger, each member must play their role responsibly. If we remain united, disciplined, and focused, there is no limit to what we can achieve together. Sun City FC is more than just a football team; it is our identity, our responsibility, and our future. ⚽🌅",
 };
 
-// Auth helper - now supports official login by ID + PIN
+// Auth helper - supports official login by ID + PIN
 export function authenticateMember(identifier: string, pin?: string): TeamMember | null {
   const upperId = identifier.toUpperCase();
   
-  // Check if it's a player ID (contains P)
   if (upperId.includes("P")) {
     const player = players.find((p) => p.id.toUpperCase() === upperId);
     if (player) return player;
   }
   
-  // Check officials by their official ID (SCF-001, etc.) + PIN
   if (pin) {
     const official = officials.find(
       (o) => o.id.toUpperCase() === upperId && o.pin === pin
@@ -249,7 +208,6 @@ export function authenticateMember(identifier: string, pin?: string): TeamMember
     if (official) return official;
   }
 
-  // Also allow officials by username + PIN (backward compat)
   if (pin) {
     const official = officials.find(
       (o) => o.username?.toUpperCase() === upperId && o.pin === pin
