@@ -26,7 +26,6 @@ const PlayerProfile = () => {
   if (!user) return <Navigate to="/" replace />;
 
   const liveMember = members.find((m) => m.id === user.id) || user;
-  // Fabian is exempt from contribution list
   const isFabianExempt = user.id === "SCF-001";
 
   const handlePayRequest = (monthKey: string, monthLabel: string) => {
@@ -42,19 +41,16 @@ const PlayerProfile = () => {
       setExcused(user.id, true, "game");
       toast({ title: "Game Excuse Submitted", description: "You are excused from the next game." });
     }
-    setExcuseType("");
-    setExcuseDays([]);
+    setExcuseType(""); setExcuseDays([]);
   };
 
   const handleProfilePicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    toast({ title: "Compressing & uploading...", description: "Processing your photo..." });
     const url = await uploadProfilePicToStorage(user.id, file);
-    if (url) {
-      toast({ title: "Profile Updated", description: "Your profile picture has been saved permanently." });
-    } else {
-      toast({ title: "Upload Failed", description: "Could not upload profile picture.", variant: "destructive" });
-    }
+    if (url) toast({ title: "Profile Updated", description: "Your profile picture has been saved permanently." });
+    else toast({ title: "Upload Failed", description: "Could not upload profile picture.", variant: "destructive" });
     e.target.value = "";
   };
 
@@ -102,7 +98,7 @@ const PlayerProfile = () => {
           ))}
         </motion.div>
 
-        {/* Weekly Attendance */}
+        {/* Weekly Attendance with emojis */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <Card className="bg-card border-border card-glow">
             <CardHeader>
@@ -116,18 +112,18 @@ const PlayerProfile = () => {
                 {DAYS.map((day) => {
                   const record = myAttendance.find((a) => a.day === day);
                   const status = record?.status || "absent";
+                  const emojis: Record<string, string> = { present: "✅", absent: "❌", excused: "🔵", no_activity: "➖" };
                   const colors: Record<string, string> = {
-                    present: "bg-green-500/20 border-green-500/40 text-green-400",
-                    absent: "bg-destructive/10 border-destructive/30 text-destructive",
-                    excused: "bg-primary/20 border-primary/30 text-primary",
-                    no_activity: "bg-muted border-border text-muted-foreground",
+                    present: "bg-green-500/20 border-green-500/40",
+                    absent: "bg-destructive/10 border-destructive/30",
+                    excused: "bg-primary/20 border-primary/30",
+                    no_activity: "bg-muted border-border",
                   };
-                  const labels: Record<string, string> = { present: "✓", absent: "✗", excused: "E", no_activity: "—" };
                   return (
                     <div key={day} className="text-center flex-1">
                       <p className="text-xs text-muted-foreground font-body mb-1">{day.slice(0, 3)}</p>
-                      <div className={`w-10 h-10 mx-auto rounded-lg border-2 flex items-center justify-center font-heading text-sm ${colors[status]}`}>
-                        {labels[status]}
+                      <div className={`w-10 h-10 mx-auto rounded-lg border-2 flex items-center justify-center text-lg ${colors[status]}`}>
+                        {emojis[status]}
                       </div>
                     </div>
                   );
@@ -137,13 +133,11 @@ const PlayerProfile = () => {
           </Card>
         </motion.div>
 
-        {/* Monthly Contributions - exempt Fabian */}
+        {/* Monthly Contributions */}
         {!isFabianExempt && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <Card className="bg-card border-border card-glow">
-              <CardHeader>
-                <CardTitle className="font-heading text-lg text-foreground">Monthly Contributions</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground">Monthly Contributions</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 {contributionMonths.map(({ key, label }) => {
                   const status = liveMember.contributions[key] || "unpaid";
@@ -166,7 +160,7 @@ const PlayerProfile = () => {
           </motion.div>
         )}
 
-        {/* Excuse Request - updated with type selection */}
+        {/* Excuse Request */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
           <Card className="bg-card border-border card-glow">
             <CardHeader>
@@ -182,10 +176,8 @@ const PlayerProfile = () => {
               ) : (
                 <>
                   <div className="flex gap-2">
-                    <Button size="sm" variant={excuseType === "game" ? "default" : "outline"} onClick={() => { setExcuseType("game"); setExcuseDays([]); }}
-                      className="font-body">🏟️ Game</Button>
-                    <Button size="sm" variant={excuseType === "training" ? "default" : "outline"} onClick={() => setExcuseType("training")}
-                      className="font-body">🏋️ Training</Button>
+                    <Button size="sm" variant={excuseType === "game" ? "default" : "outline"} onClick={() => { setExcuseType("game"); setExcuseDays([]); }} className="font-body">🏟️ Game</Button>
+                    <Button size="sm" variant={excuseType === "training" ? "default" : "outline"} onClick={() => setExcuseType("training")} className="font-body">🏋️ Training</Button>
                   </div>
                   {excuseType === "training" && (
                     <div className="space-y-2">
@@ -194,9 +186,7 @@ const PlayerProfile = () => {
                         {DAYS.map((day) => (
                           <label key={day} className="flex items-center gap-2 font-body text-sm text-foreground">
                             <Checkbox checked={excuseDays.includes(day)}
-                              onCheckedChange={(checked) => {
-                                setExcuseDays(checked ? [...excuseDays, day] : excuseDays.filter((d) => d !== day));
-                              }} />
+                              onCheckedChange={(checked) => setExcuseDays(checked ? [...excuseDays, day] : excuseDays.filter((d) => d !== day))} />
                             {day}
                           </label>
                         ))}
@@ -205,9 +195,7 @@ const PlayerProfile = () => {
                   )}
                   {excuseType && (
                     <Button onClick={handleExcuse} variant="outline" className="font-body border-primary/30 text-primary hover:bg-primary/10"
-                      disabled={excuseType === "training" && excuseDays.length === 0}>
-                      Submit Excuse
-                    </Button>
+                      disabled={excuseType === "training" && excuseDays.length === 0}>Submit Excuse</Button>
                   )}
                 </>
               )}

@@ -25,7 +25,7 @@ export interface GameScore {
   opponent: string;
   ourScore: number;
   theirScore: number;
-  scorers?: string[]; // player IDs who scored
+  scorers?: string[];
 }
 
 export interface CalendarEvent {
@@ -70,57 +70,17 @@ export interface AttendanceRecord {
 
 // Officials
 export const officials: TeamMember[] = [
-  {
-    id: "SCF-001", name: "Fabian", role: "coach",
-    username: "COACH-FAB", pin: "8246", phone: "0717455265",
-    goals: 0, assists: 0, gamesPlayed: 0,
-    contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" },
-  },
-  {
-    id: "SCF-002", name: "Fadhir", role: "finance",
-    username: "FIN-FAD", pin: "5931", phone: "0748431548",
-    goals: 0, assists: 0, gamesPlayed: 0,
-    contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" },
-  },
-  {
-    id: "SCF-003", name: "Kevin", role: "manager",
-    username: "MGR-KEV", pin: "7719", phone: "0112563036",
-    goals: 0, assists: 0, gamesPlayed: 0,
-    contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" },
-  },
-  {
-    id: "SCF-004", name: "Ethan", role: "captain",
-    username: "CPT-ETH", pin: "4628", phone: "0718258821",
-    goals: 0, assists: 0, gamesPlayed: 0,
-    contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" },
-  },
-  {
-    id: "SCF-005", name: "Denoh", role: "captain",
-    username: "CPT-DEN", pin: "9183", phone: "0769188787",
-    goals: 0, assists: 0, gamesPlayed: 0,
-    contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" },
-  },
-  {
-    id: "SCF-006", name: "Victor", role: "captain",
-    username: "CPT-VIC", pin: "3507", phone: "0786520209",
-    goals: 0, assists: 0, gamesPlayed: 0,
-    contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" },
-  },
-  {
-    id: "SCF-007", name: "Lucario", role: "captain",
-    username: "CPT-LUC", pin: "6842", phone: "0722725900",
-    goals: 0, assists: 0, gamesPlayed: 0,
-    contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" },
-  },
-  {
-    id: "SCF-008", name: "Austin", role: "captain",
-    username: "CPT-AUS", pin: "2059",
-    goals: 0, assists: 0, gamesPlayed: 0,
-    contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" },
-  },
+  { id: "SCF-001", name: "Fabian", role: "coach", username: "COACH-FAB", pin: "8246", phone: "0717455265", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-002", name: "Fadhir", role: "finance", username: "FIN-FAD", pin: "5931", phone: "0748431548", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-003", name: "Kevin", role: "manager", username: "MGR-KEV", pin: "7719", phone: "0112563036", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-004", name: "Ethan", role: "captain", username: "CPT-ETH", pin: "4628", phone: "0718258821", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-005", name: "Denoh", role: "captain", username: "CPT-DEN", pin: "9183", phone: "0769188787", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-006", name: "Victor", role: "captain", username: "CPT-VIC", pin: "3507", phone: "0786520209", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-007", name: "Lucario", role: "captain", username: "CPT-LUC", pin: "6842", phone: "0722725900", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-008", name: "Austin", role: "captain", username: "CPT-AUS", pin: "2059", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
 ];
 
-// Players - corrected contribution statuses, added Kelly, Edu, Rodgers, renamed Travis→Mannasseh
+// Players — removed May, added Brian Kim (SCF-P35)
 export const players: TeamMember[] = [
   { id: "SCF-P01", name: "Blaise", role: "player", squadNumber: 1, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P02", name: "Bronze", role: "player", squadNumber: 2, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
@@ -156,64 +116,47 @@ export const players: TeamMember[] = [
   { id: "SCF-P32", name: "Kelly", role: "player", squadNumber: 32, goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
   { id: "SCF-P33", name: "Edu", role: "player", squadNumber: 33, goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
   { id: "SCF-P34", name: "Rodgers", role: "player", squadNumber: 34, goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
+  { id: "SCF-P35", name: "Brian Kim", role: "player", squadNumber: 35, goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
 ];
 
 export const allMembers: TeamMember[] = [...officials, ...players];
 
-// Contribution months
+// Contribution months — May removed
 export const contributionMonths = [
   { key: "dec-2025", label: "Dec 2025" },
   { key: "jan-2026", label: "Jan 2026" },
   { key: "feb-2026", label: "Feb 2026" },
   { key: "mar-2026", label: "Mar 2026" },
   { key: "apr-2026", label: "Apr 2026" },
-  { key: "may-2026", label: "May 2026" },
 ];
 
-// Monthly contribution amount
 export const CONTRIBUTION_AMOUNT = 100;
 
-// Pre-loaded financial records from PDF — empty initially, loaded from Supabase
 export const initialFinancialRecords: FinancialRecord[] = [];
-
-// Sample game scores — empty, loaded from Supabase
 export const initialGameScores: GameScore[] = [];
-
-// Sample calendar events — empty, loaded from Supabase
 export const initialCalendarEvents: CalendarEvent[] = [];
 
-// Team background
 export const teamBackground = {
   origin: "Sun City FC was born out of passion, friendship, and the strong desire to give talented young players a platform to showcase their abilities. What began as a simple gathering of football lovers on dusty fields slowly transformed into a team with a vision. In the early days, we had no proper jerseys, no stable financial support, and sometimes not even enough equipment for training. Despite all these challenges, we showed up every day because we believed in something bigger than ourselves.",
   struggle: "When we first joined the Kanjuri League, our start was very difficult. We lost matches, struggled with coordination, and lacked proper discipline and commitment. Financial hardship almost broke us apart, and there were moments when morale was low and unity was tested. However, through resilience and determination, we refused to give up.",
   coachImpact: "The turning point came when Fabian became the coach of the team. At that time, the team needed structure, discipline, and a fresh vision. Fabian stepped in not only as a coach but as a leader determined to rebuild the team's foundation. He introduced a monthly contribution system to help stabilize the team financially and ensure accountability among players. Under his leadership, the team managed to purchase new jerseys, restoring pride and identity. He worked hard to motivate players, strengthen bonds between teammates, and create a spirit of unity and brotherhood. Discipline was instilled both on and off the pitch, and he made sure every player felt comfortable, valued, and respected within the team. The culture of seriousness and commitment that we see today is a result of his dedication and leadership.",
   acknowledgements: "We also extend sincere appreciation to Fadhir for working tirelessly for the team and consistently building a positive image of Sun City FC. His effort and commitment behind the scenes have greatly contributed to where we are today. Special thanks also go to Captain Ethan for always performing his role responsibly, keeping players on their toes, and leading by example. To all team leaders, your cooperation with the coach has made the work easier, and you are encouraged to fully understand your roles and continue bringing ideas that will help move the team to the next level.",
   values: "As a coach, I want to make it very clear that Sun City FC is not a place for indiscipline, laziness, or division. Any player who is not ready to work with the team, the officials, and the leadership should reconsider their position. If any form of disrespect, disunity, or refusal to cooperate is noted, the player will face suspension for a period of not less than ten days. We are competing seriously in the Kanjuri League, and discipline, commitment, and unity are non-negotiable values.",
-  contributions: "Regarding monthly contributions, old members are required to have five ticks, while new members must have three ticks. Everyone must be clear about their contributions, whether they are with the team financially or not. There will be no hiding behind others and no unnecessary excuses. For Sun City FC to grow stronger, each member must play their role responsibly. If we remain united, disciplined, and focused, there is no limit to what we can achieve together. Sun City FC is more than just a football team; it is our identity, our responsibility, and our future. ⚽🌅",
 };
 
-// Auth helper - supports official login by ID + PIN
 export function authenticateMember(identifier: string, pin?: string): TeamMember | null {
   const upperId = identifier.toUpperCase();
-  
   if (upperId.includes("P")) {
     const player = players.find((p) => p.id.toUpperCase() === upperId);
     if (player) return player;
   }
-  
   if (pin) {
-    const official = officials.find(
-      (o) => o.id.toUpperCase() === upperId && o.pin === pin
-    );
+    const official = officials.find((o) => o.id.toUpperCase() === upperId && o.pin === pin);
     if (official) return official;
   }
-
   if (pin) {
-    const official = officials.find(
-      (o) => o.username?.toUpperCase() === upperId && o.pin === pin
-    );
+    const official = officials.find((o) => o.username?.toUpperCase() === upperId && o.pin === pin);
     if (official) return official;
   }
-
   return null;
 }

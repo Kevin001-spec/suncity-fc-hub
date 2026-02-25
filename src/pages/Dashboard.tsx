@@ -15,18 +15,11 @@ import { type TeamMember, type GameScore, teamBackground } from "@/data/team-dat
 import useEmblaCarousel from "embla-carousel-react";
 import suncityBadge from "@/assets/suncity-badge.png";
 
-const fadeUp = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.5 },
-};
+const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5 } };
 
 const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profilePic?: string; onClose: () => void }) => (
-  <motion.div
-    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-    className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4"
-    onClick={onClose}
-  >
+  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4" onClick={onClose}>
     <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
       className="bg-card border border-border rounded-xl p-6 w-full max-w-sm card-glow" onClick={(e) => e.stopPropagation()}>
       <div className="text-center">
@@ -112,6 +105,7 @@ const MediaGallery = () => {
     return <div className="flex items-center justify-center h-40 rounded-lg border border-dashed border-border text-muted-foreground font-body text-sm">No media uploaded yet — Officials can upload from their profile</div>;
   }
 
+  // Group by date, limit to 2 most recent dates
   const grouped = mediaItems.reduce((acc, item) => {
     const dateKey = item.date.split("T")[0];
     if (!acc[dateKey]) acc[dateKey] = [];
@@ -119,17 +113,19 @@ const MediaGallery = () => {
     return acc;
   }, {} as Record<string, typeof mediaItems>);
 
+  const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a)).slice(0, 2);
+
   return (
     <div className="space-y-4">
-      {Object.entries(grouped).map(([date, items]) => (
+      {sortedDates.map((date) => (
         <div key={date}>
           <p className="text-xs text-muted-foreground font-body mb-2">📅 {new Date(date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
           <div className="overflow-hidden" ref={emblaRef}>
             <div className="flex gap-3">
-              {items.map((item) => (
+              {grouped[date].map((item) => (
                 <div key={item.id} className="flex-[0_0_200px] min-w-0">
                   <div className="relative group">
-                    <img src={item.url} alt={item.caption || "Team photo"} className="w-full h-40 object-cover rounded-lg border border-border" />
+                    <img src={item.url} alt={item.caption || "Team photo"} className="w-full h-40 object-cover rounded-lg border border-border" loading="lazy" />
                     <a href={item.url} download className="absolute inset-0 flex items-center justify-center bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
                       <Download className="w-6 h-6 text-primary" />
                     </a>
@@ -149,10 +145,8 @@ const Dashboard = () => {
   const { members, gameScores, calendarEvents, profilePics } = useTeamData();
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
 
-  // Dashboard: max 3 recent results, newest first
   const recentScores = gameScores.slice(0, 3);
 
-  // Dashboard: max 3 upcoming events, filter out past events (end of day)
   const upcomingEvents = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -172,7 +166,7 @@ const Dashboard = () => {
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-8">
         <motion.section {...fadeUp} className="text-center py-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 border-primary/40 bg-secondary mb-4 overflow-hidden">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white border-2 border-primary/40 mb-4 overflow-hidden">
             <img src={suncityBadge} alt="Suncity FC" className="w-12 h-12 object-contain" />
           </div>
           <h1 className="text-4xl md:text-5xl font-heading font-bold gold-text text-shadow-gold">SUNCITY FC</h1>
