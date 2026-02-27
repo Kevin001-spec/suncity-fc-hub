@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
 import { Navigate } from "react-router-dom";
@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { BarChart3, Download, CheckCircle, Clock, DollarSign, Trophy, Calendar, Image, X, Star, Award } from "lucide-react";
-import { contributionMonths } from "@/data/team-data";
+import { BarChart3, Download, CheckCircle, Clock, DollarSign, Trophy, Calendar, Image, Star, Award, Users } from "lucide-react";
+import { contributionMonths, officials } from "@/data/team-data";
 import { generateBrandedPdf, type TableData } from "@/lib/pdf-export";
 import useEmblaCarousel from "embla-carousel-react";
 
@@ -37,7 +37,7 @@ const Stats = () => {
     });
   }, [contributionMembers]);
 
-  // Attendance ranking — sorted: highest ticks first, then those with excuses, then absent-only at bottom
+  // Attendance ranking with progressive calculation
   const attendanceRanking = useMemo(() => {
     const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
     return playerMembers.map((m) => {
@@ -45,9 +45,11 @@ const Stats = () => {
       const activeDays = playerAtt.filter((a) => a.status !== "no_activity");
       const presentDays = playerAtt.filter((a) => a.status === "present").length;
       const excusedDays = playerAtt.filter((a) => a.status === "excused").length;
+      // Progressive: denominator = active days count
       const pct = activeDays.length > 0 ? Math.round(((presentDays + excusedDays) / activeDays.length) * 100) : 0;
       return { ...m, attendancePct: pct, presentDays, excusedDays, hasExcuse: excusedDays > 0 };
     }).sort((a, b) => {
+      // Sort: most ticks first, then excuses, then absent-only
       if (b.presentDays !== a.presentDays) return b.presentDays - a.presentDays;
       if (a.hasExcuse && !b.hasExcuse) return -1;
       if (!a.hasExcuse && b.hasExcuse) return 1;
@@ -55,7 +57,6 @@ const Stats = () => {
     });
   }, [members, attendance]);
 
-  // Media grouped by date for gallery
   const mediaByDate = useMemo(() => {
     const grouped: Record<string, typeof mediaItems> = {};
     mediaItems.forEach((item) => {
@@ -66,25 +67,21 @@ const Stats = () => {
     return Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a));
   }, [mediaItems]);
 
-  // Weekly overview — only visible Friday, Saturday, Sunday
+  // Weekly overview — Fri/Sat/Sun only
   const dayOfWeek = new Date().getDay();
-  const showWeeklyOverview = dayOfWeek >= 5 || dayOfWeek === 0; // 5=Fri, 6=Sat, 0=Sun
+  const showWeeklyOverview = dayOfWeek >= 5 || dayOfWeek === 0;
 
   const weeklyOverview = useMemo(() => {
     if (!showWeeklyOverview) return null;
     const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
-
-    // Most disciplined: attended every training day
     const mostDisciplined = playerMembers.filter((m) => {
       const playerAtt = attendance.filter((a) => a.playerId === m.id && a.status !== "no_activity");
       return playerAtt.length > 0 && playerAtt.every((a) => a.status === "present");
     });
-
-    // Best player of the week: highest goals+assists
     const sortedByPerf = [...playerMembers].sort((a, b) => ((b.goals || 0) + (b.assists || 0)) - ((a.goals || 0) + (a.assists || 0)));
     const bestPlayer = sortedByPerf[0];
-
-    // Low contributors with low attendance
+    // Top 3 rated players with stars
+    const top3 = sortedByPerf.slice(0, 3);
     const lowContributors = playerMembers.filter((m) => {
       const paidCount = Object.values(m.contributions).filter((s) => s === "paid").length;
       const playerAtt = attendance.filter((a) => a.playerId === m.id);
@@ -93,8 +90,7 @@ const Stats = () => {
       const pct = activeDays.length > 0 ? Math.round((presentDays / activeDays.length) * 100) : 0;
       return paidCount <= 1 && pct < 60;
     });
-
-    return { mostDisciplined, bestPlayer, lowContributors };
+    return { mostDisciplined, bestPlayer, top3, lowContributors };
   }, [showWeeklyOverview, members, attendance]);
 
   const exportContributionsPdf = () => {
@@ -103,36 +99,54 @@ const Stats = () => {
       m.name,
       ...contributionMonths.map((month) => {
         const status = m.contributions[month.key] || "unpaid";
-        return status === "paid" ? "✅" : status === "pending" ? "⏳" : "—";
+        return status === "paid" ? "[PAID]" : status === "pending" ? "[Pending]" : "—";
       }),
     ]);
     generateBrandedPdf("Monthly Contribution Status Report", [{ head, body }], "suncity_fc_contributions.pdf");
   };
 
   const exportAttendancePdf = () => {
-    const head = [["Player", ...DAYS.map((d) => d.slice(0, 3)), "%"]];
-    const body = attendanceRanking.map((m) => {
+    const head = [["Rank", "Player", ...DAYS.map((d) => d.slice(0, 3)), "%"]];
+    const body = attendanceRanking.map((m, i) => {
       const playerAtt = attendance.filter((a) => a.playerId === m.id);
       return [
+        String(i + 1),
         m.name,
         ...DAYS.map((day) => {
           const record = playerAtt.find((a) => a.day === day);
-          return record?.status === "present" ? "✅" : record?.status === "excused" ? "E" : record?.status === "no_activity" ? "➖" : "❌";
+          return record?.status === "present" ? "[PAID]" : record?.status === "excused" ? "[E]" : record?.status === "no_activity" ? "[-]" : "[X]";
         }),
         `${m.attendancePct}%`,
       ];
     });
-    const keyRow = [["Key: E = Excused, ✅ = Present, ❌ = Absent, ➖ = No Activity", "", "", "", "", "", ""]];
-    generateBrandedPdf("Weekly Attendance Report", [{ head, body }, { head: [], body: keyRow }], "suncity_fc_attendance.pdf");
+    const keyTable: TableData = { head: [], body: [["Key: [PAID] = Present, [X] = Absent, [E] = Excused, [-] = No Activity"]] };
+    generateBrandedPdf("Weekly Attendance Report", [{ head, body }, keyTable], "suncity_fc_attendance.pdf");
   };
 
   const exportFinancialPdf = () => {
-    const head = [["Month", "Contributors", "Opening", "Contributions", "Expenses", "Closing"]];
-    const body = financialRecords.map((f) => {
+    const tables: TableData[] = [];
+    financialRecords.forEach((f) => {
       const totalExp = f.expenses.reduce((sum, e) => sum + e.amount, 0);
-      return [f.month, String(f.contributors), `KSh ${f.openingBalance.toLocaleString()}`, `KSh ${f.contributions.toLocaleString()}`, `KSh ${totalExp.toLocaleString()}`, `KSh ${f.closingBalance.toLocaleString()}`];
+      const head = [[`${f.month} — Financial Details`, ""]];
+      const body: string[][] = [
+        ["Opening Balance", `KSh ${f.openingBalance.toLocaleString()}`],
+        ["Contributors", `${f.contributors} members`],
+        ["Total Contributions", `KSh ${f.contributions.toLocaleString()}`],
+      ];
+      if (f.contributorNote) body.push(["Note", f.contributorNote]);
+      f.expenses.forEach(exp => body.push([`Expense: ${exp.description} (${exp.date})`, `-KSh ${exp.amount.toLocaleString()}`]));
+      body.push(["Total Expenses", `-KSh ${totalExp.toLocaleString()}`]);
+      body.push(["Closing Balance", `KSh ${f.closingBalance.toLocaleString()}`]);
+      tables.push({ head, body });
     });
-    generateBrandedPdf("Financial Summary Report", [{ head, body }], "suncity_fc_financial.pdf");
+    // Contributor names
+    const cHead = [["Month", "Contributors Who Paid"]];
+    const cBody = contributionMonths.map(month => {
+      const paid = members.filter(m => m.contributions[month.key] === "paid").map(m => m.name).join(", ");
+      return [month.label, paid || "None"];
+    });
+    tables.push({ head: cHead, body: cBody });
+    generateBrandedPdf("Detailed Financial Summary Report", tables, "suncity_fc_financial_detailed.pdf");
   };
 
   const exportWeeklyOverviewPdf = () => {
@@ -141,8 +155,11 @@ const Stats = () => {
     if (weeklyOverview.mostDisciplined.length > 0) {
       tables.push({ head: [["Most Disciplined (100% Attendance)"]], body: weeklyOverview.mostDisciplined.map((m) => [m.name]) });
     }
-    if (weeklyOverview.bestPlayer) {
-      tables.push({ head: [["Best Player of the Week"]], body: [[`${weeklyOverview.bestPlayer.name} — Goals: ${weeklyOverview.bestPlayer.goals || 0}, Assists: ${weeklyOverview.bestPlayer.assists || 0}`]] });
+    if (weeklyOverview.top3.length > 0) {
+      tables.push({ head: [["Top Rated Players"]], body: weeklyOverview.top3.map((m, i) => {
+        const stars = i === 0 ? "5 Stars" : i === 1 ? "4 Stars" : "3 Stars";
+        return [`${m.name} — Goals: ${m.goals || 0}, Assists: ${m.assists || 0} (${stars})`];
+      })});
     }
     if (weeklyOverview.lowContributors.length > 0) {
       tables.push({ head: [["Low Contribution & Attendance"]], body: weeklyOverview.lowContributors.map((m) => [m.name]) });
@@ -151,7 +168,7 @@ const Stats = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20 sm:pb-0">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
@@ -159,7 +176,7 @@ const Stats = () => {
           <p className="text-muted-foreground text-sm font-body mt-1">Performance, contributions, attendance & finance</p>
         </motion.div>
 
-        {/* Weekly Overview — Friday/Sat/Sun only */}
+        {/* Weekly Overview — Fri/Sat/Sun */}
         {weeklyOverview && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
             <Card className="bg-card border-border card-glow border-l-4 border-l-primary">
@@ -169,30 +186,39 @@ const Stats = () => {
                 </CardTitle>
                 {isOfficial && (
                   <Button size="sm" variant="outline" onClick={exportWeeklyOverviewPdf} className="font-body text-xs border-primary/30 text-primary">
-                    <Download className="w-3 h-3 mr-1" /> Export PDF
+                    <Download className="w-3 h-3 mr-1" /> Export
                   </Button>
                 )}
               </CardHeader>
               <CardContent className="space-y-4">
                 {weeklyOverview.mostDisciplined.length > 0 && (
                   <div>
-                    <h4 className="font-heading text-xs text-primary tracking-wider mb-2">🏆 MOST DISCIPLINED</h4>
+                    <h4 className="font-heading text-xs text-primary tracking-wider mb-2">MOST DISCIPLINED</h4>
                     <div className="flex flex-wrap gap-2">
                       {weeklyOverview.mostDisciplined.map((m) => (
-                        <Badge key={m.id} variant="outline" className="border-green-500/30 text-green-400 font-body">{m.name}</Badge>
+                        <Badge key={m.id} variant="outline" className="border-green-500/30 text-green-600 font-body">{m.name}</Badge>
                       ))}
                     </div>
                   </div>
                 )}
-                {weeklyOverview.bestPlayer && (
+                {weeklyOverview.top3.length > 0 && (
                   <div>
-                    <h4 className="font-heading text-xs text-primary tracking-wider mb-2">⭐ BEST PLAYER OF THE WEEK</h4>
-                    <p className="font-body text-foreground">{weeklyOverview.bestPlayer.name} — <span className="text-primary">{weeklyOverview.bestPlayer.goals || 0} goals, {weeklyOverview.bestPlayer.assists || 0} assists</span></p>
+                    <h4 className="font-heading text-xs text-primary tracking-wider mb-2">TOP RATED PLAYERS</h4>
+                    {weeklyOverview.top3.map((m, i) => {
+                      const starCount = 5 - i;
+                      return (
+                        <div key={m.id} className="flex items-center gap-2 py-1">
+                          <span className="text-sm font-body text-foreground">{m.name}</span>
+                          <div className="flex">{Array.from({ length: starCount }).map((_, j) => <Star key={j} className="w-3 h-3 text-primary fill-primary" />)}</div>
+                          <span className="text-xs text-muted-foreground">G:{m.goals || 0} A:{m.assists || 0}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 {weeklyOverview.lowContributors.length > 0 && (
                   <div>
-                    <h4 className="font-heading text-xs text-destructive tracking-wider mb-2">⚠️ LOW CONTRIBUTION & ATTENDANCE</h4>
+                    <h4 className="font-heading text-xs text-destructive tracking-wider mb-2">LOW CONTRIBUTION & ATTENDANCE</h4>
                     <div className="flex flex-wrap gap-2">
                       {weeklyOverview.lowContributors.map((m) => (
                         <Badge key={m.id} variant="outline" className="border-destructive/30 text-destructive font-body">{m.name}</Badge>
@@ -204,6 +230,27 @@ const Stats = () => {
             </Card>
           </motion.div>
         )}
+
+        {/* Officials List */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
+          <Card className="bg-card border-border card-glow">
+            <CardHeader>
+              <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" /> Team Officials
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {officials.map(o => (
+                  <div key={o.id} className="p-3 rounded-lg border border-border bg-secondary/30">
+                    <p className="font-body font-medium text-foreground text-sm">{o.name}</p>
+                    <p className="text-xs text-primary font-body capitalize">{o.role}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
         {/* Player Performance */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
@@ -220,7 +267,7 @@ const Stats = () => {
                     <tr className="border-b border-border text-muted-foreground">
                       <th className="text-left py-2 px-2">#</th>
                       <th className="text-left py-2">Player</th>
-                      <th className="text-left py-2">Role</th>
+                      <th className="text-left py-2">Pos</th>
                       <th className="text-right py-2 px-2">Goals</th>
                       <th className="text-right py-2 px-2">Assists</th>
                       <th className="text-right py-2 px-2">Games</th>
@@ -231,7 +278,7 @@ const Stats = () => {
                       <tr key={m.id} className="border-b border-border hover:bg-secondary/30">
                         <td className="py-2 px-2 text-primary text-xs">{m.squadNumber || "—"}</td>
                         <td className="py-2 text-foreground font-medium">{m.name}</td>
-                        <td className="py-2 capitalize text-muted-foreground text-xs">{m.role}</td>
+                        <td className="py-2 text-muted-foreground text-xs">{m.position || "—"}</td>
                         <td className="py-2 px-2 text-right font-heading text-primary">{m.goals || 0}</td>
                         <td className="py-2 px-2 text-right">{m.assists || 0}</td>
                         <td className="py-2 px-2 text-right">{m.gamesPlayed || 0}</td>
@@ -244,55 +291,9 @@ const Stats = () => {
           </Card>
         </motion.div>
 
-        {/* Game History */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-          <Card className="bg-card border-border card-glow">
-            <CardHeader>
-              <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-primary" /> Game History
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {gameScores.length === 0 ? (
-                <p className="text-muted-foreground text-sm font-body">No games recorded yet</p>
-              ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {gameScores.map((game) => (
-                    <div key={game.id} className="border border-border rounded-lg p-3 navy-accent">
-                      <div className="flex items-center justify-between">
-                        <div className="font-body">
-                          <p className="text-foreground font-medium">vs {game.opponent}</p>
-                          <p className="text-xs text-muted-foreground">{new Date(game.date).toLocaleDateString()}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-heading text-lg text-primary">{game.ourScore}</span>
-                          <span className="text-muted-foreground">-</span>
-                          <span className="font-heading text-lg text-muted-foreground">{game.theirScore}</span>
-                          <Badge variant="outline" className={`ml-2 text-xs font-body ${
-                            game.ourScore > game.theirScore ? "border-green-500/30 text-green-400"
-                            : game.ourScore < game.theirScore ? "border-destructive/30 text-destructive"
-                            : "border-primary/30 text-primary"
-                          }`}>
-                            {game.ourScore > game.theirScore ? "W" : game.ourScore < game.theirScore ? "L" : "D"}
-                          </Badge>
-                        </div>
-                      </div>
-                      {game.scorers && game.scorers.length > 0 && (
-                        <p className="text-xs text-muted-foreground mt-1 font-body">
-                          ⚽ {game.scorers.map((sid) => members.find((m) => m.id === sid)?.name || sid).join(", ")}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Team Gallery — date icons with modal */}
+        {/* Team Gallery — date icons */}
         {mediaByDate.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.17 }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
             <Card className="bg-card border-border card-glow">
               <CardHeader>
                 <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
@@ -303,8 +304,8 @@ const Stats = () => {
                 <div className="flex flex-wrap gap-3">
                   {mediaByDate.map(([date, items]) => (
                     <button key={date} onClick={() => setSelectedDate(date)}
-                      className="flex flex-col items-center gap-1 p-3 rounded-xl border border-border hover:border-primary/40 bg-secondary/50 hover:bg-secondary transition-all card-glow">
-                      <span className="text-2xl">📅</span>
+                      className="flex flex-col items-center gap-1 p-3 rounded-xl border border-border hover:border-primary/40 bg-secondary/50 hover:bg-secondary transition-all player-card-glow">
+                      <Calendar className="w-6 h-6 text-primary" />
                       <span className="text-xs font-body text-primary font-medium">
                         {new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </span>
@@ -317,7 +318,6 @@ const Stats = () => {
           </motion.div>
         )}
 
-        {/* Gallery Modal */}
         <GalleryModal date={selectedDate} mediaByDate={Object.fromEntries(mediaByDate)} onClose={() => setSelectedDate(null)} />
 
         {/* Attendance Ranking */}
@@ -329,7 +329,7 @@ const Stats = () => {
               </CardTitle>
               {isOfficial && (
                 <Button size="sm" variant="outline" onClick={exportAttendancePdf} className="font-body text-xs border-primary/30 text-primary">
-                  <Download className="w-3 h-3 mr-1" /> Export PDF
+                  <Download className="w-3 h-3 mr-1" /> Export
                 </Button>
               )}
             </CardHeader>
@@ -354,11 +354,9 @@ const Stats = () => {
                           {DAYS.map((day) => {
                             const record = playerAtt.find((a) => a.day === day);
                             const status = record?.status;
-                            return (
-                              <td key={day} className="py-2 text-center text-sm">
-                                {status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : status === "absent" ? "❌" : ""}
-                              </td>
-                            );
+                            const display = status === "present" ? "P" : status === "excused" ? "E" : status === "no_activity" ? "-" : status === "absent" ? "X" : "";
+                            const color = status === "present" ? "text-green-600 font-bold" : status === "excused" ? "text-blue-600" : status === "no_activity" ? "text-muted-foreground" : "text-destructive";
+                            return <td key={day} className={`py-2 text-center text-sm ${color}`}>{display}</td>;
                           })}
                           <td className="py-2 px-2 text-right font-heading text-primary">{m.attendancePct}%</td>
                         </tr>
@@ -367,11 +365,12 @@ const Stats = () => {
                   </tbody>
                 </table>
               </div>
+              <p className="text-xs text-muted-foreground font-body mt-2">Key: P = Present, E = Excused, X = Absent, - = No Activity</p>
             </CardContent>
           </Card>
         </motion.div>
 
-        {/* Monthly Contribution Grid */}
+        {/* Contribution Grid */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <Card className="bg-card border-border card-glow">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -380,7 +379,7 @@ const Stats = () => {
               </CardTitle>
               {isOfficial && (
                 <Button size="sm" variant="outline" onClick={exportContributionsPdf} className="font-body text-xs border-primary/30 text-primary">
-                  <Download className="w-3 h-3 mr-1" /> Export PDF
+                  <Download className="w-3 h-3 mr-1" /> Export
                 </Button>
               )}
             </CardHeader>
@@ -401,9 +400,9 @@ const Stats = () => {
                           const status = m.contributions[month.key] || "unpaid";
                           return (
                             <td key={month.key} className="py-2 text-center">
-                              {status === "paid" && <span title="Paid" className="text-green-400">✅</span>}
-                              {status === "pending" && <span title="Pending"><Clock className="w-4 h-4 text-primary inline" /></span>}
-                              {status === "unpaid" && <span title="Unpaid" className="text-muted-foreground">—</span>}
+                              {status === "paid" && <span className="text-green-600 font-bold" title="Paid">P</span>}
+                              {status === "pending" && <Clock className="w-4 h-4 text-primary inline" />}
+                              {status === "unpaid" && <span className="text-muted-foreground">—</span>}
                             </td>
                           );
                         })}
@@ -425,7 +424,7 @@ const Stats = () => {
               </CardTitle>
               {isOfficial && (
                 <Button size="sm" variant="outline" onClick={exportFinancialPdf} className="font-body text-xs border-primary/30 text-primary">
-                  <Download className="w-3 h-3 mr-1" /> Export PDF
+                  <Download className="w-3 h-3 mr-1" /> Export
                 </Button>
               )}
             </CardHeader>
@@ -438,9 +437,10 @@ const Stats = () => {
                       <h4 className="font-heading text-sm text-primary">{f.month}</h4>
                       <Badge variant="outline" className="font-body text-xs border-primary/30 text-primary">{f.contributors} contributors</Badge>
                     </div>
+                    {f.contributorNote && <p className="text-xs text-muted-foreground font-body mb-2 italic">{f.contributorNote}</p>}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-body text-sm">
                       <div><p className="text-xs text-muted-foreground">Opening</p><p className="text-foreground">KSh {f.openingBalance.toLocaleString()}</p></div>
-                      <div><p className="text-xs text-muted-foreground">Contributions</p><p className="text-green-400">+KSh {f.contributions.toLocaleString()}</p></div>
+                      <div><p className="text-xs text-muted-foreground">Contributions</p><p className="text-green-600">+KSh {f.contributions.toLocaleString()}</p></div>
                       <div><p className="text-xs text-muted-foreground">Expenses</p><p className="text-destructive">-KSh {totalExpenses.toLocaleString()}</p></div>
                       <div><p className="text-xs text-muted-foreground">Closing</p><p className={f.closingBalance >= 0 ? "text-primary font-medium" : "text-destructive font-medium"}>KSh {f.closingBalance.toLocaleString()}</p></div>
                     </div>
@@ -465,10 +465,9 @@ const Stats = () => {
   );
 };
 
-// Gallery modal component with embla carousel
-const GalleryModal = ({ date, mediaByDate, onClose }: { date: string | null; mediaByDate: Record<string, typeof Stats extends any ? any : never>; onClose: () => void }) => {
+// Gallery modal
+const GalleryModal = ({ date, mediaByDate, onClose }: { date: string | null; mediaByDate: Record<string, any>; onClose: () => void }) => {
   const [emblaRef] = useEmblaCarousel({ loop: true });
-
   if (!date || !mediaByDate[date]) return null;
   const items = mediaByDate[date] as { id: string; url: string; caption?: string }[];
 
@@ -477,12 +476,12 @@ const GalleryModal = ({ date, mediaByDate, onClose }: { date: string | null; med
       <DialogContent className="max-w-3xl bg-card border-border">
         <DialogHeader>
           <DialogTitle className="font-heading text-primary">
-            📅 {new Date(date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            {new Date(date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </DialogTitle>
         </DialogHeader>
         <div className="overflow-hidden rounded-lg" ref={emblaRef}>
           <div className="flex">
-            {items.map((item: any) => (
+            {items.map((item) => (
               <div key={item.id} className="flex-[0_0_100%] min-w-0 px-1">
                 <div className="relative">
                   <img src={item.url} alt={item.caption || "Team photo"} className="w-full h-72 sm:h-96 object-cover rounded-lg" />
@@ -495,7 +494,7 @@ const GalleryModal = ({ date, mediaByDate, onClose }: { date: string | null; med
             ))}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground font-body text-center">Swipe or scroll to view all {items.length} photos</p>
+        <p className="text-xs text-muted-foreground font-body text-center">Swipe to view all {items.length} photos</p>
       </DialogContent>
     </Dialog>
   );
