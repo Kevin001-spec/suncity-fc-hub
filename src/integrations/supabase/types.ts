@@ -76,6 +76,71 @@ export type Database = {
         }
         Relationships: []
       }
+      contribution_event_payments: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          member_id: string
+          paid: boolean
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          member_id: string
+          paid?: boolean
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          member_id?: string
+          paid?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contribution_event_payments_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "contribution_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contribution_events: {
+        Row: {
+          amount_per_person: number
+          created_at: string
+          created_by: string
+          goal_description: string | null
+          id: string
+          is_completed: boolean
+          target_amount: number
+          title: string
+        }
+        Insert: {
+          amount_per_person?: number
+          created_at?: string
+          created_by: string
+          goal_description?: string | null
+          id?: string
+          is_completed?: boolean
+          target_amount?: number
+          title: string
+        }
+        Update: {
+          amount_per_person?: number
+          created_at?: string
+          created_by?: string
+          goal_description?: string | null
+          id?: string
+          is_completed?: boolean
+          target_amount?: number
+          title?: string
+        }
+        Relationships: []
+      }
       contributions: {
         Row: {
           id: string
@@ -257,6 +322,39 @@ export type Database = {
         }
         Relationships: []
       }
+      league_standings: {
+        Row: {
+          drawn: number
+          goal_difference: number
+          id: string
+          lost: number
+          played: number
+          points: number
+          updated_at: string
+          won: number
+        }
+        Insert: {
+          drawn?: number
+          goal_difference?: number
+          id?: string
+          lost?: number
+          played?: number
+          points?: number
+          updated_at?: string
+          won?: number
+        }
+        Update: {
+          drawn?: number
+          goal_difference?: number
+          id?: string
+          lost?: number
+          played?: number
+          points?: number
+          updated_at?: string
+          won?: number
+        }
+        Relationships: []
+      }
       lineup_positions: {
         Row: {
           id: string
@@ -407,6 +505,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      season_config: {
+        Row: {
+          created_at: string
+          created_by: string
+          end_date: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          end_date: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          end_date?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      weekly_overviews: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          type: string
+          week_start: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          id?: string
+          type?: string
+          week_start: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          type?: string
+          week_start?: string
+        }
+        Relationships: []
       }
     }
     Views: {

@@ -6,23 +6,23 @@
 
 @layer base {
   :root {
-    --background: 40 6% 7%;
-    --foreground: 43 90% 75%;
+    --background: 0 0% 100%;
+    --foreground: 220 20% 15%;
 
-    --card: 40 8% 11%;
-    --card-foreground: 43 90% 75%;
+    --card: 0 0% 98%;
+    --card-foreground: 220 20% 15%;
 
-    --popover: 40 8% 11%;
-    --popover-foreground: 43 90% 75%;
+    --popover: 0 0% 98%;
+    --popover-foreground: 220 20% 15%;
 
     --primary: 45 93% 47%;
     --primary-foreground: 0 0% 5%;
 
-    --secondary: 40 10% 16%;
-    --secondary-foreground: 43 60% 70%;
+    --secondary: 220 15% 95%;
+    --secondary-foreground: 220 20% 30%;
 
-    --muted: 40 8% 14%;
-    --muted-foreground: 40 15% 50%;
+    --muted: 220 10% 92%;
+    --muted-foreground: 220 10% 45%;
 
     --accent: 45 93% 47%;
     --accent-foreground: 0 0% 5%;
@@ -30,28 +30,28 @@
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 40 12% 18%;
-    --input: 40 12% 18%;
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
     --ring: 45 93% 47%;
 
     --radius: 0.75rem;
 
     --gold: 45 93% 47%;
-    --gold-light: 43 90% 75%;
+    --gold-light: 43 90% 65%;
     --gold-dark: 40 80% 30%;
     --gold-glow: 45 100% 55%;
 
-    --navy: 220 60% 20%;
-    --navy-light: 220 50% 30%;
-    --navy-dark: 220 70% 12%;
+    --chelsea: 220 70% 40%;
+    --chelsea-light: 220 55% 55%;
+    --chelsea-dark: 220 80% 20%;
 
-    --sidebar-background: 40 8% 9%;
-    --sidebar-foreground: 43 90% 75%;
+    --sidebar-background: 220 70% 20%;
+    --sidebar-foreground: 0 0% 95%;
     --sidebar-primary: 45 93% 47%;
     --sidebar-primary-foreground: 0 0% 5%;
-    --sidebar-accent: 40 10% 14%;
-    --sidebar-accent-foreground: 43 60% 70%;
-    --sidebar-border: 40 12% 18%;
+    --sidebar-accent: 220 60% 30%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 220 50% 30%;
     --sidebar-ring: 45 93% 47%;
   }
 }
@@ -73,11 +73,11 @@
 
 @layer utilities {
   .gold-gradient {
-    background: linear-gradient(135deg, hsl(45 93% 47%), hsl(43 90% 75%), hsl(45 93% 47%));
+    background: linear-gradient(135deg, hsl(45 93% 47%), hsl(43 90% 65%), hsl(45 93% 47%));
   }
   
   .gold-text {
-    background: linear-gradient(135deg, hsl(45 93% 47%), hsl(43 90% 75%));
+    background: linear-gradient(135deg, hsl(45 93% 47%), hsl(40 80% 30%));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -88,26 +88,64 @@
   }
 
   .card-glow {
-    box-shadow: 0 0 20px hsl(45 93% 47% / 0.1), 0 0 60px hsl(45 93% 47% / 0.05);
+    box-shadow: 0 0 15px hsl(45 93% 47% / 0.08), 0 0 40px hsl(45 93% 47% / 0.04);
   }
 
   .text-shadow-gold {
-    text-shadow: 0 0 20px hsl(45 93% 47% / 0.5);
+    text-shadow: 0 0 20px hsl(45 93% 47% / 0.4);
   }
 
-  .navy-gradient {
-    background: linear-gradient(135deg, hsl(220 60% 20%), hsl(220 50% 30%));
+  .chelsea-gradient {
+    background: linear-gradient(135deg, hsl(220 70% 40%), hsl(220 55% 55%));
   }
 
-  .navy-border {
-    border-color: hsl(220 60% 20%);
+  .chelsea-bg {
+    background-color: hsl(220 70% 40%);
   }
 
-  .navy-bg {
-    background-color: hsl(220 60% 20%);
+  .chelsea-text {
+    color: hsl(220 70% 40%);
   }
 
   .navy-accent {
-    background-color: hsl(220 70% 12% / 0.5);
+    background-color: hsl(220 70% 40% / 0.05);
   }
+
+  .navy-bg {
+    background-color: hsl(220 80% 20%);
+  }
+
+  .player-card-glow {
+    box-shadow: 0 0 12px hsl(45 93% 47% / 0.15), 0 0 30px hsl(45 93% 47% / 0.06);
+    border: 1px solid hsl(45 93% 47% / 0.2);
+  }
+
+  .glow-tab {
+    position: relative;
+  }
+
+  .glow-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 10%;
+    right: 10%;
+    height: 2px;
+    background: hsl(45 93% 47%);
+    box-shadow: 0 0 8px hsl(45 93% 47% / 0.6), 0 0 20px hsl(45 93% 47% / 0.3);
+    border-radius: 2px;
+  }
+}
+
+/* Hide Lovable badge */
+[data-lovable-badge],
+iframe[src*="lovable"],
+div[class*="lovable-badge"],
+a[href*="lovable.dev"][style*="position: fixed"],
+div[style*="position: fixed"][style*="bottom"][style*="right"] > a[href*="lovable"],
+#lovable-badge {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }

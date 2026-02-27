@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
@@ -7,9 +7,7 @@ import Navbar from "@/components/Navbar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Target, Footprints, Gamepad2, Upload, CheckCircle, Clock, AlertTriangle, Calendar } from "lucide-react";
+import { Target, Footprints, Gamepad2, Upload, CheckCircle, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { contributionMonths } from "@/data/team-data";
 
@@ -17,32 +15,14 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 const PlayerProfile = () => {
   const { user } = useAuth();
-  const { members, profilePics, requestContribution, setExcused, uploadProfilePicToStorage, attendance, currentWeekStart } = useTeamData();
+  const { members, profilePics, uploadProfilePicToStorage, attendance, currentWeekStart } = useTeamData();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [excuseType, setExcuseType] = useState<"game" | "training" | "">("");
-  const [excuseDays, setExcuseDays] = useState<string[]>([]);
 
   if (!user) return <Navigate to="/" replace />;
 
   const liveMember = members.find((m) => m.id === user.id) || user;
   const isFabianExempt = user.id === "SCF-001";
-
-  const handlePayRequest = (monthKey: string, monthLabel: string) => {
-    requestContribution(user.id, user.name, monthKey, monthLabel);
-    toast({ title: "Request Sent", description: `Payment request for ${monthLabel} sent to Finance Officer.` });
-  };
-
-  const handleExcuse = () => {
-    if (excuseType === "training" && excuseDays.length > 0) {
-      setExcused(user.id, true, "training", excuseDays);
-      toast({ title: "Training Excuse Submitted", description: `Excused from training on ${excuseDays.join(", ")}.` });
-    } else if (excuseType === "game") {
-      setExcused(user.id, true, "game");
-      toast({ title: "Game Excuse Submitted", description: "You are excused from the next game." });
-    }
-    setExcuseType(""); setExcuseDays([]);
-  };
 
   const handleProfilePicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -63,7 +43,7 @@ const PlayerProfile = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20 sm:pb-0">
       <Navbar />
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
@@ -83,6 +63,7 @@ const PlayerProfile = () => {
             <Badge variant="outline" className="border-primary/30 text-primary font-body">{user.id}</Badge>
             {user.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body">Captain</Badge>}
           </div>
+          {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{liveMember.position}</p>}
           {liveMember.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{liveMember.squadNumber}</p>}
         </motion.div>
 
@@ -98,7 +79,7 @@ const PlayerProfile = () => {
           ))}
         </motion.div>
 
-        {/* Weekly Attendance with emojis */}
+        {/* Weekly Attendance */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <Card className="bg-card border-border card-glow">
             <CardHeader>
@@ -112,18 +93,18 @@ const PlayerProfile = () => {
                 {DAYS.map((day) => {
                   const record = myAttendance.find((a) => a.day === day);
                   const status = record?.status || "absent";
-                  const emojis: Record<string, string> = { present: "✅", absent: "❌", excused: "🔵", no_activity: "➖" };
+                  const symbols: Record<string, string> = { present: "P", absent: "X", excused: "E", no_activity: "-" };
                   const colors: Record<string, string> = {
-                    present: "bg-green-500/20 border-green-500/40",
-                    absent: "bg-destructive/10 border-destructive/30",
-                    excused: "bg-primary/20 border-primary/30",
-                    no_activity: "bg-muted border-border",
+                    present: "bg-green-500/20 border-green-500/40 text-green-700",
+                    absent: "bg-destructive/10 border-destructive/30 text-destructive",
+                    excused: "bg-blue-500/20 border-blue-500/30 text-blue-600",
+                    no_activity: "bg-muted border-border text-muted-foreground",
                   };
                   return (
                     <div key={day} className="text-center flex-1">
                       <p className="text-xs text-muted-foreground font-body mb-1">{day.slice(0, 3)}</p>
-                      <div className={`w-10 h-10 mx-auto rounded-lg border-2 flex items-center justify-center text-lg ${colors[status]}`}>
-                        {emojis[status]}
+                      <div className={`w-10 h-10 mx-auto rounded-lg border-2 flex items-center justify-center text-sm font-bold ${colors[status]}`}>
+                        {symbols[status]}
                       </div>
                     </div>
                   );
@@ -133,75 +114,41 @@ const PlayerProfile = () => {
           </Card>
         </motion.div>
 
-        {/* Monthly Contributions */}
+        {/* Monthly Contributions — Fancy display */}
         {!isFabianExempt && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <Card className="bg-card border-border card-glow">
               <CardHeader><CardTitle className="font-heading text-lg text-foreground">Monthly Contributions</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                {contributionMonths.map(({ key, label }) => {
-                  const status = liveMember.contributions[key] || "unpaid";
-                  return (
-                    <div key={key} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                      <span className="font-body text-foreground">{label}</span>
-                      <div className="flex items-center gap-2">
-                        {status === "paid" && <Badge className="bg-green-500/20 text-green-400 border-green-500/30 font-body"><CheckCircle className="w-3 h-3 mr-1" /> Paid</Badge>}
-                        {status === "pending" && <Badge className="bg-primary/20 text-primary border-primary/30 font-body"><Clock className="w-3 h-3 mr-1" /> Pending</Badge>}
-                        {status === "unpaid" && (
-                          <Button size="sm" variant="outline" onClick={() => handlePayRequest(key, label)}
-                            className="font-body text-xs border-primary/30 text-primary hover:bg-primary/10">Mark as Paid</Button>
-                        )}
+              <CardContent>
+                <div className="flex flex-wrap gap-3">
+                  {contributionMonths.map(({ key, label }) => {
+                    const status = liveMember.contributions[key] || "unpaid";
+                    const isPaid = status === "paid";
+                    return (
+                      <div key={key} className={`px-4 py-3 rounded-xl border-2 text-center transition-all ${
+                        isPaid 
+                          ? "border-primary/40 bg-primary/10 player-card-glow" 
+                          : "border-border bg-muted/30"
+                      }`}>
+                        <p className="text-xs font-body text-muted-foreground">{label}</p>
+                        <div className="mt-1">
+                          {isPaid ? (
+                            <div className="flex items-center gap-1 justify-center">
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                              <span className="text-sm font-heading text-green-600">Paid</span>
+                            </div>
+                          ) : (
+                            <span className="text-sm font-body text-muted-foreground">Unpaid</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </CardContent>
             </Card>
           </motion.div>
         )}
-
-        {/* Excuse Request */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-          <Card className="bg-card border-border card-glow">
-            <CardHeader>
-              <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-primary" /> Request Excuse
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {liveMember.excused ? (
-                <div className="flex items-center gap-2 text-primary font-body">
-                  <CheckCircle className="w-4 h-4" /> You are excused ({liveMember.excusedType || "game"})
-                </div>
-              ) : (
-                <>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant={excuseType === "game" ? "default" : "outline"} onClick={() => { setExcuseType("game"); setExcuseDays([]); }} className="font-body">🏟️ Game</Button>
-                    <Button size="sm" variant={excuseType === "training" ? "default" : "outline"} onClick={() => setExcuseType("training")} className="font-body">🏋️ Training</Button>
-                  </div>
-                  {excuseType === "training" && (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground font-body">Select days you won't attend:</p>
-                      <div className="flex flex-wrap gap-3">
-                        {DAYS.map((day) => (
-                          <label key={day} className="flex items-center gap-2 font-body text-sm text-foreground">
-                            <Checkbox checked={excuseDays.includes(day)}
-                              onCheckedChange={(checked) => setExcuseDays(checked ? [...excuseDays, day] : excuseDays.filter((d) => d !== day))} />
-                            {day}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {excuseType && (
-                    <Button onClick={handleExcuse} variant="outline" className="font-body border-primary/30 text-primary hover:bg-primary/10"
-                      disabled={excuseType === "training" && excuseDays.length === 0}>Submit Excuse</Button>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
       </main>
     </div>
   );
