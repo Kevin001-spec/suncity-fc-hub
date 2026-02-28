@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import {
   Trophy, Calendar as CalendarIcon, Image, DollarSign, Users, CheckCircle, XCircle, Plus,
-  TrendingUp, TrendingDown, Upload, Target, Save, Trash2, Download, UserMinus, Star,
+  TrendingUp, TrendingDown, Upload, Target, Save, Trash2, Download, UserMinus, Star, BarChart3, Edit,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { contributionMonths } from "@/data/team-data";
@@ -28,6 +28,28 @@ import { supabase } from "@/integrations/supabase/client";
 import LineupBuilder from "@/components/LineupBuilder";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+
+// Correct attendance calculation
+function calcAttendancePct(playerAtt: { status: string }[]) {
+  const activeDays = playerAtt.filter(a => a.status !== "no_activity");
+  const presentDays = activeDays.filter(a => a.status === "present").length;
+  const excusedDays = activeDays.filter(a => a.status === "excused").length;
+  if (activeDays.length === 0) return 0;
+  const dayValue = 100 / activeDays.length;
+  return Math.round((presentDays * dayValue) + (excusedDays * dayValue * 0.5));
+}
+
+interface LeagueTeam {
+  id: string;
+  team_name: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goal_difference: number;
+  points: number;
+  is_own_team: boolean;
+}
 
 const OfficialProfile = () => {
   const { user } = useAuth();
@@ -39,7 +61,7 @@ const OfficialProfile = () => {
     uploadProfilePicToStorage, uploadMediaToStorage,
     updateContributionDirect, updateAttendance, markDayNoActivity,
     requestContribution, deleteMediaItem, removePlayer,
-    uploadHomepageImages, deleteHomepageImage,
+    uploadHomepageImages, deleteHomepageImage, updatePlayerStats,
   } = useTeamData();
   const { toast } = useToast();
 
@@ -54,9 +76,31 @@ const OfficialProfile = () => {
   const [finAmount, setFinAmount] = useState("");
   const [finDesc, setFinDesc] = useState("");
   const [finDate, setFinDate] = useState<Date | undefined>();
-  const [finMonth, setFinMonth] = useState("Mar 2026");
+  const [finMonth, setFinMonth] = useState(() => {
+    const now = new Date();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+  });
   const [removePlayerId, setRemovePlayerId] = useState("");
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+
+  // Team Stats Editor state
+  const [statsPlayerId, setStatsPlayerId] = useState("");
+  const [statsGoals, setStatsGoals] = useState("");
+  const [statsAssists, setStatsAssists] = useState("");
+  const [statsGames, setStatsGames] = useState("");
+  const [statsOpponent, setStatsOpponent] = useState("");
+
+  // Position Editor state
+  const [posPlayerId, setPosPlayerId] = useState("");
+  const [posValue, setPosValue] = useState("");
+
+  // League Teams state
+  const [leagueTeams, setLeagueTeams] = useState<LeagueTeam[]>([]);
+  const [leagueLoaded, setLeagueLoaded] = useState(false);
+  const [newTeamName, setNewTeamName] = useState("");
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editTeamData, setEditTeamData] = useState({ played: 0, won: 0, drawn: 0, lost: 0, gd: 0, pts: 0 });
 
   // Contribution Events
   const [ceTitle, setCeTitle] = useState("");
@@ -79,19 +123,39 @@ const OfficialProfile = () => {
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const homepageInputRef = useRef<HTMLInputElement>(null);
 
-  if (!user) return <Navigate to="/" replace />;
-
   // Load contribution events
-  if (!ceLoaded) {
-    Promise.all([
-      supabase.from("contribution_events").select("*").order("created_at", { ascending: false }),
-      supabase.from("contribution_event_payments").select("*"),
-    ]).then(([{ data: events }, { data: payments }]) => {
-      setContribEvents(events || []);
-      setContribPayments(payments || []);
-      setCeLoaded(true);
-    });
-  }
+  useEffect(() => {
+    if (!ceLoaded) {
+      Promise.all([
+        supabase.from("contribution_events").select("*").order("created_at", { ascending: false }),
+        supabase.from("contribution_event_payments").select("*"),
+      ]).then(([{ data: events }, { data: payments }]) => {
+        setContribEvents(events || []);
+        setContribPayments(payments || []);
+        setCeLoaded(true);
+      });
+    }
+  }, [ceLoaded]);
+
+  // Load league teams
+  useEffect(() => {
+    if (!leagueLoaded) {
+      supabase.from("league_teams").select("*").then(({ data }) => {
+        if (data) setLeagueTeams((data as LeagueTeam[]).sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference));
+        setLeagueLoaded(true);
+      });
+    }
+  }, [leagueLoaded]);
+
+  // Load league teams
+  useEffect(() => {
+    if (!leagueLoaded) {
+      supabase.from("league_teams").select("*").then(({ data }) => {
+        if (data) setLeagueTeams((data as LeagueTeam[]).sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference));
+        setLeagueLoaded(true);
+      });
+    }
+  }, [leagueLoaded]);
 
   const isCoach = user.role === "coach";
   const isFadhir = user.id === "SCF-002";
@@ -106,6 +170,7 @@ const OfficialProfile = () => {
   const canDeletePhotos = isManager;
   const canManageContribEvents = isFadhir || isCaptain;
   const showContributions = !isFabian;
+  const canManageAttendance = isManager || user.id === "SCF-004";
 
   const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
   const ourScoreNum = parseInt(newOurScore) || 0;
@@ -163,17 +228,55 @@ const OfficialProfile = () => {
     e.target.value = "";
   };
 
-  const handlePayRequest = (monthKey: string, monthLabel: string) => {
-    requestContribution(user.id, user.name, monthKey, monthLabel);
-    toast({ title: "Request Sent", description: `Payment request for ${monthLabel} sent.` });
-  };
-
   const handleRemovePlayer = async () => {
     if (!removePlayerId) return;
     const playerName = members.find((m) => m.id === removePlayerId)?.name;
     await removePlayer(removePlayerId);
     toast({ title: "Player Removed", description: `${playerName} has been removed.` });
     setRemovePlayerId(""); setShowRemoveConfirm(false);
+  };
+
+  const handleUpdateStats = async () => {
+    if (!statsPlayerId) return;
+    const goals = parseInt(statsGoals) || 0;
+    const assists = parseInt(statsAssists) || 0;
+    const games = parseInt(statsGames) || 0;
+    await updatePlayerStats(statsPlayerId, goals, assists, games);
+    toast({ title: "Stats Updated" });
+  };
+
+  const handleUpdatePosition = async () => {
+    if (!posPlayerId || !posValue) return;
+    await supabase.from("members").update({ position: posValue }).eq("id", posPlayerId);
+    toast({ title: "Position Updated" });
+    setPosPlayerId(""); setPosValue("");
+  };
+
+  // League team management
+  const handleAddLeagueTeam = async () => {
+    if (!newTeamName) return;
+    const { data } = await supabase.from("league_teams").insert({ team_name: newTeamName, is_own_team: false } as any).select().single();
+    if (data) {
+      setLeagueTeams(prev => [...prev, data as LeagueTeam].sort((a, b) => b.points - a.points));
+      toast({ title: "Team Added" });
+    }
+    setNewTeamName("");
+  };
+
+  const handleSaveLeagueTeam = async (teamId: string) => {
+    await supabase.from("league_teams").update({
+      played: editTeamData.played, won: editTeamData.won, drawn: editTeamData.drawn,
+      lost: editTeamData.lost, goal_difference: editTeamData.gd, points: editTeamData.pts,
+    } as any).eq("id", teamId);
+    setLeagueTeams(prev => prev.map(t => t.id === teamId ? { ...t, played: editTeamData.played, won: editTeamData.won, drawn: editTeamData.drawn, lost: editTeamData.lost, goal_difference: editTeamData.gd, points: editTeamData.pts } : t).sort((a, b) => b.points - a.points));
+    setEditingTeamId(null);
+    toast({ title: "Standings Updated" });
+  };
+
+  const handleDeleteLeagueTeam = async (teamId: string) => {
+    await supabase.from("league_teams").delete().eq("id", teamId);
+    setLeagueTeams(prev => prev.filter(t => t.id !== teamId));
+    toast({ title: "Team Removed" });
   };
 
   const handleAddContribEvent = async () => {
@@ -213,7 +316,6 @@ const OfficialProfile = () => {
     const tables: TableData[] = [];
     financialRecords.forEach((f) => {
       const totalExp = f.expenses.reduce((sum, e) => sum + e.amount, 0);
-      // Detailed per-month table
       const head = [[`${f.month} — Financial Details`, ""]];
       const body: string[][] = [
         ["Opening Balance", `KSh ${f.openingBalance.toLocaleString()}`],
@@ -226,7 +328,6 @@ const OfficialProfile = () => {
       body.push(["Closing Balance", `KSh ${f.closingBalance.toLocaleString()}`]);
       tables.push({ head, body });
     });
-    // Add contributor names per month
     const contribHead = [["Month", "Contributors Who Paid"]];
     const contribBody = contributionMonths.map(month => {
       const paidMembers = members.filter(m => m.contributions[month.key] === "paid").map(m => m.name).join(", ");
@@ -240,9 +341,7 @@ const OfficialProfile = () => {
   const playerAnalytics = useMemo(() => {
     return playerMembers.map(m => {
       const playerAtt = attendance.filter(a => a.playerId === m.id);
-      const activeDays = playerAtt.filter(a => a.status !== "no_activity");
-      const presentDays = playerAtt.filter(a => a.status === "present").length;
-      const attPct = activeDays.length > 0 ? Math.round((presentDays / activeDays.length) * 100) : 0;
+      const attPct = calcAttendancePct(playerAtt);
       const score = attPct * 0.4 + (m.goals || 0) * 30 + (m.assists || 0) * 20;
       return { ...m, attPct, score };
     }).sort((a, b) => b.score - a.score);
@@ -260,15 +359,25 @@ const OfficialProfile = () => {
 
   const liveMember = members.find((m) => m.id === user.id) || user;
 
+  // When selecting a player for stats editor, load their current stats
+  const selectedStatsPlayer = members.find(m => m.id === statsPlayerId);
+  useEffect(() => {
+    if (selectedStatsPlayer) {
+      setStatsGoals(String(selectedStatsPlayer.goals || 0));
+      setStatsAssists(String(selectedStatsPlayer.assists || 0));
+      setStatsGames(String(selectedStatsPlayer.gamesPlayed || 0));
+    }
+  }, [statsPlayerId]);
+
   return (
-    <div className="min-h-screen bg-background pb-20 sm:pb-0">
+    <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
         {/* Profile Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
           <div className="relative inline-block">
             <Avatar className="w-24 h-24 border-2 border-primary mx-auto">
-              {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} />}
+              {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
               <AvatarFallback className="bg-secondary text-primary font-heading text-2xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
             <button onClick={() => fileInputRef.current?.click()}
@@ -285,7 +394,7 @@ const OfficialProfile = () => {
         </motion.div>
 
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Game Scores — all officials except removed for coach per plan */}
+          {/* Game Scores */}
           {canManageScores && (
             <Card className="bg-card border-border card-glow">
               <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Update Scores</CardTitle></CardHeader>
@@ -340,7 +449,7 @@ const OfficialProfile = () => {
             </Card>
           )}
 
-          {/* Record Transaction — Finance/Coach only, with DatePicker */}
+          {/* Record Transaction — Finance/Coach only (NOT coach per plan) */}
           {canManageFinance && !isCoach && (
             <Card className="bg-card border-border card-glow">
               <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><DollarSign className="w-5 h-5 text-primary" /> Record Transaction</CardTitle></CardHeader>
@@ -361,8 +470,8 @@ const OfficialProfile = () => {
                       {finDate ? format(finDate, "PPP") : "Select date"}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={finDate} onSelect={setFinDate} initialFocus className={cn("p-3 pointer-events-auto")} />
+                  <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                    <Calendar mode="single" selected={finDate} onSelect={setFinDate} initialFocus className="p-3 pointer-events-auto" />
                   </PopoverContent>
                 </Popover>
                 <Button onClick={handleRecordTransaction} className="w-full font-body"><Plus className="w-4 h-4 mr-1" /> Record</Button>
@@ -370,6 +479,95 @@ const OfficialProfile = () => {
             </Card>
           )}
         </div>
+
+        {/* ===== MANAGER: Team Stats Editor ===== */}
+        {isManager && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Team Stats Editor</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <select value={statsPlayerId} onChange={(e) => setStatsPlayerId(e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                <option value="">Select player</option>
+                {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+              {statsPlayerId && (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground font-body">Goals</label>
+                      <Input type="number" value={statsGoals} onChange={(e) => setStatsGoals(e.target.value)} className="bg-secondary border-border font-body" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground font-body">Assists</label>
+                      <Input type="number" value={statsAssists} onChange={(e) => setStatsAssists(e.target.value)} className="bg-secondary border-border font-body" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground font-body">Games</label>
+                      <Input type="number" value={statsGames} onChange={(e) => setStatsGames(e.target.value)} className="bg-secondary border-border font-body" />
+                    </div>
+                  </div>
+                  <Input placeholder="Opponent name (optional)" value={statsOpponent} onChange={(e) => setStatsOpponent(e.target.value)} className="bg-secondary border-border font-body" />
+                  <Button onClick={handleUpdateStats} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== MANAGER: League Standings Editor ===== */}
+        {isManager && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> League Standings Editor</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {/* Add team */}
+              <div className="flex gap-2">
+                <Input placeholder="Team name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} className="bg-secondary border-border font-body" />
+                <Button onClick={handleAddLeagueTeam} disabled={!newTeamName} className="font-body"><Plus className="w-4 h-4 mr-1" /> Add</Button>
+              </div>
+              {/* Teams list */}
+              <div className="space-y-2">
+                {leagueTeams.map((team, i) => (
+                  <div key={team.id} className={`border rounded-lg p-3 ${team.is_own_team ? "border-primary/40 bg-primary/5" : "border-border"}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`font-body font-medium text-sm ${team.is_own_team ? "text-primary" : "text-foreground"}`}>
+                        {i + 1}. {team.team_name} {team.is_own_team && "⭐"}
+                      </span>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
+                          setEditingTeamId(team.id);
+                          setEditTeamData({ played: team.played, won: team.won, drawn: team.drawn, lost: team.lost, gd: team.goal_difference, pts: team.points });
+                        }}><Edit className="w-3 h-3" /></Button>
+                        {!team.is_own_team && <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => handleDeleteLeagueTeam(team.id)}><Trash2 className="w-3 h-3" /></Button>}
+                      </div>
+                    </div>
+                    {editingTeamId === team.id ? (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-6 gap-1">
+                          {[["P", "played"], ["W", "won"], ["D", "drawn"], ["L", "lost"], ["GD", "gd"], ["Pts", "pts"]].map(([label, key]) => (
+                            <div key={key}>
+                              <label className="text-[10px] text-muted-foreground">{label}</label>
+                              <Input type="number" value={(editTeamData as any)[key]} onChange={(e) => setEditTeamData(prev => ({ ...prev, [key]: +e.target.value }))} className="h-8 text-xs bg-secondary border-border" />
+                            </div>
+                          ))}
+                        </div>
+                        <Button size="sm" onClick={() => handleSaveLeagueTeam(team.id)} className="font-body text-xs"><Save className="w-3 h-3 mr-1" /> Save</Button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-6 gap-2 text-xs text-muted-foreground font-body">
+                        <span>P: {team.played}</span>
+                        <span className="text-green-600">W: {team.won}</span>
+                        <span>D: {team.drawn}</span>
+                        <span className="text-destructive">L: {team.lost}</span>
+                        <span>GD: {team.goal_difference}</span>
+                        <span className="text-primary font-bold">Pts: {team.points}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Official's contribution section */}
         {showContributions && (
@@ -383,7 +581,7 @@ const OfficialProfile = () => {
                   return (
                     <div key={key} className={`px-4 py-3 rounded-xl border-2 text-center ${isPaid ? "border-primary/40 bg-primary/10" : "border-border bg-muted/30"}`}>
                       <p className="text-xs font-body text-muted-foreground">{label}</p>
-                      {isPaid ? <CheckCircle className="w-4 h-4 text-green-600 mx-auto mt-1" /> : <span className="text-xs text-muted-foreground">—</span>}
+                      {isPaid ? <span className="text-green-600">✅</span> : <span className="text-muted-foreground">❌</span>}
                     </div>
                   );
                 })}
@@ -547,8 +745,8 @@ const OfficialProfile = () => {
           </Card>
         )}
 
-        {/* Weekly Attendance — Manager only */}
-        {isManager && (
+        {/* Weekly Attendance — Manager + Ethan */}
+        {canManageAttendance && (
           <Card className="bg-card border-border card-glow">
             <CardHeader>
               <CardTitle className="font-heading text-lg text-foreground">Weekly Attendance — {currentWeekStart}</CardTitle>
@@ -572,11 +770,7 @@ const OfficialProfile = () => {
                   <tbody>
                     {playerMembers.map((m) => {
                       const playerAtt = attendance.filter((a) => a.playerId === m.id);
-                      const activeDays = playerAtt.filter(a => a.status !== "no_activity");
-                      const presentDays = playerAtt.filter((a) => a.status === "present").length;
-                      const excusedDays = playerAtt.filter(a => a.status === "excused").length;
-                      // Progressive: show running percentage
-                      const pct = activeDays.length > 0 ? Math.round(((presentDays + excusedDays) / activeDays.length) * 100) : 0;
+                      const pct = calcAttendancePct(playerAtt);
 
                       return (
                         <tr key={m.id} className="border-b border-border">
@@ -585,35 +779,34 @@ const OfficialProfile = () => {
                             const record = playerAtt.find((a) => a.day === day);
                             const status = record?.status || "";
                             const isNoActivity = status === "no_activity";
-                            // Three-state toggle: click cycles present -> excused -> absent
                             const handleClick = () => {
                               if (isNoActivity) return;
                               if (status === "present") updateAttendance(m.id, day, "excused");
                               else if (status === "excused") updateAttendance(m.id, day, "absent");
                               else updateAttendance(m.id, day, "present");
                             };
-                            const display = status === "present" ? "P" : status === "excused" ? "E" : status === "no_activity" ? "-" : "X";
-                            const colors = status === "present" ? "bg-green-500/20 text-green-700 border-green-500/40"
-                              : status === "excused" ? "bg-blue-500/20 text-blue-600 border-blue-500/40"
-                              : status === "no_activity" ? "bg-muted text-muted-foreground border-border"
-                              : "bg-destructive/10 text-destructive border-destructive/30";
+                            const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : "❌";
+                            const colors = status === "present" ? "bg-green-500/20 border-green-500/40"
+                              : status === "excused" ? "bg-blue-500/20 border-blue-500/40"
+                              : status === "no_activity" ? "bg-muted border-border"
+                              : "bg-destructive/10 border-destructive/30";
                             return (
                               <td key={day} className="py-2 text-center">
                                 <button onClick={handleClick} disabled={isNoActivity}
-                                  className={`w-8 h-8 rounded-md border-2 text-xs font-bold transition-all ${colors} ${isNoActivity ? "cursor-not-allowed" : "cursor-pointer hover:opacity-80"}`}>
+                                  className={`w-8 h-8 rounded-md border-2 text-xs transition-all ${colors} ${isNoActivity ? "cursor-not-allowed" : "cursor-pointer hover:opacity-80"}`}>
                                   {display}
                                 </button>
                               </td>
                             );
                           })}
-                          <td className="py-2 text-center font-heading text-primary text-xs">{activeDays.length > 0 ? `${pct}%` : "—"}</td>
+                          <td className="py-2 text-center font-heading text-primary text-xs">{playerAtt.filter(a => a.status !== "no_activity").length > 0 ? `${pct}%` : "—"}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-muted-foreground font-body mt-2">Click to toggle: P (Present) → E (Excused) → X (Absent)</p>
+              <p className="text-xs text-muted-foreground font-body mt-2">Click to toggle: ✅ Present → 🔵 Excused → ❌ Absent</p>
             </CardContent>
           </Card>
         )}
@@ -638,7 +831,7 @@ const OfficialProfile = () => {
           </Card>
         )}
 
-        {/* Homepage Photos — Manager only (Coach removed per plan) */}
+        {/* Homepage Photos — Manager only */}
         {isManager && (
           <Card className="bg-card border-border card-glow">
             <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Image className="w-5 h-5 text-primary" /> Homepage Photos</CardTitle></CardHeader>
@@ -661,6 +854,36 @@ const OfficialProfile = () => {
                 <span className="text-xs text-muted-foreground font-body">Upload up to 4 homepage photos</span>
                 <input ref={homepageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleHomepageUpload} />
               </label>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Coach: Edit Player Positions */}
+        {isCoach && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Edit className="w-5 h-5 text-primary" /> Edit Player Positions</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <select value={posPlayerId} onChange={(e) => setPosPlayerId(e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                <option value="">Select player</option>
+                {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.position || "No position"})</option>)}
+              </select>
+              {posPlayerId && (
+                <>
+                  <select value={posValue} onChange={(e) => setPosValue(e.target.value)}
+                    className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                    <option value="">Select position</option>
+                    <option value="GK">Goalkeeper</option>
+                    <option value="DEF">Defender</option>
+                    <option value="DEF (LB)">Defender (LB)</option>
+                    <option value="DEF (CB)">Defender (CB)</option>
+                    <option value="DEF (RB)">Defender (RB)</option>
+                    <option value="MID">Midfielder</option>
+                    <option value="ATT">Attacker</option>
+                  </select>
+                  <Button onClick={handleUpdatePosition} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Update Position</Button>
+                </>
+              )}
             </CardContent>
           </Card>
         )}
@@ -696,7 +919,7 @@ const OfficialProfile = () => {
                         </Button>
                         <Button size="sm" variant={isSub ? "secondary" : "outline"} className="text-xs h-7 px-2"
                           onClick={() => setSelectedSubs(prev => isSub ? prev.filter(id => id !== m.id) : [...prev, m.id])}>
-                          {isSub ? "Sub" : "Sub"}
+                          Sub
                         </Button>
                       </div>
                     </div>
@@ -725,8 +948,8 @@ const OfficialProfile = () => {
                     {seasonEndDate ? format(seasonEndDate, "PPP") : "Set season end date"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={seasonEndDate} onSelect={setSeasonEndDate} initialFocus className={cn("p-3 pointer-events-auto")} />
+                <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                  <Calendar mode="single" selected={seasonEndDate} onSelect={setSeasonEndDate} initialFocus className="p-3 pointer-events-auto" />
                 </PopoverContent>
               </Popover>
               {seasonEndDate && (

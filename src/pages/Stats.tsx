@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BarChart3, Download, CheckCircle, Clock, DollarSign, Trophy, Calendar, Image, Star, Award, Users } from "lucide-react";
 import { contributionMonths, officials } from "@/data/team-data";
@@ -15,9 +16,19 @@ import useEmblaCarousel from "embla-carousel-react";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
+// Correct attendance math helper
+function calcAttendancePct(playerAtt: { status: string }[]) {
+  const activeDays = playerAtt.filter(a => a.status !== "no_activity");
+  const presentDays = activeDays.filter(a => a.status === "present").length;
+  const excusedDays = activeDays.filter(a => a.status === "excused").length;
+  if (activeDays.length === 0) return 0;
+  const dayValue = 100 / activeDays.length;
+  return Math.round((presentDays * dayValue) + (excusedDays * dayValue * 0.5));
+}
+
 const Stats = () => {
   const { user, isOfficial } = useAuth();
-  const { members, financialRecords, gameScores, attendance, mediaItems } = useTeamData();
+  const { members, financialRecords, gameScores, attendance, mediaItems, profilePics } = useTeamData();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   if (!user) return <Navigate to="/" replace />;
@@ -37,23 +48,19 @@ const Stats = () => {
     });
   }, [contributionMembers]);
 
-  // Attendance ranking with progressive calculation
+  // Attendance ranking with CORRECT progressive calculation
   const attendanceRanking = useMemo(() => {
     const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
     return playerMembers.map((m) => {
       const playerAtt = attendance.filter((a) => a.playerId === m.id);
-      const activeDays = playerAtt.filter((a) => a.status !== "no_activity");
-      const presentDays = playerAtt.filter((a) => a.status === "present").length;
-      const excusedDays = playerAtt.filter((a) => a.status === "excused").length;
-      // Progressive: denominator = active days count
-      const pct = activeDays.length > 0 ? Math.round(((presentDays + excusedDays) / activeDays.length) * 100) : 0;
+      const pct = calcAttendancePct(playerAtt);
+      const presentDays = playerAtt.filter(a => a.status === "present").length;
+      const excusedDays = playerAtt.filter(a => a.status === "excused").length;
       return { ...m, attendancePct: pct, presentDays, excusedDays, hasExcuse: excusedDays > 0 };
     }).sort((a, b) => {
-      // Sort: most ticks first, then excuses, then absent-only
+      if (b.attendancePct !== a.attendancePct) return b.attendancePct - a.attendancePct;
       if (b.presentDays !== a.presentDays) return b.presentDays - a.presentDays;
-      if (a.hasExcuse && !b.hasExcuse) return -1;
-      if (!a.hasExcuse && b.hasExcuse) return 1;
-      return b.attendancePct - a.attendancePct;
+      return 0;
     });
   }, [members, attendance]);
 
@@ -79,18 +86,14 @@ const Stats = () => {
       return playerAtt.length > 0 && playerAtt.every((a) => a.status === "present");
     });
     const sortedByPerf = [...playerMembers].sort((a, b) => ((b.goals || 0) + (b.assists || 0)) - ((a.goals || 0) + (a.assists || 0)));
-    const bestPlayer = sortedByPerf[0];
-    // Top 3 rated players with stars
     const top3 = sortedByPerf.slice(0, 3);
     const lowContributors = playerMembers.filter((m) => {
       const paidCount = Object.values(m.contributions).filter((s) => s === "paid").length;
       const playerAtt = attendance.filter((a) => a.playerId === m.id);
-      const activeDays = playerAtt.filter((a) => a.status !== "no_activity");
-      const presentDays = playerAtt.filter((a) => a.status === "present" || a.status === "excused").length;
-      const pct = activeDays.length > 0 ? Math.round((presentDays / activeDays.length) * 100) : 0;
+      const pct = calcAttendancePct(playerAtt);
       return paidCount <= 1 && pct < 60;
     });
-    return { mostDisciplined, bestPlayer, top3, lowContributors };
+    return { mostDisciplined, bestPlayer: sortedByPerf[0], top3, lowContributors };
   }, [showWeeklyOverview, members, attendance]);
 
   const exportContributionsPdf = () => {
@@ -99,7 +102,7 @@ const Stats = () => {
       m.name,
       ...contributionMonths.map((month) => {
         const status = m.contributions[month.key] || "unpaid";
-        return status === "paid" ? "[PAID]" : status === "pending" ? "[Pending]" : "—";
+        return status === "paid" ? "✅" : status === "pending" ? "⏳" : "❌";
       }),
     ]);
     generateBrandedPdf("Monthly Contribution Status Report", [{ head, body }], "suncity_fc_contributions.pdf");
@@ -114,12 +117,12 @@ const Stats = () => {
         m.name,
         ...DAYS.map((day) => {
           const record = playerAtt.find((a) => a.day === day);
-          return record?.status === "present" ? "[PAID]" : record?.status === "excused" ? "[E]" : record?.status === "no_activity" ? "[-]" : "[X]";
+          return record?.status === "present" ? "✅" : record?.status === "excused" ? "🔵" : record?.status === "no_activity" ? "➖" : "❌";
         }),
         `${m.attendancePct}%`,
       ];
     });
-    const keyTable: TableData = { head: [], body: [["Key: [PAID] = Present, [X] = Absent, [E] = Excused, [-] = No Activity"]] };
+    const keyTable: TableData = { head: [], body: [["Key: ✅ = Present, ❌ = Absent, 🔵 = Excused, ➖ = No Activity"]] };
     generateBrandedPdf("Weekly Attendance Report", [{ head, body }, keyTable], "suncity_fc_attendance.pdf");
   };
 
@@ -139,7 +142,6 @@ const Stats = () => {
       body.push(["Closing Balance", `KSh ${f.closingBalance.toLocaleString()}`]);
       tables.push({ head, body });
     });
-    // Contributor names
     const cHead = [["Month", "Contributors Who Paid"]];
     const cBody = contributionMonths.map(month => {
       const paid = members.filter(m => m.contributions[month.key] === "paid").map(m => m.name).join(", ");
@@ -157,8 +159,8 @@ const Stats = () => {
     }
     if (weeklyOverview.top3.length > 0) {
       tables.push({ head: [["Top Rated Players"]], body: weeklyOverview.top3.map((m, i) => {
-        const stars = i === 0 ? "5 Stars" : i === 1 ? "4 Stars" : "3 Stars";
-        return [`${m.name} — Goals: ${m.goals || 0}, Assists: ${m.assists || 0} (${stars})`];
+        const stars = i === 0 ? "⭐⭐⭐⭐⭐" : i === 1 ? "⭐⭐⭐⭐" : "⭐⭐⭐";
+        return [`${m.name} — Goals: ${m.goals || 0}, Assists: ${m.assists || 0} ${stars}`];
       })});
     }
     if (weeklyOverview.lowContributors.length > 0) {
@@ -168,7 +170,7 @@ const Stats = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20 sm:pb-0">
+    <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
@@ -196,7 +198,7 @@ const Stats = () => {
                     <h4 className="font-heading text-xs text-primary tracking-wider mb-2">MOST DISCIPLINED</h4>
                     <div className="flex flex-wrap gap-2">
                       {weeklyOverview.mostDisciplined.map((m) => (
-                        <Badge key={m.id} variant="outline" className="border-green-500/30 text-green-600 font-body">{m.name}</Badge>
+                        <Badge key={m.id} variant="outline" className="border-green-500/30 text-green-600 font-body">✅ {m.name}</Badge>
                       ))}
                     </div>
                   </div>
@@ -221,7 +223,7 @@ const Stats = () => {
                     <h4 className="font-heading text-xs text-destructive tracking-wider mb-2">LOW CONTRIBUTION & ATTENDANCE</h4>
                     <div className="flex flex-wrap gap-2">
                       {weeklyOverview.lowContributors.map((m) => (
-                        <Badge key={m.id} variant="outline" className="border-destructive/30 text-destructive font-body">{m.name}</Badge>
+                        <Badge key={m.id} variant="outline" className="border-destructive/30 text-destructive font-body">❌ {m.name}</Badge>
                       ))}
                     </div>
                   </div>
@@ -241,12 +243,22 @@ const Stats = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {officials.map(o => (
-                  <div key={o.id} className="p-3 rounded-lg border border-border bg-secondary/30">
-                    <p className="font-body font-medium text-foreground text-sm">{o.name}</p>
-                    <p className="text-xs text-primary font-body capitalize">{o.role}</p>
-                  </div>
-                ))}
+                {officials.map(o => {
+                  const liveMember = members.find(m => m.id === o.id);
+                  const pic = profilePics[o.id];
+                  return (
+                    <div key={o.id} className="p-3 rounded-lg border border-border bg-secondary/30 flex items-center gap-3">
+                      <Avatar className="w-10 h-10 border border-primary/20">
+                        {pic && <AvatarImage src={pic} />}
+                        <AvatarFallback className="bg-secondary text-primary font-heading text-xs">{o.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-body font-medium text-foreground text-sm">{o.name}</p>
+                        <p className="text-xs text-primary font-body capitalize">{o.role}</p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -354,9 +366,8 @@ const Stats = () => {
                           {DAYS.map((day) => {
                             const record = playerAtt.find((a) => a.day === day);
                             const status = record?.status;
-                            const display = status === "present" ? "P" : status === "excused" ? "E" : status === "no_activity" ? "-" : status === "absent" ? "X" : "";
-                            const color = status === "present" ? "text-green-600 font-bold" : status === "excused" ? "text-blue-600" : status === "no_activity" ? "text-muted-foreground" : "text-destructive";
-                            return <td key={day} className={`py-2 text-center text-sm ${color}`}>{display}</td>;
+                            const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : status === "absent" ? "❌" : "";
+                            return <td key={day} className="py-2 text-center text-sm">{display}</td>;
                           })}
                           <td className="py-2 px-2 text-right font-heading text-primary">{m.attendancePct}%</td>
                         </tr>
@@ -365,7 +376,7 @@ const Stats = () => {
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-muted-foreground font-body mt-2">Key: P = Present, E = Excused, X = Absent, - = No Activity</p>
+              <p className="text-xs text-muted-foreground font-body mt-2">Key: ✅ = Present, 🔵 = Excused, ❌ = Absent, ➖ = No Activity</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -400,9 +411,9 @@ const Stats = () => {
                           const status = m.contributions[month.key] || "unpaid";
                           return (
                             <td key={month.key} className="py-2 text-center">
-                              {status === "paid" && <span className="text-green-600 font-bold" title="Paid">P</span>}
-                              {status === "pending" && <Clock className="w-4 h-4 text-primary inline" />}
-                              {status === "unpaid" && <span className="text-muted-foreground">—</span>}
+                              {status === "paid" && <span title="Paid">✅</span>}
+                              {status === "pending" && <span title="Pending">⏳</span>}
+                              {status === "unpaid" && <span title="Unpaid">❌</span>}
                             </td>
                           );
                         })}

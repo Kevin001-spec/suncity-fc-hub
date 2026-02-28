@@ -15,7 +15,7 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 const PlayerProfile = () => {
   const { user } = useAuth();
-  const { members, profilePics, uploadProfilePicToStorage, attendance, currentWeekStart } = useTeamData();
+  const { members, profilePics, uploadProfilePicToStorage, attendance, currentWeekStart, gameScores } = useTeamData();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -36,6 +36,11 @@ const PlayerProfile = () => {
 
   const myAttendance = attendance.filter((a) => a.playerId === user.id);
 
+  // Get opponents played against from game_scorers
+  const opponentsPlayed = gameScores
+    .filter(game => game.scorers?.includes(user.id))
+    .map(game => ({ opponent: game.opponent, date: game.date, result: `${game.ourScore}-${game.theirScore}` }));
+
   const statCards = [
     { icon: Target, label: "Goals", value: liveMember.goals || 0 },
     { icon: Footprints, label: "Assists", value: liveMember.assists || 0 },
@@ -43,13 +48,13 @@ const PlayerProfile = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-20 sm:pb-0">
+    <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
           <div className="relative inline-block">
             <Avatar className="w-24 h-24 border-2 border-primary mx-auto">
-              {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} />}
+              {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
               <AvatarFallback className="bg-secondary text-primary font-heading text-2xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
             <button onClick={() => fileInputRef.current?.click()}
@@ -61,7 +66,7 @@ const PlayerProfile = () => {
           <h2 className="font-heading text-2xl text-foreground mt-4">{user.name}</h2>
           <div className="flex items-center justify-center gap-2 mt-1">
             <Badge variant="outline" className="border-primary/30 text-primary font-body">{user.id}</Badge>
-            {user.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body">Captain</Badge>}
+            {user.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body">Field Captain</Badge>}
           </div>
           {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{liveMember.position}</p>}
           {liveMember.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{liveMember.squadNumber}</p>}
@@ -93,18 +98,18 @@ const PlayerProfile = () => {
                 {DAYS.map((day) => {
                   const record = myAttendance.find((a) => a.day === day);
                   const status = record?.status || "absent";
-                  const symbols: Record<string, string> = { present: "P", absent: "X", excused: "E", no_activity: "-" };
+                  const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : "❌";
                   const colors: Record<string, string> = {
-                    present: "bg-green-500/20 border-green-500/40 text-green-700",
-                    absent: "bg-destructive/10 border-destructive/30 text-destructive",
-                    excused: "bg-blue-500/20 border-blue-500/30 text-blue-600",
-                    no_activity: "bg-muted border-border text-muted-foreground",
+                    present: "bg-green-500/20 border-green-500/40",
+                    absent: "bg-destructive/10 border-destructive/30",
+                    excused: "bg-blue-500/20 border-blue-500/30",
+                    no_activity: "bg-muted border-border",
                   };
                   return (
                     <div key={day} className="text-center flex-1">
                       <p className="text-xs text-muted-foreground font-body mb-1">{day.slice(0, 3)}</p>
-                      <div className={`w-10 h-10 mx-auto rounded-lg border-2 flex items-center justify-center text-sm font-bold ${colors[status]}`}>
-                        {symbols[status]}
+                      <div className={`w-10 h-10 mx-auto rounded-lg border-2 flex items-center justify-center text-sm ${colors[status]}`}>
+                        {display}
                       </div>
                     </div>
                   );
@@ -134,16 +139,38 @@ const PlayerProfile = () => {
                         <div className="mt-1">
                           {isPaid ? (
                             <div className="flex items-center gap-1 justify-center">
-                              <CheckCircle className="w-4 h-4 text-green-600" />
+                              <span className="text-green-600">✅</span>
                               <span className="text-sm font-heading text-green-600">Paid</span>
                             </div>
                           ) : (
-                            <span className="text-sm font-body text-muted-foreground">Unpaid</span>
+                            <span className="text-sm font-body text-muted-foreground">❌ Unpaid</span>
                           )}
                         </div>
                       </div>
                     );
                   })}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Opponents Played Against */}
+        {opponentsPlayed.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground">Opponents Played Against</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {opponentsPlayed.map((game, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                      <span className="font-body text-sm text-foreground">vs {game.opponent}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground font-body">{new Date(game.date).toLocaleDateString()}</span>
+                        <Badge variant="outline" className="text-xs border-primary/30 text-primary">{game.result}</Badge>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>

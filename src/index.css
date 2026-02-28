@@ -143,9 +143,27 @@ iframe[src*="lovable"],
 div[class*="lovable-badge"],
 a[href*="lovable.dev"][style*="position: fixed"],
 div[style*="position: fixed"][style*="bottom"][style*="right"] > a[href*="lovable"],
-#lovable-badge {
+div[style*="position: fixed"][style*="z-index"][style*="bottom"],
+#lovable-badge,
+a[href*="lovable.dev"] {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Profile picture aspect ratio fix */
+.aspect-square-profile {
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  object-position: center;
+}
+
+[data-radix-avatar-image] {
+  aspect-ratio: 1 / 1 !important;
+  object-fit: cover !important;
+  object-position: center !important;
 }

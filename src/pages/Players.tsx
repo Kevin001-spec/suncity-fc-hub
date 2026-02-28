@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
@@ -8,12 +8,24 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { type TeamMember } from "@/data/team-data";
 
-const positionLabels: Record<string, string> = {
-  GK: "Goalkeeper",
-  DEF: "Defender",
-  MID: "Midfielder",
-  ATT: "Attacker",
-};
+const positionGroupOrder: Record<string, number> = { "GK": 1, "DEF": 2, "MID": 3, "ATT": 4 };
+const positionGroupLabels: Record<string, string> = { "GK": "Goalkeepers", "DEF": "Defenders", "MID": "Midfielders", "ATT": "Attackers" };
+
+function getPositionGroup(pos?: string): string {
+  if (!pos) return "ATT"; // default
+  if (pos.startsWith("GK")) return "GK";
+  if (pos.startsWith("DEF")) return "DEF";
+  if (pos.startsWith("MID")) return "MID";
+  if (pos.startsWith("ATT")) return "ATT";
+  return "MID";
+}
+
+function getPositionLabel(pos?: string): string {
+  if (!pos) return "Player";
+  const group = getPositionGroup(pos);
+  const detail = pos.includes("(") ? pos : positionGroupLabels[group] || pos;
+  return detail;
+}
 
 const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profilePic?: string; onClose: () => void }) => (
   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -22,13 +34,13 @@ const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profi
       className="bg-card border border-border rounded-xl p-6 w-full max-w-sm card-glow" onClick={(e) => e.stopPropagation()}>
       <div className="text-center">
         <Avatar className="w-20 h-20 mx-auto mb-4 border-2 border-primary">
-          {profilePic && <AvatarImage src={profilePic} />}
+          {profilePic && <AvatarImage src={profilePic} className="aspect-square object-cover object-center" />}
           <AvatarFallback className="bg-secondary text-primary font-heading text-xl">{member.name.slice(0, 2).toUpperCase()}</AvatarFallback>
         </Avatar>
         <h3 className="font-heading text-lg text-foreground">{member.name}</h3>
         <p className="text-primary font-body text-sm">{member.id}</p>
-        <Badge variant="outline" className="mt-2 border-primary/30 text-primary capitalize font-body">{member.role}</Badge>
-        {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{positionLabels[member.position] || member.position}</p>}
+        {member.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body mt-1">Field Captain</Badge>}
+        {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{getPositionLabel(member.position)}</p>}
         {member.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{member.squadNumber}</p>}
         <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-border">
           <div><p className="text-xl font-heading text-primary">{member.goals || 0}</p><p className="text-xs text-muted-foreground font-body">Goals</p></div>
@@ -49,8 +61,36 @@ const Players = () => {
 
   const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
 
+  // Sort: captains first, then by position group
+  const sortedPlayers = useMemo(() => {
+    return [...playerMembers].sort((a, b) => {
+      // Captains first
+      if (a.role === "captain" && b.role !== "captain") return -1;
+      if (a.role !== "captain" && b.role === "captain") return 1;
+      // Then by position group
+      const aGroup = positionGroupOrder[getPositionGroup(a.position)] || 5;
+      const bGroup = positionGroupOrder[getPositionGroup(b.position)] || 5;
+      return aGroup - bGroup;
+    });
+  }, [playerMembers]);
+
+  // Group players by section
+  const sections = useMemo(() => {
+    const groups: { label: string; players: typeof sortedPlayers }[] = [];
+    const captains = sortedPlayers.filter(m => m.role === "captain");
+    if (captains.length > 0) groups.push({ label: "Field Captains", players: captains });
+    
+    const nonCaptains = sortedPlayers.filter(m => m.role !== "captain");
+    const posGroups = ["GK", "DEF", "MID", "ATT"];
+    for (const pg of posGroups) {
+      const inGroup = nonCaptains.filter(m => getPositionGroup(m.position) === pg);
+      if (inGroup.length > 0) groups.push({ label: positionGroupLabels[pg], players: inGroup });
+    }
+    return groups;
+  }, [sortedPlayers]);
+
   return (
-    <div className="min-h-screen bg-background pb-20 sm:pb-0">
+    <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
@@ -58,30 +98,37 @@ const Players = () => {
           <p className="text-muted-foreground text-sm font-body mt-1">{playerMembers.length} squad members</p>
         </motion.div>
 
-        <div className="space-y-3">
-          {playerMembers.map((member, i) => (
-            <motion.button
-              key={member.id}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.03 }}
-              onClick={() => setSelectedMember(member)}
-              className="w-full flex items-center justify-between p-4 rounded-xl player-card-glow bg-card hover:bg-secondary/50 transition-all text-left"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="font-heading text-sm text-foreground font-bold">{member.name}</p>
-                <p className="text-xs text-muted-foreground font-body">
-                  {member.position ? positionLabels[member.position] || member.position : "Player"}
-                  {member.squadNumber ? ` • #${member.squadNumber}` : ""}
-                </p>
-              </div>
-              <Avatar className="w-12 h-12 border border-primary/20 ml-3">
-                {profilePics[member.id] && <AvatarImage src={profilePics[member.id]} />}
-                <AvatarFallback className="bg-secondary text-primary font-heading text-sm">{member.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
-            </motion.button>
-          ))}
-        </div>
+        {sections.map((section, si) => (
+          <div key={section.label}>
+            <motion.h3 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: si * 0.05 }}
+              className="font-heading text-xs text-primary tracking-wider uppercase mb-3 mt-4">{section.label}</motion.h3>
+            <div className="space-y-3">
+              {section.players.map((member, i) => (
+                <motion.button
+                  key={member.id}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: (si * 0.05) + (i * 0.02) }}
+                  onClick={() => setSelectedMember(member)}
+                  className="w-full flex items-center justify-between p-4 rounded-xl player-card-glow bg-card hover:bg-secondary/50 transition-all text-left"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-heading text-sm text-foreground font-bold">{member.name}</p>
+                    <p className="text-xs text-muted-foreground font-body">
+                      {member.role === "captain" ? "Field Captain • " : ""}
+                      {getPositionLabel(member.position)}
+                      {member.squadNumber ? ` • #${member.squadNumber}` : ""}
+                    </p>
+                  </div>
+                  <Avatar className="w-12 h-12 border border-primary/20 ml-3">
+                    {profilePics[member.id] && <AvatarImage src={profilePics[member.id]} className="aspect-square object-cover object-center" />}
+                    <AvatarFallback className="bg-secondary text-primary font-heading text-sm">{member.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                </motion.button>
+              ))}
+            </div>
+          </div>
+        ))}
       </main>
 
       <AnimatePresence>

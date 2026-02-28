@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
@@ -6,49 +6,36 @@ import { Navigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Trophy, Save } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+
+interface LeagueTeam {
+  id: string;
+  team_name: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goal_difference: number;
+  points: number;
+  is_own_team: boolean;
+}
 
 const Results = () => {
   const { user } = useAuth();
   const { members, gameScores } = useTeamData();
-  const { toast } = useToast();
-  const isManager = user?.role === "manager";
+  const [leagueTeams, setLeagueTeams] = useState<LeagueTeam[]>([]);
 
-  const [standings, setStandings] = useState({ played: 0, won: 0, drawn: 0, lost: 0, gd: 0, pts: 0 });
-  const [standingsLoaded, setStandingsLoaded] = useState(false);
-  const [standingsId, setStandingsId] = useState<string | null>(null);
-
-  // Load standings
-  if (!standingsLoaded) {
-    supabase.from("league_standings").select("*").limit(1).then(({ data }) => {
-      if (data && data.length > 0) {
-        const s = data[0] as any;
-        setStandings({ played: s.played, won: s.won, drawn: s.drawn, lost: s.lost, gd: s.goal_difference, pts: s.points });
-        setStandingsId(s.id);
-      }
-      setStandingsLoaded(true);
+  useEffect(() => {
+    supabase.from("league_teams").select("*").then(({ data }) => {
+      if (data) setLeagueTeams((data as LeagueTeam[]).sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference));
     });
-  }
-
-  const saveStandings = async () => {
-    const payload = { played: standings.played, won: standings.won, drawn: standings.drawn, lost: standings.lost, goal_difference: standings.gd, points: standings.pts, updated_at: new Date().toISOString() };
-    if (standingsId) {
-      await supabase.from("league_standings").update(payload).eq("id", standingsId);
-    } else {
-      const { data } = await supabase.from("league_standings").insert(payload).select().single();
-      if (data) setStandingsId((data as any).id);
-    }
-    toast({ title: "Standings Updated" });
-  };
+  }, []);
 
   if (!user) return <Navigate to="/" replace />;
 
   return (
-    <div className="min-h-screen bg-background pb-20 sm:pb-0">
+    <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
@@ -56,60 +43,53 @@ const Results = () => {
           <p className="text-muted-foreground text-sm font-body mt-1">All game history & league standings</p>
         </motion.div>
 
-        {/* League Standings */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-          <Card className="bg-card border-border card-glow">
-            <CardHeader>
-              <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-primary" /> League Standings
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full font-body text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-muted-foreground">
-                      <th className="text-center py-2 px-3">P</th>
-                      <th className="text-center py-2 px-3">W</th>
-                      <th className="text-center py-2 px-3">D</th>
-                      <th className="text-center py-2 px-3">L</th>
-                      <th className="text-center py-2 px-3">GD</th>
-                      <th className="text-center py-2 px-3">Pts</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-border">
-                      {isManager ? (
-                        <>
-                          <td className="py-2 px-1 text-center"><Input type="number" value={standings.played} onChange={(e) => setStandings(s => ({ ...s, played: +e.target.value }))} className="w-14 h-8 text-center bg-secondary border-border text-xs" /></td>
-                          <td className="py-2 px-1 text-center"><Input type="number" value={standings.won} onChange={(e) => setStandings(s => ({ ...s, won: +e.target.value }))} className="w-14 h-8 text-center bg-secondary border-border text-xs" /></td>
-                          <td className="py-2 px-1 text-center"><Input type="number" value={standings.drawn} onChange={(e) => setStandings(s => ({ ...s, drawn: +e.target.value }))} className="w-14 h-8 text-center bg-secondary border-border text-xs" /></td>
-                          <td className="py-2 px-1 text-center"><Input type="number" value={standings.lost} onChange={(e) => setStandings(s => ({ ...s, lost: +e.target.value }))} className="w-14 h-8 text-center bg-secondary border-border text-xs" /></td>
-                          <td className="py-2 px-1 text-center"><Input type="number" value={standings.gd} onChange={(e) => setStandings(s => ({ ...s, gd: +e.target.value }))} className="w-14 h-8 text-center bg-secondary border-border text-xs" /></td>
-                          <td className="py-2 px-1 text-center"><Input type="number" value={standings.pts} onChange={(e) => setStandings(s => ({ ...s, pts: +e.target.value }))} className="w-14 h-8 text-center bg-secondary border-border text-xs" /></td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="py-2 px-3 text-center font-heading">{standings.played}</td>
-                          <td className="py-2 px-3 text-center font-heading text-green-600">{standings.won}</td>
-                          <td className="py-2 px-3 text-center font-heading text-primary">{standings.drawn}</td>
-                          <td className="py-2 px-3 text-center font-heading text-destructive">{standings.lost}</td>
-                          <td className="py-2 px-3 text-center font-heading">{standings.gd}</td>
-                          <td className="py-2 px-3 text-center font-heading text-primary font-bold">{standings.pts}</td>
-                        </>
-                      )}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              {isManager && (
-                <Button onClick={saveStandings} size="sm" className="mt-3 font-body">
-                  <Save className="w-4 h-4 mr-1" /> Save Standings
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
+        {/* League Standings — Read-only, multi-team */}
+        {leagueTeams.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-primary" /> League Standings
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full font-body text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-muted-foreground">
+                        <th className="text-left py-2 px-2">#</th>
+                        <th className="text-left py-2">Team</th>
+                        <th className="text-center py-2 px-2">P</th>
+                        <th className="text-center py-2 px-2">W</th>
+                        <th className="text-center py-2 px-2">D</th>
+                        <th className="text-center py-2 px-2">L</th>
+                        <th className="text-center py-2 px-2">GD</th>
+                        <th className="text-center py-2 px-2">Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leagueTeams.map((team, i) => (
+                        <tr key={team.id} className={`border-b border-border ${team.is_own_team ? "bg-primary/10 font-bold" : ""}`}>
+                          <td className="py-2 px-2 text-muted-foreground">{i + 1}</td>
+                          <td className={`py-2 ${team.is_own_team ? "text-primary font-heading" : "text-foreground"}`}>
+                            {team.team_name}
+                            {team.is_own_team && <Badge className="ml-2 bg-primary text-primary-foreground text-[10px] py-0 px-1">Us</Badge>}
+                          </td>
+                          <td className="py-2 px-2 text-center">{team.played}</td>
+                          <td className="py-2 px-2 text-center text-green-600">{team.won}</td>
+                          <td className="py-2 px-2 text-center text-primary">{team.drawn}</td>
+                          <td className="py-2 px-2 text-center text-destructive">{team.lost}</td>
+                          <td className="py-2 px-2 text-center">{team.goal_difference}</td>
+                          <td className="py-2 px-2 text-center font-heading text-primary">{team.points}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         {/* All Game Results */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
@@ -146,7 +126,7 @@ const Results = () => {
                       </div>
                       {game.scorers && game.scorers.length > 0 && (
                         <p className="text-xs text-muted-foreground mt-1 font-body">
-                          Goals: {game.scorers.map((sid) => members.find((m) => m.id === sid)?.name || sid).join(", ")}
+                          ⚽ {game.scorers.map((sid) => members.find((m) => m.id === sid)?.name || sid).join(", ")}
                         </p>
                       )}
                     </div>
