@@ -38,7 +38,7 @@ const ScoreCard = ({ game, members: allMembers }: { game: GameScore; members: Te
     </div>
     {game.scorers && game.scorers.length > 0 && (
       <p className="text-xs text-muted-foreground mt-1 font-body">
-        Goals: {game.scorers.map((sid) => allMembers.find((m) => m.id === sid)?.name || sid).join(", ")}
+        ⚽ {game.scorers.map((sid) => allMembers.find((m) => m.id === sid)?.name || sid).join(", ")}
       </p>
     )}
   </div>
@@ -71,9 +71,29 @@ const StorySection = ({ sectionKey, text }: { sectionKey: string; text: string }
   );
 };
 
+// Individual carousel per date group to fix scroll bug
+const DateGallery = ({ items }: { items: { id: string; url: string; caption?: string }[] }) => {
+  const [emblaRef] = useEmblaCarousel({ loop: true, align: "start" });
+  return (
+    <div className="overflow-hidden" ref={emblaRef}>
+      <div className="flex gap-3">
+        {items.map((item) => (
+          <div key={item.id} className="flex-[0_0_200px] min-w-0">
+            <div className="relative group">
+              <img src={item.url} alt={item.caption || "Team photo"} className="w-full h-40 object-cover rounded-lg border border-border" loading="lazy" />
+              <a href={item.url} download className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+                <Download className="w-6 h-6 text-white" />
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const MediaGallery = () => {
   const { mediaItems } = useTeamData();
-  const [emblaRef] = useEmblaCarousel({ loop: true, align: "start" });
 
   if (mediaItems.length === 0) return null;
 
@@ -90,20 +110,7 @@ const MediaGallery = () => {
       {sortedDates.map((date) => (
         <div key={date}>
           <p className="text-xs text-muted-foreground font-body mb-2">{new Date(date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
-          <div className="overflow-hidden" ref={emblaRef}>
-            <div className="flex gap-3">
-              {grouped[date].map((item) => (
-                <div key={item.id} className="flex-[0_0_200px] min-w-0">
-                  <div className="relative group">
-                    <img src={item.url} alt={item.caption || "Team photo"} className="w-full h-40 object-cover rounded-lg border border-border" loading="lazy" />
-                    <a href={item.url} download className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
-                      <Download className="w-6 h-6 text-white" />
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <DateGallery items={grouped[date]} />
         </div>
       ))}
     </div>
@@ -123,7 +130,7 @@ const Dashboard = () => {
   if (!user) return <Navigate to="/" replace />;
 
   return (
-    <div className="min-h-screen bg-background pb-20 sm:pb-0">
+    <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-8">
         <motion.section {...fadeUp} className="text-center py-8">

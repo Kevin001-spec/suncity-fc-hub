@@ -355,6 +355,45 @@ export type Database = {
         }
         Relationships: []
       }
+      league_teams: {
+        Row: {
+          created_at: string
+          drawn: number
+          goal_difference: number
+          id: string
+          is_own_team: boolean
+          lost: number
+          played: number
+          points: number
+          team_name: string
+          won: number
+        }
+        Insert: {
+          created_at?: string
+          drawn?: number
+          goal_difference?: number
+          id?: string
+          is_own_team?: boolean
+          lost?: number
+          played?: number
+          points?: number
+          team_name: string
+          won?: number
+        }
+        Update: {
+          created_at?: string
+          drawn?: number
+          goal_difference?: number
+          id?: string
+          is_own_team?: boolean
+          lost?: number
+          played?: number
+          points?: number
+          team_name?: string
+          won?: number
+        }
+        Relationships: []
+      }
       lineup_positions: {
         Row: {
           id: string
