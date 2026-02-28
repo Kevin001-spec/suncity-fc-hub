@@ -1,255 +1,246 @@
-# Suncity FC — Massive System Update Plan
 
-This is a very large update touching nearly every file. Due to the sheer scope, this plan is organized into implementation phases.
 
----
+# Suncity FC — System Fixes & Enhancements
 
-## Phase 1: Database & Data Changes
-
-### New Supabase Tables
-
-- `**contribution_events**` — id, title, goal_description, target_amount, amount_per_person, created_by, created_at, is_completed
-- `**contribution_event_payments**` — id, event_id (FK), member_id, paid (boolean), created_at
-- `**league_standings**` — id, played, won, drawn, lost, goal_difference, points, updated_at
-- `**weekly_overviews**` — id, week_start, data (jsonb — stores the overview snapshot), type (weekly/monthly/season), created_at
-- `**season_config**` — id, end_date, created_by
-
-### Data Updates (via insert tool, not migrations)
-
-- Rename `Brian(d)` → `Brian (K)` in members table
-- Change `Brian (K)` role from `player` to `captain`, add pin
-- Add `Oscar` as new member (SCF-P36 or SCF-P35 depending on squad numbering)
-- Add `position` field data for all players as specified (GK, DEF, MID, ATT)
-- Update Feb 2026 financial record: add jersey printing expense of KSh 2000 on Feb 21, add coach personal contribution of KSh 2000 (noted as personal, not from team funds), correct contributors to 17
-
-### Update `team-data.ts` (fallback data)
-
-- Mirror all name/role/position changes
-- Add Oscar
+This update covers 15 specific issues: navbar mobile position, sign-out button, attendance math fix, player positions/ordering, team stats editor restoration, league standings multi-team support, opponent tracking, player data export, DOCX export restoration with emojis, financial system fixes, tracking/overview system, gallery scroll fix, profile pic aspect ratio, Ethan attendance access, and Lovable badge hiding.
 
 ---
 
-## Phase 2: Theme & UI Overhaul
+## 1. Navbar: Move Mobile Tab Bar to Top + Add Sign Out
 
-### `src/index.css` — Theme Change
+**`src/components/Navbar.tsx`**
+- Change mobile nav from `fixed bottom-0` to `sticky top-0` (same as desktop)
+- Merge mobile and desktop into a single top navbar that adapts
+- Add a LogOut button visible on mobile (currently only on desktop)
+- Remove the `<div className="h-16 sm:hidden" />` spacer at bottom
 
-- **Background**: Change from dark (40 6% 7%) to **white** (0 0% 100%)
-- **Card/Secondary**: Light grays
-- **Primary accent**: Keep gold
-- **Navy**: Change to **Chelsea blue** (hsl(220, 70%, 40%))
-- **Text**: Dark foreground on white background
-- **Black accents** on certain elements
-- **Gold glow effects** remain on edges/borders
-- Add global CSS rule to hide Lovable badge:
+---
 
+## 2. Attendance Math Fix (CORE)
+
+**`src/pages/OfficialProfile.tsx`** and **`src/pages/Stats.tsx`**
+
+Current bug: excused days count as full attendance in the percentage. The correct logic:
+
+```text
+For each player in the week:
+  activeDays = days with status != "no_activity" (and status is recorded)
+  presentDays = days with status == "present"
+  excusedDays = days with status == "excused"
+  
+  Each excuse = HALF a day's value
+  dayValue = 100 / activeDays.length
+  percentage = (presentDays * dayValue) + (excusedDays * dayValue * 0.5)
+  
+  Progressive: only count days that have been recorded so far
+```
+
+Apply this formula in:
+- `OfficialProfile.tsx` attendance table (lines ~576-579)
+- `Stats.tsx` attendanceRanking useMemo (lines ~41-57)
+
+---
+
+## 3. Player Positions & Ordering on Players Page
+
+**`src/pages/Players.tsx`**
+- Sort players: Captains (labeled "Field Captain") first, then by position group (GK → DEF → MID → ATT)
+- Show position title below name (e.g., "Field Captain • Midfielder")
+- Add position group headers between sections
+
+**`src/data/team-data.ts`** — Update positions for players missing them based on provided data:
+- Add specific positions (LB, CB, RB, etc.) as sub-positions where provided
+- These are already partially set; update the detailed sub-positions
+
+**DB update** — Update member positions in Supabase via SQL:
+```sql
+UPDATE members SET position = 'GK' WHERE name IN ('Kibe', 'Brayo');
+UPDATE members SET position = 'DEF (LB)' WHERE name = 'Victor';
+-- etc. for all players
+```
+
+**Coach's profile** — Add a "Edit Player Positions" section where coach can select a player and set/change their position, saved to Supabase.
+
+---
+
+## 4. Restore Team Stats Editor on Manager Profile
+
+**`src/pages/OfficialProfile.tsx`**
+- The `updatePlayerStats` function exists in context but no UI for it on manager profile
+- Add back the Team Stats Editor card for the manager: select player → edit goals, assists, games played → save
+- Add an "Opponent" field: when updating games_played, also input opponent name
+- Store opponents played against (add `opponents_played` text[] column to members table, or store in game_scorers)
+
+---
+
+## 5. League Standings — Multi-Team Support
+
+**`src/pages/Results.tsx`** — Currently only shows Suncity FC's single row
+- Restructure to support multiple teams in the league table
+- Manager can add/remove teams and update their stats
+- Suncity FC row highlighted with primary color/different background
+- Auto-sort by points (highest to lowest), then goal difference
+
+**Database migration**: Create `league_teams` table:
+```sql
+CREATE TABLE league_teams (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_name text NOT NULL,
+  played int DEFAULT 0,
+  won int DEFAULT 0,
+  drawn int DEFAULT 0,
+  lost int DEFAULT 0,
+  goal_difference int DEFAULT 0,
+  points int DEFAULT 0,
+  is_own_team boolean DEFAULT false,
+  created_at timestamptz DEFAULT now()
+);
+INSERT INTO league_teams (team_name, is_own_team) VALUES ('Suncity FC', true);
+```
+- Move league standings editing to Manager's profile (not Results page)
+- Results page shows read-only league table
+
+---
+
+## 6. Opponent Tracking in Player Profiles
+
+**`src/pages/OfficialProfile.tsx`** (Manager stats editor)
+- When recording games played for a player, add input for opponent name
+- Store as array on the member record or in a join table
+
+**`src/pages/PlayerProfile.tsx`**
+- Add a section (not at top) showing opponents played against
+- Pull from game_scorers joined with game_scores to get opponent names for games the player participated in
+
+---
+
+## 7. Player Data Export (DOCX on Fridays)
+
+**`src/pages/PlayerProfile.tsx`**
+- Show export button only on Fridays (dayOfWeek === 5)
+- Export as DOCX with team branding: player name, position, stats, attendance, opponents played
+- Use the `docx` library (reinstall it)
+
+---
+
+## 8. Switch ALL Exports Back to DOCX + Restore Emojis
+
+This reverses the PDF switch. Reinstall `docx` and `file-saver` packages.
+
+**`src/lib/docx-export.ts`** — New utility replacing pdf-export
+- Create branded DOCX documents with team badge, motto, tables
+- Use actual emoji characters (✅, ❌, 🔵, ➖) since DOCX supports them
+- Apply to: contributions, attendance, financial summary, weekly overview, first 11, player profile
+
+**All pages**: Replace `generateBrandedPdf` calls with new DOCX generator
+
+**Website UI**: Restore emoji display:
+- Contribution status: ✅ for paid, ❌ for unpaid
+- Attendance: ✅ present, 🔵 excused, ❌ absent, ➖ no activity
+- Update Stats.tsx, OfficialProfile.tsx, PlayerProfile.tsx
+
+---
+
+## 9. Financial System Fixes (CORE)
+
+**Fix Feb contributors count**: Update DB record to show 17 not 18
+```sql
+UPDATE financial_records SET contributors = 17, contributions = 1700 WHERE month = 'Feb 2026';
+```
+
+**Fix month ordering**: Sort financial records by a defined order (Dec, Jan, Feb, Mar, Apr) not by created_at
+
+**Fix "jumps to March" bug**: In `addFinancialTransaction`, the month selection defaults to "Mar 2026" (line 57). Change default to current month based on date. Also ensure the record lookup matches correctly.
+
+**Detailed financial export**: Organize by month with itemized tables, contributor names, expense breakdowns
+
+**Feb 2026 specific data**:
+- Jersey printing expense: KSh 2,000 on Feb 21
+- Note: "Coach Fabian contributed KSh 2,000 personally (not from team funds)"
+- Math: Team balance = contributions - expenses. Coach's personal contribution is noted but doesn't affect team money math
+- Current balance as of Feb 27: -400
+
+---
+
+## 10. Tracking/Overview System (Weekly/Monthly/Season)
+
+**`src/pages/Stats.tsx`**
+- Display 3 icons: Weekly 📅, Monthly 📊, Season 🏆
+- Weekly: clickable on Fri-Sun, shows overview data
+- Monthly: clickable after 3 weekly reports
+- Season: clickable when coach's end date is reached
+- All archived in `weekly_overviews` table with type field
+
+**Officials stats/profile**: Add permanent archive section showing past reports as date icons (like gallery), clickable to view
+
+---
+
+## 11. Gallery Scroll Fix
+
+**`src/pages/Dashboard.tsx`** `MediaGallery` component
+- Bug: `emblaRef` is used for all date groups but only initialized once
+- Fix: Create separate Embla instances per date group, or use a single carousel per group
+
+---
+
+## 12. Profile Picture Aspect Ratio Fix
+
+**`src/index.css`** or component-level:
+- All Avatar/AvatarImage: `aspect-ratio: 1/1`, `object-fit: cover`, `object-position: center`
+- Apply to: PlayerProfile, OfficialProfile, Players page cards, Dashboard members
+
+---
+
+## 13. Ethan Attendance Access
+
+**`src/pages/OfficialProfile.tsx`**
+- Currently attendance section only shows for `isManager`
+- Add condition: also show for Ethan (SCF-004)
+- `const canManageAttendance = isManager || user.id === "SCF-004";`
+
+---
+
+## 14. Official Profile Pics Visible
+
+Ensure officials' profile pictures (from Supabase storage) load and display in Stats page officials list and anywhere officials appear.
+
+---
+
+## 15. Lovable Badge Hide (CSS)
+
+**`src/index.css`** — Already has rules but may need strengthening:
 ```css
-[data-lovable-badge], iframe[src*="lovable"], div[class*="lovable-badge"],
+[data-lovable-badge],
+iframe[src*="lovable"],
+div[class*="lovable-badge"],
+a[href*="lovable.dev"][style*="position: fixed"],
 div[style*="position: fixed"][style*="bottom"][style*="right"] > a[href*="lovable"] {
   display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 ```
 
 ---
 
-## Phase 3: Navigation Overhaul
+## Files Changed/Created
 
-### 5-Tab Navbar (`src/components/Navbar.tsx`)
+| File | Action |
+|------|--------|
+| `src/components/Navbar.tsx` | Mobile nav to top, add sign out |
+| `src/pages/OfficialProfile.tsx` | Stats editor, attendance math, Ethan access, position editor, league management |
+| `src/pages/Stats.tsx` | Attendance math fix, emojis, overview icons, archive section |
+| `src/pages/PlayerProfile.tsx` | Opponents section, DOCX export, emojis, aspect ratio |
+| `src/pages/Players.tsx` | Position ordering, captain titles, group headers |
+| `src/pages/Results.tsx` | Multi-team league table, read-only view |
+| `src/pages/Dashboard.tsx` | Gallery scroll fix |
+| `src/contexts/TeamDataContext.tsx` | Add league_teams CRUD, position update function |
+| `src/data/team-data.ts` | Detailed positions with sub-positions |
+| `src/lib/docx-export.ts` | NEW — DOCX branded export utility |
+| `src/lib/pdf-export.ts` | Keep but deprecate |
+| `src/index.css` | Profile pic aspect ratio, Lovable badge hide |
+| `package.json` | Reinstall `docx`, `file-saver` |
+| Supabase migration | `league_teams` table |
+| Supabase data updates | Positions, Feb financial fix, Brian Kim captain |
 
-- **Home** | **Results** | **Players** | **Stats** | **Profile**
-- Glowing active tab indicator (gold underline glow)
-- Mobile-friendly bottom tab bar
-
-### New Routes (`src/App.tsx`)
-
-- `/results` — Results page (game history + league table)
-- `/players` — Players listing page
-- Keep `/dashboard` as Home, `/stats`, `/profile`
-
-### New Pages
-
-- `**src/pages/Results.tsx**` — All game history (permanent), league standings table (manager-editable)
-- `**src/pages/Players.tsx**` — Player cards with golden glowing edges, name + position on left, profile pic on right, single column layout. Click opens existing player card modal. Officials listed separately on stats page.
-
----
-
-## Phase 4: Homepage & SEO
-
-### `index.html`
-
-- Add `<meta name="google-site-verification" content="HxrSDUAB8gSHAXiyeMzCyPK18L9VZuQ2dS398pCIFpk" />` in `<head>`
-
-### `src/pages/Login.tsx` (Homepage)
-
-- Remove players/team members from homepage
-- Keep: Hero, Carousel, Our Story (exclude commitment), Recent Results (max 3), Login section
-- All arranged with white background theme
-
----
-
-## Phase 5: PDF Export Fixes (CORE)
-
-### `src/lib/pdf-export.ts`
-
-- **Fix emoji rendering**: jsPDF cannot render emoji characters. Replace all emoji symbols with text equivalents in PDF data:
-  - `✅` → `[PAID]` or `Yes`
-  - `❌` → `[X]` or `No`
-  - `🔵` → `[E]` (Excused)
-  - `➖` → `[-]` (No Activity)
-  - `⏳` → `[Pending]`
-- Apply this sanitization before passing data to `autoTable`
-- **Financial export**: Make it detailed — for each month show: month name, opening balance, each contributor's name, each expense with date and description, subtotals, closing balance. Include contribution events separately.
-- **Attendance export**: Add key legend, sort by ticks > excuses > absences
-- **All exports**: Optimized for print (proper margins, page breaks)
-
----
-
-## Phase 6: Player Profile Simplification
-
-### `src/pages/PlayerProfile.tsx`
-
-- **Remove** the "Mark as Paid" button / request approval feature
-- **Remove** the "Request Excuse" section entirely
-- Instead, show months paid in a fancy visual way (e.g., gold badges for paid months, gray for unpaid)
-- Keep: profile pic upload, stats cards, weekly attendance display
-
----
-
-## Phase 7: Coach Profile Simplification
-
-### `src/pages/OfficialProfile.tsx` (Coach sections only)
-
-- **Remove** from Coach's profile:
-  - Weekly attendance checker (manager only now)
-  - Homepage photos editor
-  - Player stats editor
-  - Record transaction feature
-- **Keep** on Coach's profile:
-  - Add game scores
-  - Add events
-  - Upload media
-  - Lineup builder
-  - Remove player
-  - Contribution approvals
-  - **NEW**: First 11 selector (analytics-driven player selection)
-  - **NEW**: Season end date setter
-
----
-
-## Phase 8: Manager Attendance Enhancement
-
-### `src/pages/OfficialProfile.tsx` (Manager sections)
-
-- Add **Excused** option per player per day on the attendance checkbox grid
-- Simplify checkbox UX: three-state toggle (Present ✅ → Excused 🔵 → clear/Absent ❌) instead of separate controls
-- No Activity button per day stays as-is
-
-### Attendance Math Fix
-
-- If all 5 days had training: each day = 20% (100%/5)
-- Logic
-  - **Default:** 5 days = **20% each** (100 / 5).
-  - **If 1 day is "No Activity":** 4 days = **25% each** (100 / 4).
-  - **If 2 days are "No Activity":** 3 days = **33.3% each** (100 / 3).
-- Progressive calculation:  each day marked as present should give the percent of the day, the next day when marked as present it should add the previous percent to give the new percent
-- Final percentage is also shown when a document is exported
-- Use `activeDays` count as denominator, `presentDays` as numerator
-
----
-
-## Phase 9: Contribution Events System
-
-### Fadhir & Captains' Profile — New Section
-
-- "Add Contribution Event" form: title, description, amount per person, target amount
-- Creates entry in `contribution_events` table
-- Shows checkbox grid for who has contributed
-- Progress bar toward target
-- When target reached, officials can delete the event
-- **Financial summary integration**: Listed separately under "Other Activities" per month
-- Tracked and exportable in stats
-
----
-
-## Phase 10: Financial Summary — Feb Specifics
-
-### Financial Data Updates
-
-- Feb 2026: 17 contributors (not 18)
-- Add expense: "Jersey Printing" — KSh 2,000 on Feb 21
-- Add note: "Coach Fabian contributed KSh 2,000 personally toward jersey purchase (not from team funds)"
-- Math: When team contributions reach KSh 2,000, allocate to jersey printing, remainder = balance
-- Display this clearly in the financial card with a note
-
----
-
-## Phase 11: Overview Reports System (Weekly/Monthly/Season)
-
-### Stats Page + Officials Archive
-
-- **Weekly Overview**: Appears Friday-Sunday, shows most disciplined, best player, most improved, low contributors. After Sunday, archived to `weekly_overviews` table.
-- **Monthly Overview**: After 3 weekly reports, a monthly summary opens. Archived similarly.
-- **Season Overview**: Coach sets end date in `season_config`. When reached, all-time best players are calculated.
-- **Display**: Three icon buttons (Weekly 📅, Monthly 📊, Season 🏆) on stats page. Clickable when their time comes.
-- **Officials Archive**: Permanent section showing all past weekly/monthly reports by date, separated by type.
-
----
-
-## Phase 12: Results Page & League Table
-
-### `src/pages/Results.tsx`
-
-- All game results permanently displayed, newest first
-- **League Standings Table**: P, W, D, L, GD, Pts — editable by Manager only
-- Stored in `league_standings` table
-
----
-
-## Phase 13: First 11 Selector (Coach Only)
-
-### New section on Coach's profile
-
-- Button "Plan First 11"
-- System pulls analytics: training attendance %, goals, assists for each player
-- Ranks players by composite score
-- Coach selects 11 starters + substitutes
-- Exportable as branded PDF
-
----
-
-## Phase 14: Calendar Date Picker for Transactions
-
-### `src/pages/OfficialProfile.tsx`
-
-- Replace the text input for transaction date with a proper Shadcn DatePicker (Popover + Calendar component)
-- Ensure `pointer-events-auto` on calendar
-
----
-
-## Phase 15: Event Fix
-
-- Debug and fix the issue where events added by officials don't appear in the dashboard events section
-- Ensure `addCalendarEvent` properly inserts and `loadCalendarEvents` refreshes
-
----
-
-## Summary of Files Changed/Created
-
-
-| File                               | Action                                                                                                                      |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`                       | Add Google verification meta tag                                                                                            |
-| `src/index.css`                    | Complete theme overhaul (white bg, Chelsea blue, gold, black) + Lovable badge hide                                          |
-| `src/App.tsx`                      | Add `/results`, `/players` routes                                                                                           |
-| `src/components/Navbar.tsx`        | 5-tab nav with glowing tabs                                                                                                 |
-| `src/pages/Login.tsx`              | Remove players section, white theme                                                                                         |
-| `src/pages/Dashboard.tsx`          | Remove Team Members section (moved to /players), white theme                                                                |
-| `src/pages/Results.tsx`            | NEW — game history + league table                                                                                           |
-| `src/pages/Players.tsx`            | NEW — player cards with golden glow                                                                                         |
-| `src/pages/Stats.tsx`              | Overview report icons, officials archive, officials list, contribution events display                                       |
-| `src/pages/OfficialProfile.tsx`    | Major refactor — coach simplification, manager excused checkbox, Fadhir contribution events, date picker, first 11 selector |
-| `src/pages/PlayerProfile.tsx`      | Remove approval request + excuse, fancy paid months display                                                                 |
-| `src/contexts/TeamDataContext.tsx` | Add contribution events CRUD, league standings, overview archives, season config                                            |
-| `src/data/team-data.ts`            | Name changes, positions, Oscar, Brian Kim captain                                                                           |
-| `src/lib/pdf-export.ts`            | Fix emoji rendering, detailed financial export                                                                              |
-| Supabase migration                 | New tables: contribution_events, contribution_event_payments, league_standings, weekly_overviews, season_config             |
-| Supabase data updates              | Name changes, position data, Feb financial corrections                                                                      |
