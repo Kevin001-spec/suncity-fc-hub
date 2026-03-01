@@ -1,226 +1,129 @@
 
 
-# Suncity FC — System Fixes & Enhancements
+# Suncity FC — System Update Plan
 
-This update covers 15 specific issues: navbar mobile position, sign-out button, attendance math fix, player positions/ordering, team stats editor restoration, league standings multi-team support, opponent tracking, player data export, DOCX export restoration with emojis, financial system fixes, tracking/overview system, gallery scroll fix, profile pic aspect ratio, Ethan attendance access, and Lovable badge hiding.
+## 1. Brian Kim: Demote to Regular Player
 
----
+**DB update**: `UPDATE members SET role = 'player' WHERE id = 'SCF-P35'`
+**team-data.ts**: Move Brian Kim from `officials` to `players`, change role to "player", remove pin/username. Keep Brian (K) (SCF-009) as official/captain.
+Also insert SCF-009 (Brian (K)) into DB members table if not already there.
 
-## 1. Navbar: Move Mobile Tab Bar to Top + Add Sign Out
+## 2. New Players: Remove Jan & Feb Contributions from Profile
 
-**`src/components/Navbar.tsx`**
-- Change mobile nav from `fixed bottom-0` to `sticky top-0` (same as desktop)
-- Merge mobile and desktop into a single top navbar that adapts
-- Add a LogOut button visible on mobile (currently only on desktop)
-- Remove the `<div className="h-16 sm:hidden" />` spacer at bottom
+For SCF-P31 through SCF-P35, filter out `dec-2025` and `jan-2026` from their contribution months display. In `PlayerProfile.tsx` and `Stats.tsx` contribution grid, conditionally show months starting from `feb-2026` for these IDs. Define a `newPlayerIds` set and a `getContribMonthsForMember(id)` helper.
 
----
+## 3. Replace Red X Emoji with Softer Unpaid Indicator
 
-## 2. Attendance Math Fix (CORE)
+Replace `❌` for unpaid contributions with `⬜` or a gray dash `—` across:
+- `PlayerProfile.tsx` monthly contributions
+- `Stats.tsx` contribution grid
+- `OfficialProfile.tsx` contribution display
+- Exported documents
 
-**`src/pages/OfficialProfile.tsx`** and **`src/pages/Stats.tsx`**
+## 4. Position-Specific Stats for GK & DEF
 
-Current bug: excused days count as full attendance in the percentage. The correct logic:
+### Schema change (migration)
+Add columns to `members`: `saves INT DEFAULT 0`, `clean_sheets INT DEFAULT 0`, `aerial_duels INT DEFAULT 0`, `tackles INT DEFAULT 0`, `interceptions INT DEFAULT 0`, `blocks INT DEFAULT 0`, `clearances INT DEFAULT 0`.
 
-```text
-For each player in the week:
-  activeDays = days with status != "no_activity" (and status is recorded)
-  presentDays = days with status == "present"
-  excusedDays = days with status == "excused"
-  
-  Each excuse = HALF a day's value
-  dayValue = 100 / activeDays.length
-  percentage = (presentDays * dayValue) + (excusedDays * dayValue * 0.5)
-  
-  Progressive: only count days that have been recorded so far
-```
+### UI changes
+- **PlayerProfile.tsx**: If position starts with "GK", show Saves/Clean Sheets/Aerial Duels instead of Goals/Assists. If "DEF", show Tackles/Interceptions/Blocks/Clearances.
+- **Players.tsx** PlayerCard: Same position-based stat display.
+- **Stats.tsx** performance table: Add position-specific columns or show relevant stats per row.
+- **OfficialProfile.tsx** Team Stats Editor: When a player is selected, show position-appropriate stat fields (GK fields for keepers, DEF fields for defenders, standard for others).
 
-Apply this formula in:
-- `OfficialProfile.tsx` attendance table (lines ~576-579)
-- `Stats.tsx` attendanceRanking useMemo (lines ~41-57)
+### TeamDataContext
+Update `updatePlayerStats` to accept all stat types. Update `TeamMember` interface in `team-data.ts`.
 
----
+## 5. Match Day Performance Tracking
 
-## 3. Player Positions & Ordering on Players Page
+### New DB table (migration): `match_performances`
+- id, game_id (FK to game_scores), player_id, goals, assists, saves, tackles, interceptions, blocks, clearances, clean_sheet, aerial_duels, rating, is_potm (boolean), created_at
 
-**`src/pages/Players.tsx`**
-- Sort players: Captains (labeled "Field Captain") first, then by position group (GK → DEF → MID → ATT)
-- Show position title below name (e.g., "Field Captain • Midfielder")
-- Add position group headers between sections
+### OfficialProfile (Manager section)
+After a match, manager records each selected player's performance stats for that game. Section: "Record Match Day Stats".
 
-**`src/data/team-data.ts`** — Update positions for players missing them based on provided data:
-- Add specific positions (LB, CB, RB, etc.) as sub-positions where provided
-- These are already partially set; update the detailed sub-positions
+### Stats page (Officials)
+New section: "Match Day Reports" — list of matches sorted by date (newest first), each expandable to show player performances, rankings, and Player of the Match. Exportable.
 
-**DB update** — Update member positions in Supabase via SQL:
-```sql
-UPDATE members SET position = 'GK' WHERE name IN ('Kibe', 'Brayo');
-UPDATE members SET position = 'DEF (LB)' WHERE name = 'Victor';
--- etc. for all players
-```
+## 6. Manager: Edit/Remove Recent Game Scores
 
-**Coach's profile** — Add a "Edit Player Positions" section where coach can select a player and set/change their position, saved to Supabase.
+Add a section on manager profile to view recent scores with Edit/Delete buttons. Functions: `deleteGameScore(id)` and `updateGameScore(id, data)` in TeamDataContext.
 
----
+## 7. Coach & Manager: Add Players to System
 
-## 4. Restore Team Stats Editor on Manager Profile
+Add a section on coach and manager profiles: "Add New Player" form with name, squad number, position. Inserts into `members` table.
 
-**`src/pages/OfficialProfile.tsx`**
-- The `updatePlayerStats` function exists in context but no UI for it on manager profile
-- Add back the Team Stats Editor card for the manager: select player → edit goals, assists, games played → save
-- Add an "Opponent" field: when updating games_played, also input opponent name
-- Store opponents played against (add `opponents_played` text[] column to members table, or store in game_scorers)
+## 8. Player Messaging to Officials
 
----
+### New DB table (migration): `messages`
+- id, from_id, to_id, content, read (boolean), created_at
 
-## 5. League Standings — Multi-Team Support
+### PlayerProfile
+New section: "Send Message" — select recipient (Fabian, Kevin, or Fadhir), type message, send.
 
-**`src/pages/Results.tsx`** — Currently only shows Suncity FC's single row
-- Restructure to support multiple teams in the league table
-- Manager can add/remove teams and update their stats
-- Suncity FC row highlighted with primary color/different background
-- Auto-sort by points (highest to lowest), then goal difference
+### OfficialProfile (Fabian/Kevin/Fadhir only)
+New section: "Inbox" — view received messages, reply. Replies stored in same table.
 
-**Database migration**: Create `league_teams` table:
-```sql
-CREATE TABLE league_teams (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  team_name text NOT NULL,
-  played int DEFAULT 0,
-  won int DEFAULT 0,
-  drawn int DEFAULT 0,
-  lost int DEFAULT 0,
-  goal_difference int DEFAULT 0,
-  points int DEFAULT 0,
-  is_own_team boolean DEFAULT false,
-  created_at timestamptz DEFAULT now()
-);
-INSERT INTO league_teams (team_name, is_own_team) VALUES ('Suncity FC', true);
-```
-- Move league standings editing to Manager's profile (not Results page)
-- Results page shows read-only league table
+## 9. Full Position Names
 
----
+Update `getPositionLabel` in `Players.tsx` and all display points:
+- GK → Goalkeeper
+- DEF → Defender, DEF (LB) → Left Back, DEF (CB) → Center Back, DEF (RB) → Right Back
+- MID → Midfielder
+- ATT → Attacker/Forward
 
-## 6. Opponent Tracking in Player Profiles
+Also update position editor options in coach profile.
 
-**`src/pages/OfficialProfile.tsx`** (Manager stats editor)
-- When recording games played for a player, add input for opponent name
-- Store as array on the member record or in a join table
+## 10. Overview Tracking System (Weekly/Monthly/Season)
 
-**`src/pages/PlayerProfile.tsx`**
-- Add a section (not at top) showing opponents played against
-- Pull from game_scorers joined with game_scores to get opponent names for games the player participated in
+### Stats page & Officials profile
+Display 3 icons: Weekly 📅, Monthly 📊, Season 🏆
+- **Weekly**: Opens Fri-Sun. After Sunday, auto-archived to `weekly_overviews` table with type='weekly'.
+- **Monthly**: Opens when 3 weekly reports exist for that month period. Archived with type='monthly'.
+- **Season**: Opens when coach's end_date is reached. Type='season'.
+- Icons always visible but grayed/locked until their opening time.
+- Include "most improved" tracking (comparing current week vs previous).
 
----
+### Officials Archive
+Permanent section on officials stats/profile: past reports as clickable date icons (like gallery). Separated by weekly vs monthly vs season.
 
-## 7. Player Data Export (DOCX on Fridays)
+## 11. Replace PDF with DOCX Export
 
-**`src/pages/PlayerProfile.tsx`**
-- Show export button only on Fridays (dayOfWeek === 5)
-- Export as DOCX with team branding: player name, position, stats, attendance, opponents played
-- Use the `docx` library (reinstall it)
+Remove `jspdf` and `jspdf-autotable`. Install `docx` and `file-saver`.
 
----
-
-## 8. Switch ALL Exports Back to DOCX + Restore Emojis
-
-This reverses the PDF switch. Reinstall `docx` and `file-saver` packages.
-
-**`src/lib/docx-export.ts`** — New utility replacing pdf-export
-- Create branded DOCX documents with team badge, motto, tables
+Create `src/lib/docx-export.ts`:
+- Fetch badge, convert to Buffer/Base64 for docx
+- Header: centered logo (80px), "Discipline • Unity • Victory" italic 10pt
+- A4 with 1-inch margins, print layout
+- Clean bordered tables with auto-column widths
 - Use actual emoji characters (✅, ❌, 🔵, ➖) since DOCX supports them
-- Apply to: contributions, attendance, financial summary, weekly overview, first 11, player profile
 
-**All pages**: Replace `generateBrandedPdf` calls with new DOCX generator
+Replace all `generateBrandedPdf` calls with new DOCX generator.
 
-**Website UI**: Restore emoji display:
-- Contribution status: ✅ for paid, ❌ for unpaid
-- Attendance: ✅ present, 🔵 excused, ❌ absent, ➖ no activity
-- Update Stats.tsx, OfficialProfile.tsx, PlayerProfile.tsx
+### Player DOCX Export (Fridays only)
+PlayerProfile: Export button visible on Fridays. Exports player photo, name, position, stats, attendance, opponents played.
 
----
+## 12. Financial System Fixes
 
-## 9. Financial System Fixes (CORE)
+### Feb 2026: 17 contributors
+Current DB shows 19 paid for feb-2026. Need user to confirm which 2 to remove, OR update via SQL to correct.
+- Fix the `finMonth` default to use current actual month
+- Fix month ordering in financial summary display (Dec, Jan, Feb, Mar, Apr order)
+- Add jersey printing expense and coach personal contribution note
 
-**Fix Feb contributors count**: Update DB record to show 17 not 18
-```sql
-UPDATE financial_records SET contributors = 17, contributions = 1700 WHERE month = 'Feb 2026';
-```
+## 13. Attendance Math: X = 0%
 
-**Fix month ordering**: Sort financial records by a defined order (Dec, Jan, Feb, Mar, Apr) not by created_at
+Current `calcAttendancePct` counts excused as half — correct. But absent days shouldn't add any percentage. The current code already doesn't add percentage for absent. The issue may be that unrecorded days (no attendance entry) are being treated differently. Fix: ensure `absent` status contributes 0 to the percentage, and only `present` and `excused` (half) contribute.
 
-**Fix "jumps to March" bug**: In `addFinancialTransaction`, the month selection defaults to "Mar 2026" (line 57). Change default to current month based on date. Also ensure the record lookup matches correctly.
+## 14. Lovable Badge CSS
 
-**Detailed financial export**: Organize by month with itemized tables, contributor names, expense breakdowns
+Already exists in `index.css`. Strengthen with additional selectors targeting `position: fixed` bottom-right elements.
 
-**Feb 2026 specific data**:
-- Jersey printing expense: KSh 2,000 on Feb 21
-- Note: "Coach Fabian contributed KSh 2,000 personally (not from team funds)"
-- Math: Team balance = contributions - expenses. Coach's personal contribution is noted but doesn't affect team money math
-- Current balance as of Feb 27: -400
+## 15. Data Integrity
 
----
-
-## 10. Tracking/Overview System (Weekly/Monthly/Season)
-
-**`src/pages/Stats.tsx`**
-- Display 3 icons: Weekly 📅, Monthly 📊, Season 🏆
-- Weekly: clickable on Fri-Sun, shows overview data
-- Monthly: clickable after 3 weekly reports
-- Season: clickable when coach's end date is reached
-- All archived in `weekly_overviews` table with type field
-
-**Officials stats/profile**: Add permanent archive section showing past reports as date icons (like gallery), clickable to view
-
----
-
-## 11. Gallery Scroll Fix
-
-**`src/pages/Dashboard.tsx`** `MediaGallery` component
-- Bug: `emblaRef` is used for all date groups but only initialized once
-- Fix: Create separate Embla instances per date group, or use a single carousel per group
-
----
-
-## 12. Profile Picture Aspect Ratio Fix
-
-**`src/index.css`** or component-level:
-- All Avatar/AvatarImage: `aspect-ratio: 1/1`, `object-fit: cover`, `object-position: center`
-- Apply to: PlayerProfile, OfficialProfile, Players page cards, Dashboard members
-
----
-
-## 13. Ethan Attendance Access
-
-**`src/pages/OfficialProfile.tsx`**
-- Currently attendance section only shows for `isManager`
-- Add condition: also show for Ethan (SCF-004)
-- `const canManageAttendance = isManager || user.id === "SCF-004";`
-
----
-
-## 14. Official Profile Pics Visible
-
-Ensure officials' profile pictures (from Supabase storage) load and display in Stats page officials list and anywhere officials appear.
-
----
-
-## 15. Lovable Badge Hide (CSS)
-
-**`src/index.css`** — Already has rules but may need strengthening:
-```css
-[data-lovable-badge],
-iframe[src*="lovable"],
-div[class*="lovable-badge"],
-a[href*="lovable.dev"][style*="position: fixed"],
-div[style*="position: fixed"][style*="bottom"][style*="right"] > a[href*="lovable"] {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-```
+- Ensure all operations go through Supabase
+- No data loss from these changes
+- Insert SCF-009 (Brian (K)) into members table if missing
 
 ---
 
@@ -228,19 +131,16 @@ div[style*="position: fixed"][style*="bottom"][style*="right"] > a[href*="lovabl
 
 | File | Action |
 |------|--------|
-| `src/components/Navbar.tsx` | Mobile nav to top, add sign out |
-| `src/pages/OfficialProfile.tsx` | Stats editor, attendance math, Ethan access, position editor, league management |
-| `src/pages/Stats.tsx` | Attendance math fix, emojis, overview icons, archive section |
-| `src/pages/PlayerProfile.tsx` | Opponents section, DOCX export, emojis, aspect ratio |
-| `src/pages/Players.tsx` | Position ordering, captain titles, group headers |
-| `src/pages/Results.tsx` | Multi-team league table, read-only view |
-| `src/pages/Dashboard.tsx` | Gallery scroll fix |
-| `src/contexts/TeamDataContext.tsx` | Add league_teams CRUD, position update function |
-| `src/data/team-data.ts` | Detailed positions with sub-positions |
+| Supabase migration | Add columns to members (saves, clean_sheets, etc.), create match_performances, messages tables |
+| DB data updates | Brian Kim → player, insert SCF-009, fix positions |
+| `src/data/team-data.ts` | Move Brian Kim to players, update TeamMember interface with new stat fields, full position names |
 | `src/lib/docx-export.ts` | NEW — DOCX branded export utility |
-| `src/lib/pdf-export.ts` | Keep but deprecate |
-| `src/index.css` | Profile pic aspect ratio, Lovable badge hide |
-| `package.json` | Reinstall `docx`, `file-saver` |
-| Supabase migration | `league_teams` table |
-| Supabase data updates | Positions, Feb financial fix, Brian Kim captain |
+| `src/lib/pdf-export.ts` | Remove/deprecate |
+| `src/contexts/TeamDataContext.tsx` | Add match performances CRUD, messages CRUD, game score edit/delete, add player, expanded updatePlayerStats |
+| `src/pages/PlayerProfile.tsx` | Position-specific stats, filtered contribution months, softer unpaid emoji, messaging, Friday DOCX export |
+| `src/pages/Players.tsx` | Full position names, position-specific stats in card |
+| `src/pages/OfficialProfile.tsx` | Match day stats recorder, add player, edit/delete scores, position-specific stats editor, overview archive |
+| `src/pages/Stats.tsx` | Match day reports, overview icons system, position-specific performance table, DOCX exports |
+| `src/index.css` | Strengthen Lovable badge hiding |
+| `package.json` | Add `docx`, `file-saver`; remove `jspdf`, `jspdf-autotable` |
 
