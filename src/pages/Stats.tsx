@@ -11,7 +11,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BarChart3, Download, CheckCircle, Clock, DollarSign, Trophy, Calendar, Image, Star, Award, Users } from "lucide-react";
 import { contributionMonths, officials } from "@/data/team-data";
-import { generateBrandedPdf, type TableData } from "@/lib/pdf-export";
+import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
+import { getContribMonthsForMember, getFullPositionName, getPositionGroup, NEW_PLAYER_IDS } from "@/data/team-data";
 import useEmblaCarousel from "embla-carousel-react";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -102,10 +103,10 @@ const Stats = () => {
       m.name,
       ...contributionMonths.map((month) => {
         const status = m.contributions[month.key] || "unpaid";
-        return status === "paid" ? "✅" : status === "pending" ? "⏳" : "❌";
+        return status === "paid" ? "✅" : status === "pending" ? "⏳" : "⬜";
       }),
     ]);
-    generateBrandedPdf("Monthly Contribution Status Report", [{ head, body }], "suncity_fc_contributions.pdf");
+    generateBrandedDocx("Monthly Contribution Status Report", [{ head, body }], "suncity_fc_contributions.docx");
   };
 
   const exportAttendancePdf = () => {
@@ -117,17 +118,17 @@ const Stats = () => {
         m.name,
         ...DAYS.map((day) => {
           const record = playerAtt.find((a) => a.day === day);
-          return record?.status === "present" ? "✅" : record?.status === "excused" ? "🔵" : record?.status === "no_activity" ? "➖" : "❌";
+          return record?.status === "present" ? "✅" : record?.status === "excused" ? "🔵" : record?.status === "no_activity" ? "➖" : "⬜";
         }),
         `${m.attendancePct}%`,
       ];
     });
-    const keyTable: TableData = { head: [], body: [["Key: ✅ = Present, ❌ = Absent, 🔵 = Excused, ➖ = No Activity"]] };
-    generateBrandedPdf("Weekly Attendance Report", [{ head, body }, keyTable], "suncity_fc_attendance.pdf");
+    const keyTable: DocxTableData = { head: [], body: [["Key: ✅ = Present, ⬜ = Absent, 🔵 = Excused, ➖ = No Activity"]] };
+    generateBrandedDocx("Weekly Attendance Report", [{ head, body }, keyTable], "suncity_fc_attendance.docx");
   };
 
   const exportFinancialPdf = () => {
-    const tables: TableData[] = [];
+    const tables: DocxTableData[] = [];
     financialRecords.forEach((f) => {
       const totalExp = f.expenses.reduce((sum, e) => sum + e.amount, 0);
       const head = [[`${f.month} — Financial Details`, ""]];
@@ -148,12 +149,12 @@ const Stats = () => {
       return [month.label, paid || "None"];
     });
     tables.push({ head: cHead, body: cBody });
-    generateBrandedPdf("Detailed Financial Summary Report", tables, "suncity_fc_financial_detailed.pdf");
+    generateBrandedDocx("Detailed Financial Summary Report", tables, "suncity_fc_financial_detailed.docx");
   };
 
   const exportWeeklyOverviewPdf = () => {
     if (!weeklyOverview) return;
-    const tables: TableData[] = [];
+    const tables: DocxTableData[] = [];
     if (weeklyOverview.mostDisciplined.length > 0) {
       tables.push({ head: [["Most Disciplined (100% Attendance)"]], body: weeklyOverview.mostDisciplined.map((m) => [m.name]) });
     }
@@ -166,7 +167,7 @@ const Stats = () => {
     if (weeklyOverview.lowContributors.length > 0) {
       tables.push({ head: [["Low Contribution & Attendance"]], body: weeklyOverview.lowContributors.map((m) => [m.name]) });
     }
-    generateBrandedPdf("Weekly Overview", tables, "suncity_fc_weekly_overview.pdf");
+    generateBrandedDocx("Weekly Overview", tables, "suncity_fc_weekly_overview.docx");
   };
 
   return (

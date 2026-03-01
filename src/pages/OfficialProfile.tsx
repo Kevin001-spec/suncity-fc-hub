@@ -23,7 +23,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { contributionMonths } from "@/data/team-data";
-import { generateBrandedPdf, type TableData } from "@/lib/pdf-export";
+import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
+import { getPositionGroup, getFullPositionName } from "@/data/team-data";
 import { supabase } from "@/integrations/supabase/client";
 import LineupBuilder from "@/components/LineupBuilder";
 
@@ -241,7 +242,7 @@ const OfficialProfile = () => {
     const goals = parseInt(statsGoals) || 0;
     const assists = parseInt(statsAssists) || 0;
     const games = parseInt(statsGames) || 0;
-    await updatePlayerStats(statsPlayerId, goals, assists, games);
+    await updatePlayerStats(statsPlayerId, { goals, assists, gamesPlayed: games });
     toast({ title: "Stats Updated" });
   };
 
@@ -313,7 +314,7 @@ const OfficialProfile = () => {
   };
 
   const exportFinancialPdf = () => {
-    const tables: TableData[] = [];
+    const tables: DocxTableData[] = [];
     financialRecords.forEach((f) => {
       const totalExp = f.expenses.reduce((sum, e) => sum + e.amount, 0);
       const head = [[`${f.month} — Financial Details`, ""]];
@@ -334,7 +335,7 @@ const OfficialProfile = () => {
       return [month.label, paidMembers || "None"];
     });
     tables.push({ head: contribHead, body: contribBody });
-    generateBrandedPdf("Detailed Financial Summary Report", tables, "suncity_fc_financial_detailed.pdf");
+    generateBrandedDocx("Detailed Financial Summary Report", tables, "suncity_fc_financial_detailed.docx");
   };
 
   // First 11 analytics
@@ -350,11 +351,11 @@ const OfficialProfile = () => {
   const exportFirst11Pdf = () => {
     const starters = selectedFirst11.map(id => members.find(m => m.id === id));
     const subs = selectedSubs.map(id => members.find(m => m.id === id));
-    const tables: TableData[] = [
+    const tables: DocxTableData[] = [
       { head: [["Starting XI"]], body: starters.filter(Boolean).map((m, i) => [`${i + 1}. ${m!.name} (${m!.position || "N/A"})`]) },
       { head: [["Substitutes"]], body: subs.filter(Boolean).map((m, i) => [`${i + 1}. ${m!.name} (${m!.position || "N/A"})`]) },
     ];
-    generateBrandedPdf("Match Day Squad Selection", tables, "suncity_fc_first11.pdf");
+    generateBrandedDocx("Match Day Squad Selection", tables, "suncity_fc_first11.docx");
   };
 
   const liveMember = members.find((m) => m.id === user.id) || user;
