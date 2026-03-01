@@ -13,6 +13,13 @@ export interface TeamMember {
   goals?: number;
   assists?: number;
   gamesPlayed?: number;
+  saves?: number;
+  cleanSheets?: number;
+  aerialDuels?: number;
+  tackles?: number;
+  interceptions?: number;
+  blocks?: number;
+  clearances?: number;
   excused?: boolean;
   excusedType?: string;
   excusedDays?: string[];
@@ -68,6 +75,67 @@ export interface AttendanceRecord {
   status: "present" | "absent" | "excused" | "no_activity";
 }
 
+export interface MatchPerformance {
+  id: string;
+  gameId: string;
+  playerId: string;
+  goals: number;
+  assists: number;
+  saves: number;
+  tackles: number;
+  interceptions: number;
+  blocks: number;
+  clearances: number;
+  cleanSheet: boolean;
+  aerialDuels: number;
+  rating: number;
+  isPotm: boolean;
+}
+
+export interface Message {
+  id: string;
+  fromId: string;
+  toId: string;
+  content: string;
+  read: boolean;
+  createdAt: string;
+}
+
+// New player IDs (SCF-P31 to SCF-P35) — their contributions start from feb-2026
+export const NEW_PLAYER_IDS = new Set(["SCF-P31", "SCF-P32", "SCF-P33", "SCF-P34", "SCF-P35"]);
+
+// Get contribution months for a member (new players skip dec-2025, jan-2026)
+export function getContribMonthsForMember(memberId: string) {
+  if (NEW_PLAYER_IDS.has(memberId)) {
+    return contributionMonths.filter(m => m.key !== "dec-2025" && m.key !== "jan-2026");
+  }
+  return contributionMonths;
+}
+
+// Full position name labels
+export function getFullPositionName(pos?: string): string {
+  if (!pos) return "Player";
+  const map: Record<string, string> = {
+    "GK": "Goalkeeper",
+    "DEF": "Defender",
+    "DEF (LB)": "Left Back",
+    "DEF (CB)": "Center Back",
+    "DEF (RB)": "Right Back",
+    "MID": "Midfielder",
+    "ATT": "Attacker",
+  };
+  return map[pos] || pos;
+}
+
+export function getPositionGroup(pos?: string): string {
+  if (!pos) return "ATT";
+  if (pos.startsWith("GK")) return "GK";
+  if (pos.startsWith("DEF")) return "DEF";
+  if (pos.startsWith("MID")) return "MID";
+  if (pos.startsWith("ATT")) return "ATT";
+  return "MID";
+}
+
 // Officials
 export const officials: TeamMember[] = [
   { id: "SCF-001", name: "Fabian", role: "coach", username: "COACH-FAB", pin: "8246", phone: "0717455265", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
@@ -75,38 +143,38 @@ export const officials: TeamMember[] = [
   { id: "SCF-003", name: "Kevin", role: "manager", username: "MGR-KEV", pin: "7719", phone: "0112563036", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-004", name: "Ethan", role: "captain", username: "CPT-ETH", pin: "4628", phone: "0718258821", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-005", name: "Denoh", role: "captain", username: "CPT-DEN", pin: "9183", phone: "0769188787", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-006", name: "Victor", role: "captain", username: "CPT-VIC", pin: "3507", phone: "0786520209", position: "DEF", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-006", name: "Victor", role: "captain", username: "CPT-VIC", pin: "3507", phone: "0786520209", position: "DEF (LB)", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-007", name: "Lucario", role: "captain", username: "CPT-LUC", pin: "6842", phone: "0722725900", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-008", name: "Austin", role: "captain", username: "CPT-AUS", pin: "2059", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-009", name: "Brian (K)", role: "captain", username: "CPT-BK", pin: "1374", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
 ];
 
-// Players — May removed, Oscar added, Brian(d) renamed, positions added
+// Players — Brian Kim is regular player (SCF-P35), not official
 export const players: TeamMember[] = [
   { id: "SCF-P01", name: "Blaise", role: "player", squadNumber: 1, position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P02", name: "Bronze", role: "player", squadNumber: 2, position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P03", name: "Lawrence", role: "player", squadNumber: 3, position: "DEF", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P03", name: "Lawrence", role: "player", squadNumber: 3, position: "DEF (CB)", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P04", name: "Darren", role: "player", squadNumber: 4, position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-P05", name: "Yassin", role: "player", squadNumber: 5, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
-  { id: "SCF-P06", name: "Wakili", role: "player", squadNumber: 6, position: "DEF", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P07", name: "Collo", role: "player", squadNumber: 7, position: "DEF", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
+  { id: "SCF-P06", name: "Wakili", role: "player", squadNumber: 6, position: "DEF (RB)", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-P07", name: "Collo", role: "player", squadNumber: 7, position: "DEF (LB)", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
   { id: "SCF-P08", name: "Fad", role: "player", squadNumber: 8, position: "ATT", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
-  { id: "SCF-P09", name: "Sam", role: "player", squadNumber: 9, position: "DEF", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
+  { id: "SCF-P09", name: "Sam", role: "player", squadNumber: 9, position: "DEF (LB)", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
   { id: "SCF-P10", name: "Olise", role: "player", squadNumber: 10, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-P11", name: "Kibe", role: "player", squadNumber: 11, position: "GK", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
+  { id: "SCF-P11", name: "Kibe", role: "player", squadNumber: 11, position: "GK", goals: 0, assists: 0, gamesPlayed: 0, saves: 0, cleanSheets: 0, aerialDuels: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
   { id: "SCF-P12", name: "Mugi J.r", role: "player", squadNumber: 12, position: "ATT", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-P13", name: "Francis", role: "player", squadNumber: 13, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P14", name: "Kanja", role: "player", squadNumber: 14, position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P15", name: "Felix M", role: "player", squadNumber: 15, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
-  { id: "SCF-P16", name: "Brayo", role: "player", squadNumber: 16, position: "GK", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P16", name: "Brayo", role: "player", squadNumber: 16, position: "GK", goals: 0, assists: 0, gamesPlayed: 0, saves: 0, cleanSheets: 0, aerialDuels: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P17", name: "Bivon", role: "player", squadNumber: 17, position: "ATT", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
-  { id: "SCF-P18", name: "Mungai", role: "player", squadNumber: 18, position: "DEF", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P18", name: "Mungai", role: "player", squadNumber: 18, position: "DEF (RB)", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P19", name: "Foden", role: "player", squadNumber: 19, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P20", name: "Njuguna", role: "player", squadNumber: 20, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P21", name: "Amos", role: "player", squadNumber: 21, position: "ATT", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
   { id: "SCF-P22", name: "Bill", role: "player", squadNumber: 22, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P23", name: "Einstein", role: "player", squadNumber: 23, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
-  { id: "SCF-P24", name: "Mannasseh", role: "player", squadNumber: 24, position: "DEF", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
+  { id: "SCF-P24", name: "Mannasseh", role: "player", squadNumber: 24, position: "DEF (CB)", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P25", name: "Morgan", role: "player", squadNumber: 25, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P26", name: "Kayb", role: "player", squadNumber: 26, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P27", name: "Davie", role: "player", squadNumber: 27, goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid" } },
@@ -126,7 +194,7 @@ export const players: TeamMember[] = [
 
 export const allMembers: TeamMember[] = [...officials, ...players];
 
-// Contribution months — May removed
+// Contribution months
 export const contributionMonths = [
   { key: "dec-2025", label: "Dec 2025" },
   { key: "jan-2026", label: "Jan 2026" },

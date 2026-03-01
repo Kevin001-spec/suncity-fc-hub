@@ -6,51 +6,58 @@ import { Navigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { type TeamMember } from "@/data/team-data";
+import { type TeamMember, getFullPositionName, getPositionGroup } from "@/data/team-data";
 
 const positionGroupOrder: Record<string, number> = { "GK": 1, "DEF": 2, "MID": 3, "ATT": 4 };
 const positionGroupLabels: Record<string, string> = { "GK": "Goalkeepers", "DEF": "Defenders", "MID": "Midfielders", "ATT": "Attackers" };
 
-function getPositionGroup(pos?: string): string {
-  if (!pos) return "ATT"; // default
-  if (pos.startsWith("GK")) return "GK";
-  if (pos.startsWith("DEF")) return "DEF";
-  if (pos.startsWith("MID")) return "MID";
-  if (pos.startsWith("ATT")) return "ATT";
-  return "MID";
-}
+const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profilePic?: string; onClose: () => void }) => {
+  const posGroup = getPositionGroup(member.position);
+  const isGK = posGroup === "GK";
+  const isDEF = posGroup === "DEF";
 
-function getPositionLabel(pos?: string): string {
-  if (!pos) return "Player";
-  const group = getPositionGroup(pos);
-  const detail = pos.includes("(") ? pos : positionGroupLabels[group] || pos;
-  return detail;
-}
-
-const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profilePic?: string; onClose: () => void }) => (
-  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-      className="bg-card border border-border rounded-xl p-6 w-full max-w-sm card-glow" onClick={(e) => e.stopPropagation()}>
-      <div className="text-center">
-        <Avatar className="w-20 h-20 mx-auto mb-4 border-2 border-primary">
-          {profilePic && <AvatarImage src={profilePic} className="aspect-square object-cover object-center" />}
-          <AvatarFallback className="bg-secondary text-primary font-heading text-xl">{member.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-        </Avatar>
-        <h3 className="font-heading text-lg text-foreground">{member.name}</h3>
-        <p className="text-primary font-body text-sm">{member.id}</p>
-        {member.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body mt-1">Field Captain</Badge>}
-        {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{getPositionLabel(member.position)}</p>}
-        {member.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{member.squadNumber}</p>}
-        <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-border">
-          <div><p className="text-xl font-heading text-primary">{member.goals || 0}</p><p className="text-xs text-muted-foreground font-body">Goals</p></div>
-          <div><p className="text-xl font-heading text-primary">{member.assists || 0}</p><p className="text-xs text-muted-foreground font-body">Assists</p></div>
-          <div><p className="text-xl font-heading text-primary">{member.gamesPlayed || 0}</p><p className="text-xs text-muted-foreground font-body">Games</p></div>
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        className="bg-card border border-border rounded-xl p-6 w-full max-w-sm card-glow" onClick={(e) => e.stopPropagation()}>
+        <div className="text-center">
+          <Avatar className="w-20 h-20 mx-auto mb-4 border-2 border-primary">
+            {profilePic && <AvatarImage src={profilePic} className="aspect-square object-cover object-center" />}
+            <AvatarFallback className="bg-secondary text-primary font-heading text-xl">{member.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          <h3 className="font-heading text-lg text-foreground">{member.name}</h3>
+          <p className="text-primary font-body text-sm">{member.id}</p>
+          {member.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body mt-1">Field Captain</Badge>}
+          {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(member.position)}</p>}
+          {member.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{member.squadNumber}</p>}
+          <div className={`grid gap-3 mt-4 pt-4 border-t border-border ${isDEF ? "grid-cols-4" : "grid-cols-3"}`}>
+            {isGK ? (
+              <>
+                <div><p className="text-xl font-heading text-primary">{member.saves || 0}</p><p className="text-xs text-muted-foreground font-body">Saves</p></div>
+                <div><p className="text-xl font-heading text-primary">{member.cleanSheets || 0}</p><p className="text-xs text-muted-foreground font-body">Clean Sheets</p></div>
+                <div><p className="text-xl font-heading text-primary">{member.aerialDuels || 0}</p><p className="text-xs text-muted-foreground font-body">Aerial Duels</p></div>
+              </>
+            ) : isDEF ? (
+              <>
+                <div><p className="text-xl font-heading text-primary">{member.tackles || 0}</p><p className="text-xs text-muted-foreground font-body">Tackles</p></div>
+                <div><p className="text-xl font-heading text-primary">{member.interceptions || 0}</p><p className="text-xs text-muted-foreground font-body">Int.</p></div>
+                <div><p className="text-xl font-heading text-primary">{member.blocks || 0}</p><p className="text-xs text-muted-foreground font-body">Blocks</p></div>
+                <div><p className="text-xl font-heading text-primary">{member.clearances || 0}</p><p className="text-xs text-muted-foreground font-body">Clear.</p></div>
+              </>
+            ) : (
+              <>
+                <div><p className="text-xl font-heading text-primary">{member.goals || 0}</p><p className="text-xs text-muted-foreground font-body">Goals</p></div>
+                <div><p className="text-xl font-heading text-primary">{member.assists || 0}</p><p className="text-xs text-muted-foreground font-body">Assists</p></div>
+                <div><p className="text-xl font-heading text-primary">{member.gamesPlayed || 0}</p><p className="text-xs text-muted-foreground font-body">Games</p></div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      </motion.div>
     </motion.div>
-  </motion.div>
-);
+  );
+};
 
 const Players = () => {
   const { user } = useAuth();
@@ -61,28 +68,22 @@ const Players = () => {
 
   const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
 
-  // Sort: captains first, then by position group
   const sortedPlayers = useMemo(() => {
     return [...playerMembers].sort((a, b) => {
-      // Captains first
       if (a.role === "captain" && b.role !== "captain") return -1;
       if (a.role !== "captain" && b.role === "captain") return 1;
-      // Then by position group
       const aGroup = positionGroupOrder[getPositionGroup(a.position)] || 5;
       const bGroup = positionGroupOrder[getPositionGroup(b.position)] || 5;
       return aGroup - bGroup;
     });
   }, [playerMembers]);
 
-  // Group players by section
   const sections = useMemo(() => {
     const groups: { label: string; players: typeof sortedPlayers }[] = [];
     const captains = sortedPlayers.filter(m => m.role === "captain");
     if (captains.length > 0) groups.push({ label: "Field Captains", players: captains });
-    
     const nonCaptains = sortedPlayers.filter(m => m.role !== "captain");
-    const posGroups = ["GK", "DEF", "MID", "ATT"];
-    for (const pg of posGroups) {
+    for (const pg of ["GK", "DEF", "MID", "ATT"]) {
       const inGroup = nonCaptains.filter(m => getPositionGroup(m.position) === pg);
       if (inGroup.length > 0) groups.push({ label: positionGroupLabels[pg], players: inGroup });
     }
@@ -116,7 +117,7 @@ const Players = () => {
                     <p className="font-heading text-sm text-foreground font-bold">{member.name}</p>
                     <p className="text-xs text-muted-foreground font-body">
                       {member.role === "captain" ? "Field Captain • " : ""}
-                      {getPositionLabel(member.position)}
+                      {getFullPositionName(member.position)}
                       {member.squadNumber ? ` • #${member.squadNumber}` : ""}
                     </p>
                   </div>

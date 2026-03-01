@@ -423,6 +423,68 @@ export type Database = {
           },
         ]
       }
+      match_performances: {
+        Row: {
+          aerial_duels: number
+          assists: number
+          blocks: number
+          clean_sheet: boolean
+          clearances: number
+          created_at: string
+          game_id: string
+          goals: number
+          id: string
+          interceptions: number
+          is_potm: boolean
+          player_id: string
+          rating: number
+          saves: number
+          tackles: number
+        }
+        Insert: {
+          aerial_duels?: number
+          assists?: number
+          blocks?: number
+          clean_sheet?: boolean
+          clearances?: number
+          created_at?: string
+          game_id: string
+          goals?: number
+          id?: string
+          interceptions?: number
+          is_potm?: boolean
+          player_id: string
+          rating?: number
+          saves?: number
+          tackles?: number
+        }
+        Update: {
+          aerial_duels?: number
+          assists?: number
+          blocks?: number
+          clean_sheet?: boolean
+          clearances?: number
+          created_at?: string
+          game_id?: string
+          goals?: number
+          id?: string
+          interceptions?: number
+          is_potm?: boolean
+          player_id?: string
+          rating?: number
+          saves?: number
+          tackles?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_performances_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "game_scores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       media_items: {
         Row: {
           caption: string | null
@@ -452,7 +514,11 @@ export type Database = {
       }
       members: {
         Row: {
+          aerial_duels: number
           assists: number
+          blocks: number
+          clean_sheets: number
+          clearances: number
           created_at: string
           excused: boolean
           excused_days: string[] | null
@@ -460,17 +526,24 @@ export type Database = {
           games_played: number
           goals: number
           id: string
+          interceptions: number
           name: string
           phone: string | null
           pin: string | null
           position: string | null
           profile_pic_url: string | null
           role: string
+          saves: number
           squad_number: number | null
+          tackles: number
           username: string | null
         }
         Insert: {
+          aerial_duels?: number
           assists?: number
+          blocks?: number
+          clean_sheets?: number
+          clearances?: number
           created_at?: string
           excused?: boolean
           excused_days?: string[] | null
@@ -478,17 +551,24 @@ export type Database = {
           games_played?: number
           goals?: number
           id: string
+          interceptions?: number
           name: string
           phone?: string | null
           pin?: string | null
           position?: string | null
           profile_pic_url?: string | null
           role?: string
+          saves?: number
           squad_number?: number | null
+          tackles?: number
           username?: string | null
         }
         Update: {
+          aerial_duels?: number
           assists?: number
+          blocks?: number
+          clean_sheets?: number
+          clearances?: number
           created_at?: string
           excused?: boolean
           excused_days?: string[] | null
@@ -496,14 +576,44 @@ export type Database = {
           games_played?: number
           goals?: number
           id?: string
+          interceptions?: number
           name?: string
           phone?: string | null
           pin?: string | null
           position?: string | null
           profile_pic_url?: string | null
           role?: string
+          saves?: number
           squad_number?: number | null
+          tackles?: number
           username?: string | null
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          content: string
+          created_at: string
+          from_id: string
+          id: string
+          read: boolean
+          to_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          from_id: string
+          id?: string
+          read?: boolean
+          to_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          from_id?: string
+          id?: string
+          read?: boolean
+          to_id?: string
         }
         Relationships: []
       }

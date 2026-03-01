@@ -7,22 +7,30 @@ import Navbar from "@/components/Navbar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Target, Footprints, Gamepad2, Upload, CheckCircle, Calendar } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Target, Footprints, Gamepad2, Upload, Calendar, Download, Shield, Hand, Crosshair, MessageCircle, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { contributionMonths } from "@/data/team-data";
+import { getContribMonthsForMember, getFullPositionName, getPositionGroup } from "@/data/team-data";
+import { generatePlayerProfileDocx } from "@/lib/docx-export";
+import { useState } from "react";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 const PlayerProfile = () => {
   const { user } = useAuth();
-  const { members, profilePics, uploadProfilePicToStorage, attendance, currentWeekStart, gameScores } = useTeamData();
+  const { members, profilePics, uploadProfilePicToStorage, attendance, currentWeekStart, gameScores, sendMessage } = useTeamData();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [msgRecipient, setMsgRecipient] = useState("");
+  const [msgContent, setMsgContent] = useState("");
 
   if (!user) return <Navigate to="/" replace />;
 
   const liveMember = members.find((m) => m.id === user.id) || user;
   const isFabianExempt = user.id === "SCF-001";
+  const posGroup = getPositionGroup(liveMember.position);
+  const isFriday = new Date().getDay() === 5;
 
   const handleProfilePicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -36,16 +44,60 @@ const PlayerProfile = () => {
 
   const myAttendance = attendance.filter((a) => a.playerId === user.id);
 
-  // Get opponents played against from game_scorers
   const opponentsPlayed = gameScores
     .filter(game => game.scorers?.includes(user.id))
     .map(game => ({ opponent: game.opponent, date: game.date, result: `${game.ourScore}-${game.theirScore}` }));
 
-  const statCards = [
-    { icon: Target, label: "Goals", value: liveMember.goals || 0 },
-    { icon: Footprints, label: "Assists", value: liveMember.assists || 0 },
-    { icon: Gamepad2, label: "Games", value: liveMember.gamesPlayed || 0 },
-  ];
+  // Position-specific stat cards
+  const getStatCards = () => {
+    if (posGroup === "GK") {
+      return [
+        { icon: Hand, label: "Saves", value: liveMember.saves || 0 },
+        { icon: Shield, label: "Clean Sheets", value: liveMember.cleanSheets || 0 },
+        { icon: Crosshair, label: "Aerial Duels", value: liveMember.aerialDuels || 0 },
+      ];
+    }
+    if (posGroup === "DEF") {
+      return [
+        { icon: Shield, label: "Tackles", value: liveMember.tackles || 0 },
+        { icon: Crosshair, label: "Interceptions", value: liveMember.interceptions || 0 },
+        { icon: Target, label: "Blocks", value: liveMember.blocks || 0 },
+        { icon: Footprints, label: "Clearances", value: liveMember.clearances || 0 },
+      ];
+    }
+    return [
+      { icon: Target, label: "Goals", value: liveMember.goals || 0 },
+      { icon: Footprints, label: "Assists", value: liveMember.assists || 0 },
+      { icon: Gamepad2, label: "Games", value: liveMember.gamesPlayed || 0 },
+    ];
+  };
+
+  const statCards = getStatCards();
+  const memberContribMonths = getContribMonthsForMember(user.id);
+
+  const handleExportProfile = async () => {
+    const stats = statCards.map(s => ({ label: s.label, value: s.value }));
+    const attDays = DAYS.map(day => {
+      const record = myAttendance.find(a => a.day === day);
+      return { day, status: record?.status || "absent" };
+    });
+    const contribs = memberContribMonths.map(m => ({
+      month: m.label, status: liveMember.contributions[m.key] || "unpaid",
+    }));
+    await generatePlayerProfileDocx(
+      liveMember.name, user.id, getFullPositionName(liveMember.position),
+      stats, attDays, opponentsPlayed.map(o => ({ ...o, date: new Date(o.date).toLocaleDateString() })),
+      contribs, profilePics[user.id]
+    );
+    toast({ title: "Profile Exported", description: "Your profile has been downloaded as a Word document." });
+  };
+
+  const handleSendMessage = async () => {
+    if (!msgRecipient || !msgContent.trim()) return;
+    await sendMessage(user.id, msgRecipient, msgContent.trim());
+    toast({ title: "Message Sent" });
+    setMsgContent(""); setMsgRecipient("");
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -68,11 +120,17 @@ const PlayerProfile = () => {
             <Badge variant="outline" className="border-primary/30 text-primary font-body">{user.id}</Badge>
             {user.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body">Field Captain</Badge>}
           </div>
-          {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{liveMember.position}</p>}
+          {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
           {liveMember.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{liveMember.squadNumber}</p>}
+          {isFriday && (
+            <Button onClick={handleExportProfile} variant="outline" size="sm" className="mt-3 font-body text-xs border-primary/30 text-primary">
+              <Download className="w-3 h-3 mr-1" /> Export Profile
+            </Button>
+          )}
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-3 gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+          className={`grid gap-4 ${statCards.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}>
           {statCards.map(({ icon: Icon, label, value }) => (
             <Card key={label} className="bg-card border-border card-glow text-center">
               <CardContent className="pt-6 pb-4">
@@ -98,10 +156,10 @@ const PlayerProfile = () => {
                 {DAYS.map((day) => {
                   const record = myAttendance.find((a) => a.day === day);
                   const status = record?.status || "absent";
-                  const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : "❌";
+                  const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : "⬜";
                   const colors: Record<string, string> = {
                     present: "bg-green-500/20 border-green-500/40",
-                    absent: "bg-destructive/10 border-destructive/30",
+                    absent: "bg-muted/30 border-border",
                     excused: "bg-blue-500/20 border-blue-500/30",
                     no_activity: "bg-muted border-border",
                   };
@@ -119,21 +177,19 @@ const PlayerProfile = () => {
           </Card>
         </motion.div>
 
-        {/* Monthly Contributions — Fancy display */}
+        {/* Monthly Contributions */}
         {!isFabianExempt && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <Card className="bg-card border-border card-glow">
               <CardHeader><CardTitle className="font-heading text-lg text-foreground">Monthly Contributions</CardTitle></CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-3">
-                  {contributionMonths.map(({ key, label }) => {
+                  {memberContribMonths.map(({ key, label }) => {
                     const status = liveMember.contributions[key] || "unpaid";
                     const isPaid = status === "paid";
                     return (
                       <div key={key} className={`px-4 py-3 rounded-xl border-2 text-center transition-all ${
-                        isPaid 
-                          ? "border-primary/40 bg-primary/10 player-card-glow" 
-                          : "border-border bg-muted/30"
+                        isPaid ? "border-primary/40 bg-primary/10 player-card-glow" : "border-border bg-muted/30"
                       }`}>
                         <p className="text-xs font-body text-muted-foreground">{label}</p>
                         <div className="mt-1">
@@ -143,7 +199,7 @@ const PlayerProfile = () => {
                               <span className="text-sm font-heading text-green-600">Paid</span>
                             </div>
                           ) : (
-                            <span className="text-sm font-body text-muted-foreground">❌ Unpaid</span>
+                            <span className="text-sm font-body text-muted-foreground">⬜ Unpaid</span>
                           )}
                         </div>
                       </div>
@@ -176,6 +232,29 @@ const PlayerProfile = () => {
             </Card>
           </motion.div>
         )}
+
+        {/* Send Message to Officials */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-primary" /> Send Message
+            </CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <select value={msgRecipient} onChange={(e) => setMsgRecipient(e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                <option value="">Select recipient</option>
+                <option value="SCF-001">Fabian (Coach)</option>
+                <option value="SCF-003">Kevin (Manager)</option>
+                <option value="SCF-002">Fadhir (Finance)</option>
+              </select>
+              <Textarea placeholder="Type your message..." value={msgContent} onChange={(e) => setMsgContent(e.target.value)}
+                className="bg-secondary border-border font-body" />
+              <Button onClick={handleSendMessage} disabled={!msgRecipient || !msgContent.trim()} className="w-full font-body">
+                <Send className="w-4 h-4 mr-1" /> Send Message
+              </Button>
+            </CardContent>
+          </Card>
+        </motion.div>
       </main>
     </div>
   );
