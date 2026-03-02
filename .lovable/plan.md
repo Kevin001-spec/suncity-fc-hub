@@ -1,146 +1,109 @@
 
 
-# Suncity FC — System Update Plan
+# System Update Plan
 
-## 1. Brian Kim: Demote to Regular Player
+## Task 1: Move "Add Recent Results" and "Add Events" to Coach Profile Only
 
-**DB update**: `UPDATE members SET role = 'player' WHERE id = 'SCF-P35'`
-**team-data.ts**: Move Brian Kim from `officials` to `players`, change role to "player", remove pin/username. Keep Brian (K) (SCF-009) as official/captain.
-Also insert SCF-009 (Brian (K)) into DB members table if not already there.
+Currently `canManageScores` and `canManageEvents` include coach, manager, and captain. Change:
+- **Add Score** card: Show only for `isCoach` (not manager/captain)
+- **Add Event** card: Show only for `isCoach`
+- **Manager gets a NEW "Edit/Remove Recent Scores"** card instead — shows list of `gameScores` with Edit/Delete buttons per entry
 
-## 2. New Players: Remove Jan & Feb Contributions from Profile
+**Files:** `src/pages/OfficialProfile.tsx`
+- Change line 399 condition from `canManageScores` to `isCoach`
+- Change line 427 condition from `canManageEvents` to `isCoach`
+- Add new Manager card: "Manage Recent Results" with list of games, each having Edit (inline fields) and Delete (with confirm) buttons
 
-For SCF-P31 through SCF-P35, filter out `dec-2025` and `jan-2026` from their contribution months display. In `PlayerProfile.tsx` and `Stats.tsx` contribution grid, conditionally show months starting from `feb-2026` for these IDs. Define a `newPlayerIds` set and a `getContribMonthsForMember(id)` helper.
+## Task 2: Update Team Stats Editor with Position-Specific Stats
 
-## 3. Replace Red X Emoji with Softer Unpaid Indicator
+The stats editor (lines 484-516) only has Goals/Assists/Games fields. Update to show position-appropriate fields:
+- **All players**: Goals, Assists, Games Played, Successful Tackles, Direct Targets (new fields needed)
+- **Defenders only**: Additional Tackles, Interceptions, Clearances, Direct Shots
+- **GK**: Saves, Clean Sheets, Aerial Duels
 
-Replace `❌` for unpaid contributions with `⬜` or a gray dash `—` across:
-- `PlayerProfile.tsx` monthly contributions
-- `Stats.tsx` contribution grid
-- `OfficialProfile.tsx` contribution display
-- Exported documents
+**Database migration**: Add `successful_tackles` and `direct_targets` columns (and `direct_shots` for DEF) to `members` table.
 
-## 4. Position-Specific Stats for GK & DEF
+**Files:**
+- Supabase migration: `ALTER TABLE members ADD COLUMN successful_tackles INT DEFAULT 0, ADD COLUMN direct_targets INT DEFAULT 0, ADD COLUMN direct_shots INT DEFAULT 0;`
+- `src/data/team-data.ts`: Add new fields to `TeamMember` interface
+- `src/pages/OfficialProfile.tsx`: Expand stats editor — add state variables for all new stats, detect selected player's position group, show relevant fields dynamically
+- `src/contexts/TeamDataContext.tsx`: Extend `updatePlayerStats` mapping to include new fields
+- `src/pages/PlayerProfile.tsx`: Update `getStatCards()` to show new stats for each position
+- `src/pages/Stats.tsx`: Update performance table columns
 
-### Schema change (migration)
-Add columns to `members`: `saves INT DEFAULT 0`, `clean_sheets INT DEFAULT 0`, `aerial_duels INT DEFAULT 0`, `tackles INT DEFAULT 0`, `interceptions INT DEFAULT 0`, `blocks INT DEFAULT 0`, `clearances INT DEFAULT 0`.
+## Task 3: Overview Tracking System (Weekly/Monthly/Season) — 3 Icons
 
-### UI changes
-- **PlayerProfile.tsx**: If position starts with "GK", show Saves/Clean Sheets/Aerial Duels instead of Goals/Assists. If "DEF", show Tackles/Interceptions/Blocks/Clearances.
-- **Players.tsx** PlayerCard: Same position-based stat display.
-- **Stats.tsx** performance table: Add position-specific columns or show relevant stats per row.
-- **OfficialProfile.tsx** Team Stats Editor: When a player is selected, show position-appropriate stat fields (GK fields for keepers, DEF fields for defenders, standard for others).
+This is the repeating core request. Currently there's a single "Weekly Overview" card that shows Fri-Sun. Need to transform into 3 icons like the gallery:
 
-### TeamDataContext
-Update `updatePlayerStats` to accept all stat types. Update `TeamMember` interface in `team-data.ts`.
+**Design:**
+- 3 icon buttons on Stats page (and officials dashboard): 📅 Weekly, 📊 Monthly, 🏆 Season
+- **Weekly**: Icon always visible. Clickable only Fri-Sun. Opens dialog with overview data. After Sunday, auto-archive to `weekly_overviews` table.
+- **Monthly**: Icon always visible. Clickable after 3 weekly reports exist. Opens dialog with monthly summary.
+- **Season**: Icon always visible. Clickable only when coach's end date has passed. Opens dialog with all-time stats.
+- Each includes "Most Improved" tracking (compare current vs previous week data for discipline, goals, assists).
+- **Archive Section**: On officials stats/profile — permanent archive of past reports, displayed as clickable date icons (like gallery), separated by type (weekly/monthly/season).
 
-## 5. Match Day Performance Tracking
+**Files:**
+- `src/pages/Stats.tsx`: Replace the single weekly overview with 3 icon system + archive section
+- `src/pages/OfficialProfile.tsx`: Add archive section for officials
+- Logic: Load `weekly_overviews` and `season_config` from Supabase, compute available reports
 
-### New DB table (migration): `match_performances`
-- id, game_id (FK to game_scores), player_id, goals, assists, saves, tackles, interceptions, blocks, clearances, clean_sheet, aerial_duels, rating, is_potm (boolean), created_at
+## Task 4: Player DOCX Export (Friday-Sunday)
 
-### OfficialProfile (Manager section)
-After a match, manager records each selected player's performance stats for that game. Section: "Record Match Day Stats".
+Currently `isFriday = new Date().getDay() === 5`. Change to show Fri-Sun:
+```
+const showExport = [0, 5, 6].includes(new Date().getDay());
+```
 
-### Stats page (Officials)
-New section: "Match Day Reports" — list of matches sorted by date (newest first), each expandable to show player performances, rankings, and Player of the Match. Exportable.
+The export already calls `generatePlayerProfileDocx` — just need to update the visibility condition.
 
-## 6. Manager: Edit/Remove Recent Game Scores
+**Files:** `src/pages/PlayerProfile.tsx` — change line 33
 
-Add a section on manager profile to view recent scores with Edit/Delete buttons. Functions: `deleteGameScore(id)` and `updateGameScore(id, data)` in TeamDataContext.
+## Task 5: Match Day Performance Tracking on Officials Stats
 
-## 7. Coach & Manager: Add Players to System
+Need a section on Stats page where officials see match-by-match player performance data. Already have `match_performances` table and `addMatchPerformance` in context.
 
-Add a section on coach and manager profiles: "Add New Player" form with name, squad number, position. Inserts into `members` table.
+**Manager's profile**: Add "Record Match Day Stats" section — select a game, add player performances (position-specific stats + rating + POTM checkbox).
 
-## 8. Player Messaging to Officials
+**Stats page**: Add "Match Day Reports" section — games listed by date (newest first), expandable to show each player's stats, ranked by rating, POTM highlighted. Exportable as DOCX.
 
-### New DB table (migration): `messages`
-- id, from_id, to_id, content, read (boolean), created_at
+**Files:**
+- `src/pages/OfficialProfile.tsx`: Add match performance recorder for manager
+- `src/pages/Stats.tsx`: Add match reports section
 
-### PlayerProfile
-New section: "Send Message" — select recipient (Fabian, Kevin, or Fadhir), type message, send.
+## Task 6: Manager Edit/Remove Recent Scores
 
-### OfficialProfile (Fabian/Kevin/Fadhir only)
-New section: "Inbox" — view received messages, reply. Replies stored in same table.
+Covered in Task 1 — the new "Manage Recent Results" card.
 
-## 9. Full Position Names
+## Task 7: Add Players Section for Coach & Manager
 
-Update `getPositionLabel` in `Players.tsx` and all display points:
-- GK → Goalkeeper
-- DEF → Defender, DEF (LB) → Left Back, DEF (CB) → Center Back, DEF (RB) → Right Back
-- MID → Midfielder
-- ATT → Attacker/Forward
+Currently `addPlayer` exists in context but no UI. Add an "Add New Player" card for both `isCoach` and `isManager`:
+- Name, Squad Number, Position selector
+- Inserts via `addPlayer(name, squadNumber, position)`
 
-Also update position editor options in coach profile.
+**Files:** `src/pages/OfficialProfile.tsx` — add card with condition `isCoach || isManager`
 
-## 10. Overview Tracking System (Weekly/Monthly/Season)
+## Task 8: Fix New Players Contribution Display in Stats
 
-### Stats page & Officials profile
-Display 3 icons: Weekly 📅, Monthly 📊, Season 🏆
-- **Weekly**: Opens Fri-Sun. After Sunday, auto-archived to `weekly_overviews` table with type='weekly'.
-- **Monthly**: Opens when 3 weekly reports exist for that month period. Archived with type='monthly'.
-- **Season**: Opens when coach's end_date is reached. Type='season'.
-- Icons always visible but grayed/locked until their opening time.
-- Include "most improved" tracking (comparing current week vs previous).
+In `Stats.tsx` contribution grid (line 408-427), new players (SCF-P31 to SCF-P35) still show ❌ for Dec/Jan. Fix by using `getContribMonthsForMember` to determine which months to show, and for months that don't apply, show `—` instead.
 
-### Officials Archive
-Permanent section on officials stats/profile: past reports as clickable date icons (like gallery). Separated by weekly vs monthly vs season.
+**Files:** `src/pages/Stats.tsx` — update contribution grid to check `NEW_PLAYER_IDS` and skip/show dash for inapplicable months
 
-## 11. Replace PDF with DOCX Export
+## Task 9: Lovable Badge CSS
 
-Remove `jspdf` and `jspdf-autotable`. Install `docx` and `file-saver`.
-
-Create `src/lib/docx-export.ts`:
-- Fetch badge, convert to Buffer/Base64 for docx
-- Header: centered logo (80px), "Discipline • Unity • Victory" italic 10pt
-- A4 with 1-inch margins, print layout
-- Clean bordered tables with auto-column widths
-- Use actual emoji characters (✅, ❌, 🔵, ➖) since DOCX supports them
-
-Replace all `generateBrandedPdf` calls with new DOCX generator.
-
-### Player DOCX Export (Fridays only)
-PlayerProfile: Export button visible on Fridays. Exports player photo, name, position, stats, attendance, opponents played.
-
-## 12. Financial System Fixes
-
-### Feb 2026: 17 contributors
-Current DB shows 19 paid for feb-2026. Need user to confirm which 2 to remove, OR update via SQL to correct.
-- Fix the `finMonth` default to use current actual month
-- Fix month ordering in financial summary display (Dec, Jan, Feb, Mar, Apr order)
-- Add jersey printing expense and coach personal contribution note
-
-## 13. Attendance Math: X = 0%
-
-Current `calcAttendancePct` counts excused as half — correct. But absent days shouldn't add any percentage. The current code already doesn't add percentage for absent. The issue may be that unrecorded days (no attendance entry) are being treated differently. Fix: ensure `absent` status contributes 0 to the percentage, and only `present` and `excused` (half) contribute.
-
-## 14. Lovable Badge CSS
-
-Already exists in `index.css`. Strengthen with additional selectors targeting `position: fixed` bottom-right elements.
-
-## 15. Data Integrity
-
-- Ensure all operations go through Supabase
-- No data loss from these changes
-- Insert SCF-009 (Brian (K)) into members table if missing
+Already exists but will re-verify/strengthen in `src/index.css`.
 
 ---
 
-## Files Changed/Created
+## Summary of Files
 
-| File | Action |
-|------|--------|
-| Supabase migration | Add columns to members (saves, clean_sheets, etc.), create match_performances, messages tables |
-| DB data updates | Brian Kim → player, insert SCF-009, fix positions |
-| `src/data/team-data.ts` | Move Brian Kim to players, update TeamMember interface with new stat fields, full position names |
-| `src/lib/docx-export.ts` | NEW — DOCX branded export utility |
-| `src/lib/pdf-export.ts` | Remove/deprecate |
-| `src/contexts/TeamDataContext.tsx` | Add match performances CRUD, messages CRUD, game score edit/delete, add player, expanded updatePlayerStats |
-| `src/pages/PlayerProfile.tsx` | Position-specific stats, filtered contribution months, softer unpaid emoji, messaging, Friday DOCX export |
-| `src/pages/Players.tsx` | Full position names, position-specific stats in card |
-| `src/pages/OfficialProfile.tsx` | Match day stats recorder, add player, edit/delete scores, position-specific stats editor, overview archive |
-| `src/pages/Stats.tsx` | Match day reports, overview icons system, position-specific performance table, DOCX exports |
+| File | Changes |
+|------|---------|
+| Supabase migration | Add `successful_tackles`, `direct_targets`, `direct_shots` to `members` |
+| `src/data/team-data.ts` | Add new stat fields to `TeamMember` interface |
+| `src/contexts/TeamDataContext.tsx` | Extend `updatePlayerStats` and `loadMembers` for new fields |
+| `src/pages/OfficialProfile.tsx` | Major: scores→coach only, events→coach only, manager gets edit/delete scores, expanded stats editor, match performance recorder, add player UI, overview archive |
+| `src/pages/Stats.tsx` | Overview 3-icon system + archive, match reports section, fix new player contribution display, updated performance table |
+| `src/pages/PlayerProfile.tsx` | Export visible Fri-Sun, new stat cards |
 | `src/index.css` | Strengthen Lovable badge hiding |
-| `package.json` | Add `docx`, `file-saver`; remove `jspdf`, `jspdf-autotable` |
 
