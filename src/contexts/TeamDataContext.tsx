@@ -120,6 +120,7 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
         goals: m.goals, assists: m.assists, gamesPlayed: m.games_played,
         saves: m.saves || 0, cleanSheets: m.clean_sheets || 0, aerialDuels: m.aerial_duels || 0,
         tackles: m.tackles || 0, interceptions: m.interceptions || 0, blocks: m.blocks || 0, clearances: m.clearances || 0,
+        successfulTackles: (m as any).successful_tackles || 0, directTargets: (m as any).direct_targets || 0, directShots: (m as any).direct_shots || 0,
         excused: m.excused, excusedType: m.excused_type, excusedDays: m.excused_days,
         profilePic: m.profile_pic_url,
         contributions: (contribMap[m.id] || {}) as Record<string, "paid" | "pending" | "unpaid">,
@@ -386,6 +387,9 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
     if (stats.interceptions !== undefined) dbStats.interceptions = stats.interceptions;
     if (stats.blocks !== undefined) dbStats.blocks = stats.blocks;
     if (stats.clearances !== undefined) dbStats.clearances = stats.clearances;
+    if (stats.successfulTackles !== undefined) dbStats.successful_tackles = stats.successfulTackles;
+    if (stats.directTargets !== undefined) dbStats.direct_targets = stats.directTargets;
+    if (stats.directShots !== undefined) dbStats.direct_shots = stats.directShots;
     await supabase.from("members").update(dbStats).eq("id", playerId);
     loadMembers();
   }, [loadMembers]);

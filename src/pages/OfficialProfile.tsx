@@ -20,6 +20,7 @@ import { format } from "date-fns";
 import {
   Trophy, Calendar as CalendarIcon, Image, DollarSign, Users, CheckCircle, XCircle, Plus,
   TrendingUp, TrendingDown, Upload, Target, Save, Trash2, Download, UserMinus, Star, BarChart3, Edit,
+  UserPlus, MessageCircle, Send, Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { contributionMonths } from "@/data/team-data";
@@ -30,7 +31,6 @@ import LineupBuilder from "@/components/LineupBuilder";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
-// Correct attendance calculation
 function calcAttendancePct(playerAtt: { status: string }[]) {
   const activeDays = playerAtt.filter(a => a.status !== "no_activity");
   const presentDays = activeDays.filter(a => a.status === "present").length;
@@ -57,12 +57,13 @@ const OfficialProfile = () => {
   const {
     members, gameScores, calendarEvents, financialRecords, pendingApprovals,
     profilePics, attendance, currentWeekStart, mediaItems, homepageImages,
-    addGameScore, addCalendarEvent,
+    addGameScore, addCalendarEvent, deleteGameScore, updateGameScore,
     approveContribution, rejectContribution, addFinancialTransaction,
     uploadProfilePicToStorage, uploadMediaToStorage,
     updateContributionDirect, updateAttendance, markDayNoActivity,
-    requestContribution, deleteMediaItem, removePlayer,
+    requestContribution, deleteMediaItem, removePlayer, addPlayer,
     uploadHomepageImages, deleteHomepageImage, updatePlayerStats,
+    addMatchPerformance, messages, sendMessage, markMessageRead, matchPerformances,
   } = useTeamData();
   const { toast } = useToast();
 
@@ -91,6 +92,15 @@ const OfficialProfile = () => {
   const [statsAssists, setStatsAssists] = useState("");
   const [statsGames, setStatsGames] = useState("");
   const [statsOpponent, setStatsOpponent] = useState("");
+  const [statsSaves, setStatsSaves] = useState("");
+  const [statsCleanSheets, setStatsCleanSheets] = useState("");
+  const [statsAerialDuels, setStatsAerialDuels] = useState("");
+  const [statsTackles, setStatsTackles] = useState("");
+  const [statsInterceptions, setStatsInterceptions] = useState("");
+  const [statsClearances, setStatsClearances] = useState("");
+  const [statsSuccessfulTackles, setStatsSuccessfulTackles] = useState("");
+  const [statsDirectTargets, setStatsDirectTargets] = useState("");
+  const [statsDirectShots, setStatsDirectShots] = useState("");
 
   // Position Editor state
   const [posPlayerId, setPosPlayerId] = useState("");
@@ -120,6 +130,35 @@ const OfficialProfile = () => {
   // Season config
   const [seasonEndDate, setSeasonEndDate] = useState<Date | undefined>();
 
+  // Manager: Edit/Delete scores
+  const [editingScoreId, setEditingScoreId] = useState<string | null>(null);
+  const [editScoreData, setEditScoreData] = useState({ opponent: "", ourScore: 0, theirScore: 0 });
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Add Player
+  const [newPlayerName, setNewPlayerName] = useState("");
+  const [newPlayerSquad, setNewPlayerSquad] = useState("");
+  const [newPlayerPos, setNewPlayerPos] = useState("");
+
+  // Match Performance Recorder
+  const [perfGameId, setPerfGameId] = useState("");
+  const [perfPlayerId, setPerfPlayerId] = useState("");
+  const [perfGoals, setPerfGoals] = useState("0");
+  const [perfAssists, setPerfAssists] = useState("0");
+  const [perfSaves, setPerfSaves] = useState("0");
+  const [perfTackles, setPerfTackles] = useState("0");
+  const [perfInterceptions, setPerfInterceptions] = useState("0");
+  const [perfBlocks, setPerfBlocks] = useState("0");
+  const [perfClearances, setPerfClearances] = useState("0");
+  const [perfCleanSheet, setPerfCleanSheet] = useState(false);
+  const [perfAerialDuels, setPerfAerialDuels] = useState("0");
+  const [perfRating, setPerfRating] = useState("5");
+  const [perfIsPotm, setPerfIsPotm] = useState(false);
+
+  // Message reply
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const homepageInputRef = useRef<HTMLInputElement>(null);
@@ -148,23 +187,11 @@ const OfficialProfile = () => {
     }
   }, [leagueLoaded]);
 
-  // Load league teams
-  useEffect(() => {
-    if (!leagueLoaded) {
-      supabase.from("league_teams").select("*").then(({ data }) => {
-        if (data) setLeagueTeams((data as LeagueTeam[]).sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference));
-        setLeagueLoaded(true);
-      });
-    }
-  }, [leagueLoaded]);
-
   const isCoach = user.role === "coach";
   const isFadhir = user.id === "SCF-002";
   const isManager = user.role === "manager";
   const isFabian = user.id === "SCF-001";
   const isCaptain = user.role === "captain";
-  const canManageScores = ["coach", "manager", "captain"].includes(user.role);
-  const canManageEvents = ["coach", "manager", "captain"].includes(user.role);
   const canUploadMedia = ["coach", "manager", "captain"].includes(user.role);
   const canManageFinance = isFadhir || isCoach;
   const canApproveContributions = isFadhir || isCoach;
@@ -172,6 +199,7 @@ const OfficialProfile = () => {
   const canManageContribEvents = isFadhir || isCaptain;
   const showContributions = !isFabian;
   const canManageAttendance = isManager || user.id === "SCF-004";
+  const canReceiveMessages = isFabian || isManager || isFadhir;
 
   const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
   const ourScoreNum = parseInt(newOurScore) || 0;
@@ -237,12 +265,30 @@ const OfficialProfile = () => {
     setRemovePlayerId(""); setShowRemoveConfirm(false);
   };
 
+  // Expanded stats handler
   const handleUpdateStats = async () => {
     if (!statsPlayerId) return;
-    const goals = parseInt(statsGoals) || 0;
-    const assists = parseInt(statsAssists) || 0;
-    const games = parseInt(statsGames) || 0;
-    await updatePlayerStats(statsPlayerId, { goals, assists, gamesPlayed: games });
+    const player = members.find(m => m.id === statsPlayerId);
+    const posGroup = getPositionGroup(player?.position);
+    const statsObj: Record<string, number> = {
+      goals: parseInt(statsGoals) || 0,
+      assists: parseInt(statsAssists) || 0,
+      gamesPlayed: parseInt(statsGames) || 0,
+      successfulTackles: parseInt(statsSuccessfulTackles) || 0,
+      directTargets: parseInt(statsDirectTargets) || 0,
+    };
+    if (posGroup === "GK") {
+      statsObj.saves = parseInt(statsSaves) || 0;
+      statsObj.cleanSheets = parseInt(statsCleanSheets) || 0;
+      statsObj.aerialDuels = parseInt(statsAerialDuels) || 0;
+    }
+    if (posGroup === "DEF") {
+      statsObj.tackles = parseInt(statsTackles) || 0;
+      statsObj.interceptions = parseInt(statsInterceptions) || 0;
+      statsObj.clearances = parseInt(statsClearances) || 0;
+      statsObj.directShots = parseInt(statsDirectShots) || 0;
+    }
+    await updatePlayerStats(statsPlayerId, statsObj);
     toast({ title: "Stats Updated" });
   };
 
@@ -352,8 +398,8 @@ const OfficialProfile = () => {
     const starters = selectedFirst11.map(id => members.find(m => m.id === id));
     const subs = selectedSubs.map(id => members.find(m => m.id === id));
     const tables: DocxTableData[] = [
-      { head: [["Starting XI"]], body: starters.filter(Boolean).map((m, i) => [`${i + 1}. ${m!.name} (${m!.position || "N/A"})`]) },
-      { head: [["Substitutes"]], body: subs.filter(Boolean).map((m, i) => [`${i + 1}. ${m!.name} (${m!.position || "N/A"})`]) },
+      { head: [["Starting XI"]], body: starters.filter(Boolean).map((m, i) => [`${i + 1}. ${m!.name} (${getFullPositionName(m!.position)})`]) },
+      { head: [["Substitutes"]], body: subs.filter(Boolean).map((m, i) => [`${i + 1}. ${m!.name} (${getFullPositionName(m!.position)})`]) },
     ];
     generateBrandedDocx("Match Day Squad Selection", tables, "suncity_fc_first11.docx");
   };
@@ -362,13 +408,79 @@ const OfficialProfile = () => {
 
   // When selecting a player for stats editor, load their current stats
   const selectedStatsPlayer = members.find(m => m.id === statsPlayerId);
+  const selectedPosGroup = getPositionGroup(selectedStatsPlayer?.position);
+
   useEffect(() => {
     if (selectedStatsPlayer) {
       setStatsGoals(String(selectedStatsPlayer.goals || 0));
       setStatsAssists(String(selectedStatsPlayer.assists || 0));
       setStatsGames(String(selectedStatsPlayer.gamesPlayed || 0));
+      setStatsSaves(String(selectedStatsPlayer.saves || 0));
+      setStatsCleanSheets(String(selectedStatsPlayer.cleanSheets || 0));
+      setStatsAerialDuels(String(selectedStatsPlayer.aerialDuels || 0));
+      setStatsTackles(String(selectedStatsPlayer.tackles || 0));
+      setStatsInterceptions(String(selectedStatsPlayer.interceptions || 0));
+      setStatsClearances(String(selectedStatsPlayer.clearances || 0));
+      setStatsSuccessfulTackles(String(selectedStatsPlayer.successfulTackles || 0));
+      setStatsDirectTargets(String(selectedStatsPlayer.directTargets || 0));
+      setStatsDirectShots(String(selectedStatsPlayer.directShots || 0));
     }
   }, [statsPlayerId]);
+
+  // Handle add player
+  const handleAddPlayer = async () => {
+    if (!newPlayerName || !newPlayerSquad) return;
+    await addPlayer(newPlayerName, parseInt(newPlayerSquad), newPlayerPos);
+    toast({ title: "Player Added", description: `${newPlayerName} (#${newPlayerSquad})` });
+    setNewPlayerName(""); setNewPlayerSquad(""); setNewPlayerPos("");
+  };
+
+  // Handle edit score
+  const handleSaveEditScore = async () => {
+    if (!editingScoreId) return;
+    await updateGameScore(editingScoreId, {
+      opponent: editScoreData.opponent,
+      ourScore: editScoreData.ourScore,
+      theirScore: editScoreData.theirScore,
+    });
+    toast({ title: "Score Updated" });
+    setEditingScoreId(null);
+  };
+
+  const handleDeleteScore = async (id: string) => {
+    await deleteGameScore(id);
+    toast({ title: "Score Deleted" });
+    setDeleteConfirmId(null);
+  };
+
+  // Handle match performance
+  const handleAddMatchPerf = async () => {
+    if (!perfGameId || !perfPlayerId) return;
+    await addMatchPerformance({
+      gameId: perfGameId, playerId: perfPlayerId,
+      goals: parseInt(perfGoals) || 0, assists: parseInt(perfAssists) || 0,
+      saves: parseInt(perfSaves) || 0, tackles: parseInt(perfTackles) || 0,
+      interceptions: parseInt(perfInterceptions) || 0, blocks: parseInt(perfBlocks) || 0,
+      clearances: parseInt(perfClearances) || 0, cleanSheet: perfCleanSheet,
+      aerialDuels: parseInt(perfAerialDuels) || 0, rating: parseFloat(perfRating) || 5,
+      isPotm: perfIsPotm,
+    });
+    toast({ title: "Performance Recorded" });
+    setPerfPlayerId(""); setPerfGoals("0"); setPerfAssists("0"); setPerfSaves("0");
+    setPerfTackles("0"); setPerfInterceptions("0"); setPerfBlocks("0"); setPerfClearances("0");
+    setPerfCleanSheet(false); setPerfAerialDuels("0"); setPerfRating("5"); setPerfIsPotm(false);
+  };
+
+  // Handle reply
+  const handleReply = async () => {
+    if (!replyTo || !replyContent.trim()) return;
+    await sendMessage(user.id, replyTo, replyContent.trim());
+    toast({ title: "Reply Sent" });
+    setReplyTo(null); setReplyContent("");
+  };
+
+  // Messages for this official
+  const myMessages = messages.filter(m => m.toId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
     <div className="min-h-screen bg-background">
@@ -395,10 +507,10 @@ const OfficialProfile = () => {
         </motion.div>
 
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Game Scores */}
-          {canManageScores && (
+          {/* Game Scores — COACH ONLY */}
+          {isCoach && (
             <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Update Scores</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Add Recent Results</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 <Input placeholder="Opponent name" value={newOpponent} onChange={(e) => setNewOpponent(e.target.value)} className="bg-secondary border-border font-body" />
                 <div className="grid grid-cols-2 gap-2">
@@ -423,8 +535,8 @@ const OfficialProfile = () => {
             </Card>
           )}
 
-          {/* Calendar Events */}
-          {canManageEvents && (
+          {/* Calendar Events — COACH ONLY */}
+          {isCoach && (
             <Card className="bg-card border-border card-glow">
               <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-primary" /> Add Event</CardTitle></CardHeader>
               <CardContent className="space-y-3">
@@ -450,7 +562,7 @@ const OfficialProfile = () => {
             </Card>
           )}
 
-          {/* Record Transaction — Finance/Coach only (NOT coach per plan) */}
+          {/* Record Transaction — Finance only (Fadhir) */}
           {canManageFinance && !isCoach && (
             <Card className="bg-card border-border card-glow">
               <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><DollarSign className="w-5 h-5 text-primary" /> Record Transaction</CardTitle></CardHeader>
@@ -481,7 +593,77 @@ const OfficialProfile = () => {
           )}
         </div>
 
-        {/* ===== MANAGER: Team Stats Editor ===== */}
+        {/* ===== MANAGER: Manage Recent Results (Edit/Delete) ===== */}
+        {isManager && gameScores.length > 0 && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Manage Recent Results</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {gameScores.slice(0, 10).map((game) => (
+                <div key={game.id} className="border border-border rounded-lg p-3">
+                  {editingScoreId === game.id ? (
+                    <div className="space-y-2">
+                      <Input value={editScoreData.opponent} onChange={(e) => setEditScoreData(p => ({ ...p, opponent: e.target.value }))} className="bg-secondary border-border font-body" placeholder="Opponent" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input type="number" value={editScoreData.ourScore} onChange={(e) => setEditScoreData(p => ({ ...p, ourScore: +e.target.value }))} className="bg-secondary border-border font-body" />
+                        <Input type="number" value={editScoreData.theirScore} onChange={(e) => setEditScoreData(p => ({ ...p, theirScore: +e.target.value }))} className="bg-secondary border-border font-body" />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={handleSaveEditScore} className="font-body text-xs"><Save className="w-3 h-3 mr-1" /> Save</Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingScoreId(null)} className="font-body text-xs">Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-body text-sm text-foreground">vs {game.opponent}</span>
+                        <span className="ml-2 font-heading text-primary text-sm">{game.ourScore} - {game.theirScore}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{game.date}</span>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
+                          setEditingScoreId(game.id);
+                          setEditScoreData({ opponent: game.opponent, ourScore: game.ourScore, theirScore: game.theirScore });
+                        }}><Edit className="w-3 h-3" /></Button>
+                        {deleteConfirmId === game.id ? (
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" onClick={() => handleDeleteScore(game.id)}>Confirm</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setDeleteConfirmId(null)}>No</Button>
+                          </div>
+                        ) : (
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => setDeleteConfirmId(game.id)}><Trash2 className="w-3 h-3" /></Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== COACH & MANAGER: Add New Player ===== */}
+        {(isCoach || isManager) && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><UserPlus className="w-5 h-5 text-primary" /> Add New Player</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <Input placeholder="Player name" value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} className="bg-secondary border-border font-body" />
+              <Input placeholder="Squad number" type="number" value={newPlayerSquad} onChange={(e) => setNewPlayerSquad(e.target.value)} className="bg-secondary border-border font-body" />
+              <select value={newPlayerPos} onChange={(e) => setNewPlayerPos(e.target.value)} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                <option value="">Select position</option>
+                <option value="GK">Goalkeeper</option>
+                <option value="DEF">Defender</option>
+                <option value="DEF (LB)">Defender (LB)</option>
+                <option value="DEF (CB)">Defender (CB)</option>
+                <option value="DEF (RB)">Defender (RB)</option>
+                <option value="MID">Midfielder</option>
+                <option value="ATT">Attacker</option>
+              </select>
+              <Button onClick={handleAddPlayer} disabled={!newPlayerName || !newPlayerSquad} className="w-full font-body"><UserPlus className="w-4 h-4 mr-1" /> Add Player</Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== MANAGER: Team Stats Editor (EXPANDED) ===== */}
         {isManager && (
           <Card className="bg-card border-border card-glow">
             <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Team Stats Editor</CardTitle></CardHeader>
@@ -489,10 +671,11 @@ const OfficialProfile = () => {
               <select value={statsPlayerId} onChange={(e) => setStatsPlayerId(e.target.value)}
                 className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
                 <option value="">Select player</option>
-                {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name} ({getFullPositionName(m.position)})</option>)}
               </select>
               {statsPlayerId && (
                 <>
+                  {/* Common stats for all */}
                   <div className="grid grid-cols-3 gap-2">
                     <div>
                       <label className="text-xs text-muted-foreground font-body">Goals</label>
@@ -507,8 +690,109 @@ const OfficialProfile = () => {
                       <Input type="number" value={statsGames} onChange={(e) => setStatsGames(e.target.value)} className="bg-secondary border-border font-body" />
                     </div>
                   </div>
-                  <Input placeholder="Opponent name (optional)" value={statsOpponent} onChange={(e) => setStatsOpponent(e.target.value)} className="bg-secondary border-border font-body" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground font-body">Successful Tackles</label>
+                      <Input type="number" value={statsSuccessfulTackles} onChange={(e) => setStatsSuccessfulTackles(e.target.value)} className="bg-secondary border-border font-body" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground font-body">Direct Targets</label>
+                      <Input type="number" value={statsDirectTargets} onChange={(e) => setStatsDirectTargets(e.target.value)} className="bg-secondary border-border font-body" />
+                    </div>
+                  </div>
+
+                  {/* GK-specific */}
+                  {selectedPosGroup === "GK" && (
+                    <div className="grid grid-cols-3 gap-2 border-t border-border pt-2">
+                      <div>
+                        <label className="text-xs text-primary font-body">Saves</label>
+                        <Input type="number" value={statsSaves} onChange={(e) => setStatsSaves(e.target.value)} className="bg-secondary border-border font-body" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-primary font-body">Clean Sheets</label>
+                        <Input type="number" value={statsCleanSheets} onChange={(e) => setStatsCleanSheets(e.target.value)} className="bg-secondary border-border font-body" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-primary font-body">Aerial Duels</label>
+                        <Input type="number" value={statsAerialDuels} onChange={(e) => setStatsAerialDuels(e.target.value)} className="bg-secondary border-border font-body" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* DEF-specific */}
+                  {selectedPosGroup === "DEF" && (
+                    <div className="grid grid-cols-2 gap-2 border-t border-border pt-2">
+                      <div>
+                        <label className="text-xs text-primary font-body">Tackles</label>
+                        <Input type="number" value={statsTackles} onChange={(e) => setStatsTackles(e.target.value)} className="bg-secondary border-border font-body" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-primary font-body">Interceptions</label>
+                        <Input type="number" value={statsInterceptions} onChange={(e) => setStatsInterceptions(e.target.value)} className="bg-secondary border-border font-body" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-primary font-body">Clearances</label>
+                        <Input type="number" value={statsClearances} onChange={(e) => setStatsClearances(e.target.value)} className="bg-secondary border-border font-body" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-primary font-body">Direct Shots</label>
+                        <Input type="number" value={statsDirectShots} onChange={(e) => setStatsDirectShots(e.target.value)} className="bg-secondary border-border font-body" />
+                      </div>
+                    </div>
+                  )}
+
                   <Button onClick={handleUpdateStats} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== MANAGER: Match Day Performance Recorder ===== */}
+        {isManager && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Star className="w-5 h-5 text-primary" /> Record Match Day Stats</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <select value={perfGameId} onChange={(e) => setPerfGameId(e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                <option value="">Select match</option>
+                {gameScores.map(g => <option key={g.id} value={g.id}>{g.date} — vs {g.opponent} ({g.ourScore}-{g.theirScore})</option>)}
+              </select>
+              {perfGameId && (
+                <>
+                  <select value={perfPlayerId} onChange={(e) => setPerfPlayerId(e.target.value)}
+                    className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                    <option value="">Select player</option>
+                    {playerMembers.map(m => <option key={m.id} value={m.id}>{m.name} ({getFullPositionName(m.position)})</option>)}
+                  </select>
+                  {perfPlayerId && (
+                    <>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div><label className="text-xs text-muted-foreground font-body">Goals</label><Input type="number" value={perfGoals} onChange={(e) => setPerfGoals(e.target.value)} className="bg-secondary border-border font-body" /></div>
+                        <div><label className="text-xs text-muted-foreground font-body">Assists</label><Input type="number" value={perfAssists} onChange={(e) => setPerfAssists(e.target.value)} className="bg-secondary border-border font-body" /></div>
+                        <div><label className="text-xs text-muted-foreground font-body">Rating (1-10)</label><Input type="number" min="1" max="10" step="0.5" value={perfRating} onChange={(e) => setPerfRating(e.target.value)} className="bg-secondary border-border font-body" /></div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div><label className="text-xs text-muted-foreground font-body">Saves</label><Input type="number" value={perfSaves} onChange={(e) => setPerfSaves(e.target.value)} className="bg-secondary border-border font-body" /></div>
+                        <div><label className="text-xs text-muted-foreground font-body">Tackles</label><Input type="number" value={perfTackles} onChange={(e) => setPerfTackles(e.target.value)} className="bg-secondary border-border font-body" /></div>
+                        <div><label className="text-xs text-muted-foreground font-body">Interceptions</label><Input type="number" value={perfInterceptions} onChange={(e) => setPerfInterceptions(e.target.value)} className="bg-secondary border-border font-body" /></div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div><label className="text-xs text-muted-foreground font-body">Blocks</label><Input type="number" value={perfBlocks} onChange={(e) => setPerfBlocks(e.target.value)} className="bg-secondary border-border font-body" /></div>
+                        <div><label className="text-xs text-muted-foreground font-body">Clearances</label><Input type="number" value={perfClearances} onChange={(e) => setPerfClearances(e.target.value)} className="bg-secondary border-border font-body" /></div>
+                        <div><label className="text-xs text-muted-foreground font-body">Aerial Duels</label><Input type="number" value={perfAerialDuels} onChange={(e) => setPerfAerialDuels(e.target.value)} className="bg-secondary border-border font-body" /></div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 text-sm font-body text-foreground">
+                          <Checkbox checked={perfCleanSheet} onCheckedChange={(c) => setPerfCleanSheet(!!c)} /> Clean Sheet
+                        </label>
+                        <label className="flex items-center gap-2 text-sm font-body text-primary">
+                          <Checkbox checked={perfIsPotm} onCheckedChange={(c) => setPerfIsPotm(!!c)} /> ⭐ Player of the Match
+                        </label>
+                      </div>
+                      <Button onClick={handleAddMatchPerf} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Record Performance</Button>
+                    </>
+                  )}
                 </>
               )}
             </CardContent>
@@ -520,12 +804,10 @@ const OfficialProfile = () => {
           <Card className="bg-card border-border card-glow">
             <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> League Standings Editor</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              {/* Add team */}
               <div className="flex gap-2">
                 <Input placeholder="Team name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} className="bg-secondary border-border font-body" />
                 <Button onClick={handleAddLeagueTeam} disabled={!newTeamName} className="font-body"><Plus className="w-4 h-4 mr-1" /> Add</Button>
               </div>
-              {/* Teams list */}
               <div className="space-y-2">
                 {leagueTeams.map((team, i) => (
                   <div key={team.id} className={`border rounded-lg p-3 ${team.is_own_team ? "border-primary/40 bg-primary/5" : "border-border"}`}>
@@ -582,7 +864,7 @@ const OfficialProfile = () => {
                   return (
                     <div key={key} className={`px-4 py-3 rounded-xl border-2 text-center ${isPaid ? "border-primary/40 bg-primary/10" : "border-border bg-muted/30"}`}>
                       <p className="text-xs font-body text-muted-foreground">{label}</p>
-                      {isPaid ? <span className="text-green-600">✅</span> : <span className="text-muted-foreground">❌</span>}
+                      {isPaid ? <span className="text-green-600">✅</span> : <span className="text-muted-foreground">⬜</span>}
                     </div>
                   );
                 })}
@@ -713,7 +995,7 @@ const OfficialProfile = () => {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="font-heading text-lg text-foreground">Financial Overview</CardTitle>
               <Button size="sm" variant="outline" onClick={exportFinancialPdf} className="font-body text-xs border-primary/30 text-primary">
-                <Download className="w-3 h-3 mr-1" /> Export PDF
+                <Download className="w-3 h-3 mr-1" /> Export
               </Button>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -786,11 +1068,11 @@ const OfficialProfile = () => {
                               else if (status === "excused") updateAttendance(m.id, day, "absent");
                               else updateAttendance(m.id, day, "present");
                             };
-                            const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : "❌";
+                            const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : "⬜";
                             const colors = status === "present" ? "bg-green-500/20 border-green-500/40"
                               : status === "excused" ? "bg-blue-500/20 border-blue-500/40"
                               : status === "no_activity" ? "bg-muted border-border"
-                              : "bg-destructive/10 border-destructive/30";
+                              : "bg-muted/30 border-border";
                             return (
                               <td key={day} className="py-2 text-center">
                                 <button onClick={handleClick} disabled={isNoActivity}
@@ -807,7 +1089,7 @@ const OfficialProfile = () => {
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-muted-foreground font-body mt-2">Click to toggle: ✅ Present → 🔵 Excused → ❌ Absent</p>
+              <p className="text-xs text-muted-foreground font-body mt-2">Click to toggle: ✅ Present → 🔵 Excused → ⬜ Absent</p>
             </CardContent>
           </Card>
         )}
@@ -867,7 +1149,7 @@ const OfficialProfile = () => {
               <select value={posPlayerId} onChange={(e) => setPosPlayerId(e.target.value)}
                 className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
                 <option value="">Select player</option>
-                {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.position || "No position"})</option>)}
+                {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name} ({getFullPositionName(m.position)})</option>)}
               </select>
               {posPlayerId && (
                 <>
@@ -909,7 +1191,7 @@ const OfficialProfile = () => {
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground w-5">{i + 1}</span>
                         <span className="text-sm font-body text-foreground">{m.name}</span>
-                        <span className="text-xs text-muted-foreground">({m.position || "N/A"})</span>
+                        <span className="text-xs text-muted-foreground">({getFullPositionName(m.position)})</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground font-body">Att: {m.attPct}%</span>
@@ -929,10 +1211,33 @@ const OfficialProfile = () => {
               </div>
               <div className="flex gap-2">
                 <Button onClick={exportFirst11Pdf} variant="outline" className="font-body text-xs" disabled={selectedFirst11.length === 0}>
-                  <Download className="w-3 h-3 mr-1" /> Export Squad PDF
+                  <Download className="w-3 h-3 mr-1" /> Export Squad
                 </Button>
                 <span className="text-xs text-muted-foreground font-body self-center">{selectedFirst11.length}/11 starters, {selectedSubs.length} subs</span>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Coach: Remove Player */}
+        {isCoach && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><UserMinus className="w-5 h-5 text-destructive" /> Remove Player</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <select value={removePlayerId} onChange={(e) => setRemovePlayerId(e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                <option value="">Select player to remove</option>
+                {playerMembers.filter(m => m.role === "player").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+              {removePlayerId && !showRemoveConfirm && (
+                <Button variant="destructive" onClick={() => setShowRemoveConfirm(true)} className="w-full font-body"><Trash2 className="w-4 h-4 mr-1" /> Remove Player</Button>
+              )}
+              {showRemoveConfirm && (
+                <div className="flex gap-2">
+                  <Button variant="destructive" onClick={handleRemovePlayer} className="flex-1 font-body">Confirm Remove</Button>
+                  <Button variant="outline" onClick={() => setShowRemoveConfirm(false)} className="flex-1 font-body">Cancel</Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -953,43 +1258,51 @@ const OfficialProfile = () => {
                   <Calendar mode="single" selected={seasonEndDate} onSelect={setSeasonEndDate} initialFocus className="p-3 pointer-events-auto" />
                 </PopoverContent>
               </Popover>
-              {seasonEndDate && (
-                <Button onClick={async () => {
-                  await supabase.from("season_config").upsert({ id: "main", end_date: seasonEndDate.toISOString(), created_by: user.id } as any);
-                  toast({ title: "Season end date set", description: format(seasonEndDate, "PPP") });
-                }} className="font-body"><Save className="w-4 h-4 mr-1" /> Save</Button>
+              <Button onClick={async () => {
+                if (!seasonEndDate) return;
+                await supabase.from("season_config").insert({ end_date: format(seasonEndDate, "yyyy-MM-dd"), created_by: user.id } as any);
+                toast({ title: "Season End Date Set" });
+              }} disabled={!seasonEndDate} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Save Season Config</Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== MESSAGE INBOX for Fabian, Kevin, Fadhir ===== */}
+        {canReceiveMessages && myMessages.length > 0 && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Mail className="w-5 h-5 text-primary" /> Message Inbox</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {myMessages.map(msg => {
+                const sender = members.find(m => m.id === msg.fromId);
+                return (
+                  <div key={msg.id} className={`border rounded-lg p-3 ${msg.read ? "border-border" : "border-primary/40 bg-primary/5"}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-body text-sm font-medium text-foreground">{sender?.name || msg.fromId}</span>
+                      <span className="text-xs text-muted-foreground">{new Date(msg.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <p className="text-sm font-body text-muted-foreground">{msg.content}</p>
+                    <div className="flex gap-2 mt-2">
+                      {!msg.read && <Button size="sm" variant="ghost" className="text-xs" onClick={() => markMessageRead(msg.id)}>Mark Read</Button>}
+                      <Button size="sm" variant="outline" className="text-xs" onClick={() => setReplyTo(msg.fromId)}>
+                        <Send className="w-3 h-3 mr-1" /> Reply
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+              {replyTo && (
+                <div className="border border-primary/30 rounded-lg p-3 space-y-2">
+                  <p className="text-xs text-primary font-body">Replying to {members.find(m => m.id === replyTo)?.name || replyTo}</p>
+                  <Textarea value={replyContent} onChange={(e) => setReplyContent(e.target.value)} placeholder="Type reply..." className="bg-secondary border-border font-body" />
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleReply} className="font-body text-xs"><Send className="w-3 h-3 mr-1" /> Send</Button>
+                    <Button size="sm" variant="outline" onClick={() => { setReplyTo(null); setReplyContent(""); }} className="font-body text-xs">Cancel</Button>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
         )}
-
-        {/* Coach: Remove Player */}
-        {isCoach && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><UserMinus className="w-5 h-5 text-destructive" /> Remove Player</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <select value={removePlayerId} onChange={(e) => setRemovePlayerId(e.target.value)}
-                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                <option value="">Select player to remove</option>
-                {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.id})</option>)}
-              </select>
-              <Button variant="destructive" onClick={() => setShowRemoveConfirm(true)} disabled={!removePlayerId} className="w-full font-body">
-                <UserMinus className="w-4 h-4 mr-1" /> Remove Player
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        <Dialog open={showRemoveConfirm} onOpenChange={setShowRemoveConfirm}>
-          <DialogContent className="bg-card border-border">
-            <DialogHeader><DialogTitle className="font-heading text-foreground">Confirm Removal</DialogTitle></DialogHeader>
-            <p className="font-body text-muted-foreground">Remove <span className="text-foreground font-medium">{members.find((m) => m.id === removePlayerId)?.name}</span> permanently?</p>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowRemoveConfirm(false)}>Cancel</Button>
-              <Button variant="destructive" onClick={handleRemovePlayer}>Remove</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </main>
     </div>
   );

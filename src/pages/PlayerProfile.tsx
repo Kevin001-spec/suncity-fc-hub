@@ -30,7 +30,7 @@ const PlayerProfile = () => {
   const liveMember = members.find((m) => m.id === user.id) || user;
   const isFabianExempt = user.id === "SCF-001";
   const posGroup = getPositionGroup(liveMember.position);
-  const isFriday = new Date().getDay() === 5;
+  const showExport = [0, 5, 6].includes(new Date().getDay());
 
   const handleProfilePicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -61,14 +61,16 @@ const PlayerProfile = () => {
       return [
         { icon: Shield, label: "Tackles", value: liveMember.tackles || 0 },
         { icon: Crosshair, label: "Interceptions", value: liveMember.interceptions || 0 },
-        { icon: Target, label: "Blocks", value: liveMember.blocks || 0 },
         { icon: Footprints, label: "Clearances", value: liveMember.clearances || 0 },
+        { icon: Target, label: "Direct Shots", value: liveMember.directShots || 0 },
       ];
     }
     return [
       { icon: Target, label: "Goals", value: liveMember.goals || 0 },
       { icon: Footprints, label: "Assists", value: liveMember.assists || 0 },
       { icon: Gamepad2, label: "Games", value: liveMember.gamesPlayed || 0 },
+      { icon: Shield, label: "Successful Tackles", value: liveMember.successfulTackles || 0 },
+      { icon: Crosshair, label: "Direct Targets", value: liveMember.directTargets || 0 },
     ];
   };
 
@@ -122,7 +124,7 @@ const PlayerProfile = () => {
           </div>
           {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
           {liveMember.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{liveMember.squadNumber}</p>}
-          {isFriday && (
+          {showExport && (
             <Button onClick={handleExportProfile} variant="outline" size="sm" className="mt-3 font-body text-xs border-primary/30 text-primary">
               <Download className="w-3 h-3 mr-1" /> Export Profile
             </Button>
