@@ -1,0 +1,4 @@
+
+ALTER TABLE members ADD COLUMN IF NOT EXISTS successful_tackles integer NOT NULL DEFAULT 0;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS direct_targets integer NOT NULL DEFAULT 0;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS direct_shots integer NOT NULL DEFAULT 0;

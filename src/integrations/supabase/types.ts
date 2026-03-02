@@ -520,6 +520,8 @@ export type Database = {
           clean_sheets: number
           clearances: number
           created_at: string
+          direct_shots: number
+          direct_targets: number
           excused: boolean
           excused_days: string[] | null
           excused_type: string | null
@@ -535,6 +537,7 @@ export type Database = {
           role: string
           saves: number
           squad_number: number | null
+          successful_tackles: number
           tackles: number
           username: string | null
         }
@@ -545,6 +548,8 @@ export type Database = {
           clean_sheets?: number
           clearances?: number
           created_at?: string
+          direct_shots?: number
+          direct_targets?: number
           excused?: boolean
           excused_days?: string[] | null
           excused_type?: string | null
@@ -560,6 +565,7 @@ export type Database = {
           role?: string
           saves?: number
           squad_number?: number | null
+          successful_tackles?: number
           tackles?: number
           username?: string | null
         }
@@ -570,6 +576,8 @@ export type Database = {
           clean_sheets?: number
           clearances?: number
           created_at?: string
+          direct_shots?: number
+          direct_targets?: number
           excused?: boolean
           excused_days?: string[] | null
           excused_type?: string | null
@@ -585,6 +593,7 @@ export type Database = {
           role?: string
           saves?: number
           squad_number?: number | null
+          successful_tackles?: number
           tackles?: number
           username?: string | null
         }

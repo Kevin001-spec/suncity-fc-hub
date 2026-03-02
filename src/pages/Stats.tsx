@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
@@ -14,10 +14,10 @@ import { contributionMonths, officials } from "@/data/team-data";
 import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
 import { getContribMonthsForMember, getFullPositionName, getPositionGroup, NEW_PLAYER_IDS } from "@/data/team-data";
 import useEmblaCarousel from "embla-carousel-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
-// Correct attendance math helper
 function calcAttendancePct(playerAtt: { status: string }[]) {
   const activeDays = playerAtt.filter(a => a.status !== "no_activity");
   const presentDays = activeDays.filter(a => a.status === "present").length;
@@ -29,13 +29,28 @@ function calcAttendancePct(playerAtt: { status: string }[]) {
 
 const Stats = () => {
   const { user, isOfficial } = useAuth();
-  const { members, financialRecords, gameScores, attendance, mediaItems, profilePics } = useTeamData();
+  const { members, financialRecords, gameScores, attendance, mediaItems, profilePics, matchPerformances } = useTeamData();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  if (!user) return <Navigate to="/" replace />;
+  // Overview system state
+  const [weeklyOverviews, setWeeklyOverviews] = useState<any[]>([]);
+  const [seasonConfig, setSeasonConfig] = useState<any[]>([]);
+  const [overviewDialog, setOverviewDialog] = useState<string | null>(null);
+  const [selectedArchive, setSelectedArchive] = useState<any | null>(null);
+  const [matchReportGameId, setMatchReportGameId] = useState<string | null>(null);
 
-  const performanceMembers = members.filter((m) => m.id !== "SCF-001" && m.id !== "SCF-003");
-  const contributionMembers = members.filter((m) => m.id !== "SCF-001");
+  // Load overviews and season config
+  useEffect(() => {
+    supabase.from("weekly_overviews").select("*").order("created_at", { ascending: false }).then(({ data }) => {
+      if (data) setWeeklyOverviews(data);
+    });
+    supabase.from("season_config").select("*").order("created_at", { ascending: false }).then(({ data }) => {
+      if (data) setSeasonConfig(data);
+    });
+  }, []);
+
+  const performanceMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001" && m.id !== "SCF-003"), [members]);
+  const contributionMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001"), [members]);
 
   const sortedContributionMembers = useMemo(() => {
     return [...contributionMembers].sort((a, b) => {
@@ -49,7 +64,6 @@ const Stats = () => {
     });
   }, [contributionMembers]);
 
-  // Attendance ranking with CORRECT progressive calculation
   const attendanceRanking = useMemo(() => {
     const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
     return playerMembers.map((m) => {
@@ -75,12 +89,11 @@ const Stats = () => {
     return Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a));
   }, [mediaItems]);
 
-  // Weekly overview — Fri/Sat/Sun only
+  // Overview logic
   const dayOfWeek = new Date().getDay();
-  const showWeeklyOverview = dayOfWeek >= 5 || dayOfWeek === 0;
+  const isWeekendWindow = dayOfWeek >= 5 || dayOfWeek === 0;
 
-  const weeklyOverview = useMemo(() => {
-    if (!showWeeklyOverview) return null;
+  const weeklyData = useMemo(() => {
     const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
     const mostDisciplined = playerMembers.filter((m) => {
       const playerAtt = attendance.filter((a) => a.playerId === m.id && a.status !== "no_activity");
@@ -95,17 +108,47 @@ const Stats = () => {
       return paidCount <= 1 && pct < 60;
     });
     return { mostDisciplined, bestPlayer: sortedByPerf[0], top3, lowContributors };
-  }, [showWeeklyOverview, members, attendance]);
+  }, [members, attendance]);
+
+  // Monthly: available when 3+ weekly archives exist
+  const weeklyArchives = weeklyOverviews.filter(o => o.type === "weekly");
+  const monthlyArchives = weeklyOverviews.filter(o => o.type === "monthly");
+  const seasonArchives = weeklyOverviews.filter(o => o.type === "season");
+  const canOpenMonthly = weeklyArchives.length >= 3;
+
+  // Season: available when coach's end date has passed
+  const latestSeasonConfig = seasonConfig[0];
+  const canOpenSeason = latestSeasonConfig && new Date(latestSeasonConfig.end_date) <= new Date();
+
+  // Match reports grouped by game
+  const matchReportsByGame = useMemo(() => {
+    const grouped: Record<string, typeof matchPerformances> = {};
+    matchPerformances.forEach(p => {
+      if (!grouped[p.gameId]) grouped[p.gameId] = [];
+      grouped[p.gameId].push(p);
+    });
+    return Object.entries(grouped)
+      .map(([gameId, perfs]) => {
+        const game = gameScores.find(g => g.id === gameId);
+        return { gameId, game, performances: perfs.sort((a, b) => b.rating - a.rating) };
+      })
+      .filter(r => r.game)
+      .sort((a, b) => new Date(b.game!.date).getTime() - new Date(a.game!.date).getTime());
+  }, [matchPerformances, gameScores]);
 
   const exportContributionsPdf = () => {
     const head = [["Member", ...contributionMonths.map((m) => m.label)]];
-    const body = sortedContributionMembers.map((m) => [
-      m.name,
-      ...contributionMonths.map((month) => {
-        const status = m.contributions[month.key] || "unpaid";
-        return status === "paid" ? "✅" : status === "pending" ? "⏳" : "⬜";
-      }),
-    ]);
+    const body = sortedContributionMembers.map((m) => {
+      const memberMonths = getContribMonthsForMember(m.id);
+      return [
+        m.name,
+        ...contributionMonths.map((month) => {
+          if (!memberMonths.some(mm => mm.key === month.key)) return "—";
+          const status = m.contributions[month.key] || "unpaid";
+          return status === "paid" ? "✅" : status === "pending" ? "⏳" : "⬜";
+        }),
+      ];
+    });
     generateBrandedDocx("Monthly Contribution Status Report", [{ head, body }], "suncity_fc_contributions.docx");
   };
 
@@ -153,21 +196,31 @@ const Stats = () => {
   };
 
   const exportWeeklyOverviewPdf = () => {
-    if (!weeklyOverview) return;
     const tables: DocxTableData[] = [];
-    if (weeklyOverview.mostDisciplined.length > 0) {
-      tables.push({ head: [["Most Disciplined (100% Attendance)"]], body: weeklyOverview.mostDisciplined.map((m) => [m.name]) });
+    if (weeklyData.mostDisciplined.length > 0) {
+      tables.push({ head: [["Most Disciplined (100% Attendance)"]], body: weeklyData.mostDisciplined.map((m) => [m.name]) });
     }
-    if (weeklyOverview.top3.length > 0) {
-      tables.push({ head: [["Top Rated Players"]], body: weeklyOverview.top3.map((m, i) => {
+    if (weeklyData.top3.length > 0) {
+      tables.push({ head: [["Top Rated Players"]], body: weeklyData.top3.map((m, i) => {
         const stars = i === 0 ? "⭐⭐⭐⭐⭐" : i === 1 ? "⭐⭐⭐⭐" : "⭐⭐⭐";
         return [`${m.name} — Goals: ${m.goals || 0}, Assists: ${m.assists || 0} ${stars}`];
       })});
     }
-    if (weeklyOverview.lowContributors.length > 0) {
-      tables.push({ head: [["Low Contribution & Attendance"]], body: weeklyOverview.lowContributors.map((m) => [m.name]) });
+    if (weeklyData.lowContributors.length > 0) {
+      tables.push({ head: [["Low Contribution & Attendance"]], body: weeklyData.lowContributors.map((m) => [m.name]) });
     }
     generateBrandedDocx("Weekly Overview", tables, "suncity_fc_weekly_overview.docx");
+  };
+
+  const exportMatchReport = (gameId: string) => {
+    const report = matchReportsByGame.find(r => r.gameId === gameId);
+    if (!report || !report.game) return;
+    const head = [["Player", "Goals", "Assists", "Rating", "POTM"]];
+    const body = report.performances.map(p => {
+      const player = members.find(m => m.id === p.playerId);
+      return [player?.name || p.playerId, String(p.goals), String(p.assists), String(p.rating), p.isPotm ? "⭐" : ""];
+    });
+    generateBrandedDocx(`Match Report — vs ${report.game.opponent} (${report.game.date})`, [{ head, body }], `suncity_fc_match_${report.game.date}.docx`);
   };
 
   return (
@@ -179,52 +232,137 @@ const Stats = () => {
           <p className="text-muted-foreground text-sm font-body mt-1">Performance, contributions, attendance & finance</p>
         </motion.div>
 
-        {/* Weekly Overview — Fri/Sat/Sun */}
-        {weeklyOverview && (
+        {/* ===== 3-ICON OVERVIEW SYSTEM ===== */}
+        {isOfficial && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Award className="w-5 h-5 text-primary" /> Overview Reports</CardTitle></CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-4 justify-center">
+                  {/* Weekly */}
+                  <button onClick={() => isWeekendWindow ? setOverviewDialog("weekly") : null}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${isWeekendWindow ? "border-primary/40 bg-primary/10 cursor-pointer hover:bg-primary/20 player-card-glow" : "border-border bg-muted/30 opacity-60 cursor-not-allowed"}`}>
+                    <Calendar className="w-8 h-8 text-primary" />
+                    <span className="text-xs font-heading text-primary">WEEKLY</span>
+                    <span className="text-[10px] text-muted-foreground font-body">{isWeekendWindow ? "Available now" : "Opens Fri-Sun"}</span>
+                  </button>
+                  {/* Monthly */}
+                  <button onClick={() => canOpenMonthly ? setOverviewDialog("monthly") : null}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${canOpenMonthly ? "border-primary/40 bg-primary/10 cursor-pointer hover:bg-primary/20 player-card-glow" : "border-border bg-muted/30 opacity-60 cursor-not-allowed"}`}>
+                    <BarChart3 className="w-8 h-8 text-primary" />
+                    <span className="text-xs font-heading text-primary">MONTHLY</span>
+                    <span className="text-[10px] text-muted-foreground font-body">{canOpenMonthly ? "Available" : `${weeklyArchives.length}/3 weeks`}</span>
+                  </button>
+                  {/* Season */}
+                  <button onClick={() => canOpenSeason ? setOverviewDialog("season") : null}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${canOpenSeason ? "border-primary/40 bg-primary/10 cursor-pointer hover:bg-primary/20 player-card-glow" : "border-border bg-muted/30 opacity-60 cursor-not-allowed"}`}>
+                    <Trophy className="w-8 h-8 text-primary" />
+                    <span className="text-xs font-heading text-primary">SEASON</span>
+                    <span className="text-[10px] text-muted-foreground font-body">{canOpenSeason ? "Available" : latestSeasonConfig ? `Ends ${latestSeasonConfig.end_date}` : "Not set"}</span>
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Overview Dialog */}
+        <Dialog open={!!overviewDialog} onOpenChange={() => setOverviewDialog(null)}>
+          <DialogContent className="max-w-2xl bg-card border-border">
+            <DialogHeader>
+              <DialogTitle className="font-heading text-primary">
+                {overviewDialog === "weekly" ? "📅 Weekly Overview" : overviewDialog === "monthly" ? "📊 Monthly Overview" : "🏆 Season Overview"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {weeklyData.mostDisciplined.length > 0 && (
+                <div>
+                  <h4 className="font-heading text-xs text-primary tracking-wider mb-2">MOST DISCIPLINED</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {weeklyData.mostDisciplined.map((m) => (
+                      <Badge key={m.id} variant="outline" className="border-green-500/30 text-green-600 font-body">✅ {m.name}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {weeklyData.top3.length > 0 && (
+                <div>
+                  <h4 className="font-heading text-xs text-primary tracking-wider mb-2">TOP RATED PLAYERS</h4>
+                  {weeklyData.top3.map((m, i) => {
+                    const starCount = 5 - i;
+                    return (
+                      <div key={m.id} className="flex items-center gap-2 py-1">
+                        <span className="text-sm font-body text-foreground">{m.name}</span>
+                        <div className="flex">{Array.from({ length: starCount }).map((_, j) => <Star key={j} className="w-3 h-3 text-primary fill-primary" />)}</div>
+                        <span className="text-xs text-muted-foreground">G:{m.goals || 0} A:{m.assists || 0}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {weeklyData.lowContributors.length > 0 && (
+                <div>
+                  <h4 className="font-heading text-xs text-destructive tracking-wider mb-2">LOW CONTRIBUTION & ATTENDANCE</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {weeklyData.lowContributors.map((m) => (
+                      <Badge key={m.id} variant="outline" className="border-destructive/30 text-destructive font-body">⬜ {m.name}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {isOfficial && (
+                <Button size="sm" variant="outline" onClick={exportWeeklyOverviewPdf} className="font-body text-xs border-primary/30 text-primary">
+                  <Download className="w-3 h-3 mr-1" /> Export
+                </Button>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ===== OVERVIEW ARCHIVE (Gallery-like icons) ===== */}
+        {isOfficial && (weeklyArchives.length > 0 || monthlyArchives.length > 0 || seasonArchives.length > 0) && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-            <Card className="bg-card border-border card-glow border-l-4 border-l-primary">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                  <Award className="w-5 h-5 text-primary" /> Weekly Overview
-                </CardTitle>
-                {isOfficial && (
-                  <Button size="sm" variant="outline" onClick={exportWeeklyOverviewPdf} className="font-body text-xs border-primary/30 text-primary">
-                    <Download className="w-3 h-3 mr-1" /> Export
-                  </Button>
-                )}
-              </CardHeader>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Clock className="w-5 h-5 text-primary" /> Report Archive</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                {weeklyOverview.mostDisciplined.length > 0 && (
+                {weeklyArchives.length > 0 && (
                   <div>
-                    <h4 className="font-heading text-xs text-primary tracking-wider mb-2">MOST DISCIPLINED</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {weeklyOverview.mostDisciplined.map((m) => (
-                        <Badge key={m.id} variant="outline" className="border-green-500/30 text-green-600 font-body">✅ {m.name}</Badge>
+                    <h4 className="font-heading text-xs text-primary tracking-wider mb-2">WEEKLY REPORTS</h4>
+                    <div className="flex flex-wrap gap-3">
+                      {weeklyArchives.map(a => (
+                        <button key={a.id} onClick={() => setSelectedArchive(a)}
+                          className="flex flex-col items-center gap-1 p-3 rounded-xl border border-border hover:border-primary/40 bg-secondary/50 hover:bg-secondary transition-all player-card-glow">
+                          <Calendar className="w-5 h-5 text-primary" />
+                          <span className="text-[10px] font-body text-primary">{a.week_start}</span>
+                        </button>
                       ))}
                     </div>
                   </div>
                 )}
-                {weeklyOverview.top3.length > 0 && (
+                {monthlyArchives.length > 0 && (
                   <div>
-                    <h4 className="font-heading text-xs text-primary tracking-wider mb-2">TOP RATED PLAYERS</h4>
-                    {weeklyOverview.top3.map((m, i) => {
-                      const starCount = 5 - i;
-                      return (
-                        <div key={m.id} className="flex items-center gap-2 py-1">
-                          <span className="text-sm font-body text-foreground">{m.name}</span>
-                          <div className="flex">{Array.from({ length: starCount }).map((_, j) => <Star key={j} className="w-3 h-3 text-primary fill-primary" />)}</div>
-                          <span className="text-xs text-muted-foreground">G:{m.goals || 0} A:{m.assists || 0}</span>
-                        </div>
-                      );
-                    })}
+                    <h4 className="font-heading text-xs text-primary tracking-wider mb-2">MONTHLY REPORTS</h4>
+                    <div className="flex flex-wrap gap-3">
+                      {monthlyArchives.map(a => (
+                        <button key={a.id} onClick={() => setSelectedArchive(a)}
+                          className="flex flex-col items-center gap-1 p-3 rounded-xl border border-border hover:border-primary/40 bg-secondary/50 hover:bg-secondary transition-all player-card-glow">
+                          <BarChart3 className="w-5 h-5 text-primary" />
+                          <span className="text-[10px] font-body text-primary">{a.week_start}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
-                {weeklyOverview.lowContributors.length > 0 && (
+                {seasonArchives.length > 0 && (
                   <div>
-                    <h4 className="font-heading text-xs text-destructive tracking-wider mb-2">LOW CONTRIBUTION & ATTENDANCE</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {weeklyOverview.lowContributors.map((m) => (
-                        <Badge key={m.id} variant="outline" className="border-destructive/30 text-destructive font-body">❌ {m.name}</Badge>
+                    <h4 className="font-heading text-xs text-primary tracking-wider mb-2">SEASON REPORTS</h4>
+                    <div className="flex flex-wrap gap-3">
+                      {seasonArchives.map(a => (
+                        <button key={a.id} onClick={() => setSelectedArchive(a)}
+                          className="flex flex-col items-center gap-1 p-3 rounded-xl border border-border hover:border-primary/40 bg-secondary/50 hover:bg-secondary transition-all player-card-glow">
+                          <Trophy className="w-5 h-5 text-primary" />
+                          <span className="text-[10px] font-body text-primary">{a.week_start}</span>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -233,6 +371,20 @@ const Stats = () => {
             </Card>
           </motion.div>
         )}
+
+        {/* Archive Detail Dialog */}
+        <Dialog open={!!selectedArchive} onOpenChange={() => setSelectedArchive(null)}>
+          <DialogContent className="max-w-lg bg-card border-border">
+            <DialogHeader>
+              <DialogTitle className="font-heading text-primary">
+                {selectedArchive?.type === "weekly" ? "📅" : selectedArchive?.type === "monthly" ? "📊" : "🏆"} {selectedArchive?.type?.charAt(0).toUpperCase() + selectedArchive?.type?.slice(1)} Report — {selectedArchive?.week_start}
+              </DialogTitle>
+            </DialogHeader>
+            <pre className="text-xs font-body text-muted-foreground whitespace-pre-wrap bg-secondary/50 p-3 rounded-lg max-h-60 overflow-y-auto">
+              {selectedArchive ? JSON.stringify(selectedArchive.data, null, 2) : ""}
+            </pre>
+          </DialogContent>
+        </Dialog>
 
         {/* Officials List */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
@@ -245,7 +397,6 @@ const Stats = () => {
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {officials.map(o => {
-                  const liveMember = members.find(m => m.id === o.id);
                   const pic = profilePics[o.id];
                   return (
                     <div key={o.id} className="p-3 rounded-lg border border-border bg-secondary/30 flex items-center gap-3">
@@ -291,7 +442,7 @@ const Stats = () => {
                       <tr key={m.id} className="border-b border-border hover:bg-secondary/30">
                         <td className="py-2 px-2 text-primary text-xs">{m.squadNumber || "—"}</td>
                         <td className="py-2 text-foreground font-medium">{m.name}</td>
-                        <td className="py-2 text-muted-foreground text-xs">{m.position || "—"}</td>
+                        <td className="py-2 text-muted-foreground text-xs">{getFullPositionName(m.position)}</td>
                         <td className="py-2 px-2 text-right font-heading text-primary">{m.goals || 0}</td>
                         <td className="py-2 px-2 text-right">{m.assists || 0}</td>
                         <td className="py-2 px-2 text-right">{m.gamesPlayed || 0}</td>
@@ -303,6 +454,67 @@ const Stats = () => {
             </CardContent>
           </Card>
         </motion.div>
+
+        {/* ===== MATCH DAY REPORTS ===== */}
+        {isOfficial && matchReportsByGame.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Star className="w-5 h-5 text-primary" /> Match Day Reports</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {matchReportsByGame.map(report => (
+                  <div key={report.gameId} className="border border-border rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <span className="font-body text-sm text-foreground font-medium">vs {report.game!.opponent}</span>
+                        <span className="ml-2 font-heading text-primary text-sm">{report.game!.ourScore}-{report.game!.theirScore}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{report.game!.date}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="text-xs font-body" onClick={() => setMatchReportGameId(matchReportGameId === report.gameId ? null : report.gameId)}>
+                          {matchReportGameId === report.gameId ? "Hide" : "View"}
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-xs font-body border-primary/30 text-primary" onClick={() => exportMatchReport(report.gameId)}>
+                          <Download className="w-3 h-3 mr-1" /> Export
+                        </Button>
+                      </div>
+                    </div>
+                    {matchReportGameId === report.gameId && (
+                      <div className="overflow-x-auto mt-2">
+                        <table className="w-full font-body text-xs">
+                          <thead>
+                            <tr className="border-b border-border text-muted-foreground">
+                              <th className="text-left py-1">Rank</th>
+                              <th className="text-left py-1">Player</th>
+                              <th className="text-right py-1">Goals</th>
+                              <th className="text-right py-1">Assists</th>
+                              <th className="text-right py-1">Rating</th>
+                              <th className="text-center py-1">POTM</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {report.performances.map((p, i) => {
+                              const player = members.find(m => m.id === p.playerId);
+                              return (
+                                <tr key={p.id} className={`border-b border-border ${p.isPotm ? "bg-primary/10" : ""}`}>
+                                  <td className="py-1 text-primary font-heading">{i + 1}</td>
+                                  <td className="py-1 text-foreground">{player?.name || p.playerId}</td>
+                                  <td className="py-1 text-right">{p.goals}</td>
+                                  <td className="py-1 text-right">{p.assists}</td>
+                                  <td className="py-1 text-right font-heading text-primary">{p.rating}</td>
+                                  <td className="py-1 text-center">{p.isPotm ? "⭐" : ""}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         {/* Team Gallery — date icons */}
         {mediaByDate.length > 0 && (
@@ -367,7 +579,7 @@ const Stats = () => {
                           {DAYS.map((day) => {
                             const record = playerAtt.find((a) => a.day === day);
                             const status = record?.status;
-                            const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : status === "absent" ? "❌" : "";
+                            const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : status === "absent" ? "⬜" : "";
                             return <td key={day} className="py-2 text-center text-sm">{display}</td>;
                           })}
                           <td className="py-2 px-2 text-right font-heading text-primary">{m.attendancePct}%</td>
@@ -377,12 +589,12 @@ const Stats = () => {
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-muted-foreground font-body mt-2">Key: ✅ = Present, 🔵 = Excused, ❌ = Absent, ➖ = No Activity</p>
+              <p className="text-xs text-muted-foreground font-body mt-2">Key: ✅ = Present, 🔵 = Excused, ⬜ = Absent, ➖ = No Activity</p>
             </CardContent>
           </Card>
         </motion.div>
 
-        {/* Contribution Grid */}
+        {/* Contribution Grid — Fixed for new players */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <Card className="bg-card border-border card-glow">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -405,21 +617,28 @@ const Stats = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedContributionMembers.map((m) => (
-                      <tr key={m.id} className="border-b border-border">
-                        <td className="py-2 text-foreground sticky left-0 bg-card font-medium whitespace-nowrap">{m.name}</td>
-                        {contributionMonths.map((month) => {
-                          const status = m.contributions[month.key] || "unpaid";
-                          return (
-                            <td key={month.key} className="py-2 text-center">
-                              {status === "paid" && <span title="Paid">✅</span>}
-                              {status === "pending" && <span title="Pending">⏳</span>}
-                              {status === "unpaid" && <span title="Unpaid">❌</span>}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                    {sortedContributionMembers.map((m) => {
+                      const memberMonths = getContribMonthsForMember(m.id);
+                      return (
+                        <tr key={m.id} className="border-b border-border">
+                          <td className="py-2 text-foreground sticky left-0 bg-card font-medium whitespace-nowrap">{m.name}</td>
+                          {contributionMonths.map((month) => {
+                            // If this month doesn't apply to this member (new player), show dash
+                            if (!memberMonths.some(mm => mm.key === month.key)) {
+                              return <td key={month.key} className="py-2 text-center text-muted-foreground">—</td>;
+                            }
+                            const status = m.contributions[month.key] || "unpaid";
+                            return (
+                              <td key={month.key} className="py-2 text-center">
+                                {status === "paid" && <span title="Paid">✅</span>}
+                                {status === "pending" && <span title="Pending">⏳</span>}
+                                {status === "unpaid" && <span title="Unpaid">⬜</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -20,6 +20,9 @@ export interface TeamMember {
   interceptions?: number;
   blocks?: number;
   clearances?: number;
+  successfulTackles?: number;
+  directTargets?: number;
+  directShots?: number;
   excused?: boolean;
   excusedType?: string;
   excusedDays?: string[];
