@@ -68,7 +68,7 @@ interface TeamDataContextType {
   uploadProfilePicToStorage: (memberId: string, file: File) => Promise<string | null>;
   deleteMediaItem: (itemId: string, url: string) => Promise<void>;
   removePlayer: (playerId: string) => Promise<void>;
-  addPlayer: (name: string, squadNumber: number, position: string) => Promise<void>;
+  addPlayer: (name: string, squadNumber: number, position: string, role?: string) => Promise<void>;
   uploadHomepageImages: (files: File[]) => Promise<void>;
   deleteHomepageImage: (imageId: string, url: string) => Promise<void>;
   addMatchPerformance: (perf: Omit<MatchPerformance, "id">) => Promise<void>;
