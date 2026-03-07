@@ -400,8 +400,8 @@ const Stats = () => {
                   const pic = profilePics[o.id];
                   return (
                     <div key={o.id} className="p-3 rounded-lg border border-border bg-secondary/30 flex items-center gap-3">
-                      <Avatar className="w-10 h-10 border border-primary/20">
-                        {pic && <AvatarImage src={pic} />}
+                      <Avatar className="w-10 h-10 border border-primary/20 shrink-0">
+                        {pic && <AvatarImage src={pic} className="aspect-square object-cover object-center" />}
                         <AvatarFallback className="bg-secondary text-primary font-heading text-xs">{o.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                       </Avatar>
                       <div>

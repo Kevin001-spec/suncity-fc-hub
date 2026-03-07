@@ -19,6 +19,7 @@ interface LeagueTeam {
   goal_difference: number;
   points: number;
   is_own_team: boolean;
+  division: string;
 }
 
 const Results = () => {
