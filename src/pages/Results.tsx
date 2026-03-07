@@ -33,6 +33,9 @@ const Results = () => {
     });
   }, []);
 
+  const mainTeams = leagueTeams.filter(t => !t.division || t.division === "league");
+  const amateurTeams = leagueTeams.filter(t => t.division === "amateur");
+
   if (!user) return <Navigate to="/" replace />;
 
   return (
@@ -45,7 +48,7 @@ const Results = () => {
         </motion.div>
 
         {/* League Standings — Read-only, multi-team */}
-        {leagueTeams.length > 0 && (
+        {mainTeams.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
             <Card className="bg-card border-border card-glow">
               <CardHeader>
@@ -69,7 +72,55 @@ const Results = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {leagueTeams.map((team, i) => (
+                      {mainTeams.map((team, i) => (
+                        <tr key={team.id} className={`border-b border-border ${team.is_own_team ? "bg-primary/10 font-bold" : ""}`}>
+                          <td className="py-2 px-2 text-muted-foreground">{i + 1}</td>
+                          <td className={`py-2 ${team.is_own_team ? "text-primary font-heading" : "text-foreground"}`}>
+                            {team.team_name}
+                            {team.is_own_team && <Badge className="ml-2 bg-primary text-primary-foreground text-[10px] py-0 px-1">Us</Badge>}
+                          </td>
+                          <td className="py-2 px-2 text-center">{team.played}</td>
+                          <td className="py-2 px-2 text-center text-green-600">{team.won}</td>
+                          <td className="py-2 px-2 text-center text-primary">{team.drawn}</td>
+                          <td className="py-2 px-2 text-center text-destructive">{team.lost}</td>
+                          <td className="py-2 px-2 text-center">{team.goal_difference}</td>
+                          <td className="py-2 px-2 text-center font-heading text-primary">{team.points}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Amateur Standings */}
+        {amateurTeams.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-primary" /> Amateur Standings
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full font-body text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-muted-foreground">
+                        <th className="text-left py-2 px-2">#</th>
+                        <th className="text-left py-2">Team</th>
+                        <th className="text-center py-2 px-2">P</th>
+                        <th className="text-center py-2 px-2">W</th>
+                        <th className="text-center py-2 px-2">D</th>
+                        <th className="text-center py-2 px-2">L</th>
+                        <th className="text-center py-2 px-2">GD</th>
+                        <th className="text-center py-2 px-2">Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {amateurTeams.map((team, i) => (
                         <tr key={team.id} className={`border-b border-border ${team.is_own_team ? "bg-primary/10 font-bold" : ""}`}>
                           <td className="py-2 px-2 text-muted-foreground">{i + 1}</td>
                           <td className={`py-2 ${team.is_own_team ? "text-primary font-heading" : "text-foreground"}`}>
