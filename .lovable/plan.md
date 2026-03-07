@@ -2,108 +2,97 @@
 
 # System Update Plan
 
-## Task 1: Move "Add Recent Results" and "Add Events" to Coach Profile Only
+## 1. Fix Add Player Name Bug + Fix P36
 
-Currently `canManageScores` and `canManageEvents` include coach, manager, and captain. Change:
-- **Add Score** card: Show only for `isCoach` (not manager/captain)
-- **Add Event** card: Show only for `isCoach`
-- **Manager gets a NEW "Edit/Remove Recent Scores"** card instead — shows list of `gameScores` with Edit/Delete buttons per entry
+**Root cause**: `addPlayer` generates ID as `SCF-P${String(squadNumber).padStart(2, "0")}`. When adding a player with squad number 36, it creates `SCF-P36` which may collide with existing data. Also, the profile page reads from `members` (Supabase), while the players list also reads from `members` — so the name mismatch happens when the DB has stale/wrong data for that ID.
 
-**Files:** `src/pages/OfficialProfile.tsx`
-- Change line 399 condition from `canManageScores` to `isCoach`
-- Change line 427 condition from `canManageEvents` to `isCoach`
-- Add new Manager card: "Manage Recent Results" with list of games, each having Edit (inline fields) and Delete (with confirm) buttons
+**Fix**: 
+- Update P36 name in DB from "Kibeh" to "Oscar" via data update
+- Change `addPlayer` to generate unique IDs using a counter query: `SELECT MAX(CAST(SUBSTRING(id, 6) AS INT)) FROM members WHERE id LIKE 'SCF-P%'` + 1, ensuring no collisions
+- Also refresh the user in localStorage after login so profile always uses live DB data
 
-## Task 2: Update Team Stats Editor with Position-Specific Stats
+**Files**: `src/contexts/TeamDataContext.tsx` (addPlayer function), DB data fix
 
-The stats editor (lines 484-516) only has Goals/Assists/Games fields. Update to show position-appropriate fields:
-- **All players**: Goals, Assists, Games Played, Successful Tackles, Direct Targets (new fields needed)
-- **Defenders only**: Additional Tackles, Interceptions, Clearances, Direct Shots
-- **GK**: Saves, Clean Sheets, Aerial Duels
+## 2. Move "Add Recent Results" + "Add Events" to Manager & Captains Only
 
-**Database migration**: Add `successful_tackles` and `direct_targets` columns (and `direct_shots` for DEF) to `members` table.
+Currently at lines 511 and 539, both are `isCoach` only. Change:
+- Remove from coach profile
+- Show for `isManager || isCaptain`
 
-**Files:**
-- Supabase migration: `ALTER TABLE members ADD COLUMN successful_tackles INT DEFAULT 0, ADD COLUMN direct_targets INT DEFAULT 0, ADD COLUMN direct_shots INT DEFAULT 0;`
-- `src/data/team-data.ts`: Add new fields to `TeamMember` interface
-- `src/pages/OfficialProfile.tsx`: Expand stats editor — add state variables for all new stats, detect selected player's position group, show relevant fields dynamically
-- `src/contexts/TeamDataContext.tsx`: Extend `updatePlayerStats` mapping to include new fields
-- `src/pages/PlayerProfile.tsx`: Update `getStatCards()` to show new stats for each position
-- `src/pages/Stats.tsx`: Update performance table columns
+**Files**: `src/pages/OfficialProfile.tsx` — change conditions on lines 511 and 539
 
-## Task 3: Overview Tracking System (Weekly/Monthly/Season) — 3 Icons
+## 3. Add Assistant Coach "Clyn"
 
-This is the repeating core request. Currently there's a single "Weekly Overview" card that shows Fri-Sun. Need to transform into 3 icons like the gallery:
+- Add new role `"assistant_coach"` to the Role type
+- Insert Clyn into `members` table with role `assistant_coach`, give username/pin for login
+- Update `AuthContext` so `isOfficial` includes `assistant_coach`
+- In `OfficialProfile.tsx`: assistant coach can upload photos and mark attendance only (same as `canUploadMedia` and `canManageAttendance` expanded)
+- Update `Profile.tsx` to route `assistant_coach` to OfficialProfile
 
-**Design:**
-- 3 icon buttons on Stats page (and officials dashboard): 📅 Weekly, 📊 Monthly, 🏆 Season
-- **Weekly**: Icon always visible. Clickable only Fri-Sun. Opens dialog with overview data. After Sunday, auto-archive to `weekly_overviews` table.
-- **Monthly**: Icon always visible. Clickable after 3 weekly reports exist. Opens dialog with monthly summary.
-- **Season**: Icon always visible. Clickable only when coach's end date has passed. Opens dialog with all-time stats.
-- Each includes "Most Improved" tracking (compare current vs previous week data for discipline, goals, assists).
-- **Archive Section**: On officials stats/profile — permanent archive of past reports, displayed as clickable date icons (like gallery), separated by type (weekly/monthly/season).
+**Files**: `src/data/team-data.ts` (Role type), `src/contexts/AuthContext.tsx`, `src/pages/OfficialProfile.tsx`, `src/pages/Profile.tsx`, DB insert
 
-**Files:**
-- `src/pages/Stats.tsx`: Replace the single weekly overview with 3 icon system + archive section
-- `src/pages/OfficialProfile.tsx`: Add archive section for officials
-- Logic: Load `weekly_overviews` and `season_config` from Supabase, compute available reports
+## 4. Add Fans Feature
 
-## Task 4: Player DOCX Export (Friday-Sunday)
+- Add role `"fan"` to the Role type
+- In the "Add New Player" section (coach/manager), add a dropdown to choose between "Player" and "Fan"
+- Fans appear on Stats page below Officials section
+- Fan profile: can upload photos, view stats (read-only). Use `PlayerProfile` but with limited sections, or route to OfficialProfile with fan-specific permissions
+- Fans show in a "Fans" section on the Stats page
 
-Currently `isFriday = new Date().getDay() === 5`. Change to show Fri-Sun:
-```
-const showExport = [0, 5, 6].includes(new Date().getDay());
-```
+**Files**: `src/data/team-data.ts`, `src/pages/OfficialProfile.tsx` (add fan option), `src/pages/Stats.tsx` (fans section), `src/pages/Profile.tsx` (routing), `src/pages/PlayerProfile.tsx` or new FanProfile
 
-The export already calls `generatePlayerProfileDocx` — just need to update the visibility condition.
+## 5. Amateur Standings
 
-**Files:** `src/pages/PlayerProfile.tsx` — change line 33
+- Create `amateur_standings` table (same schema as `league_teams` but for amateur division) — or reuse `league_teams` with a `division` column
+- Better approach: add a `division` TEXT column to `league_teams` table (default 'league', can be 'amateur')
+- Manager can add/edit amateur teams on their profile (similar to league standings editor)
+- Results page shows Amateur Standings below League Standings
 
-## Task 5: Match Day Performance Tracking on Officials Stats
+**DB migration**: `ALTER TABLE league_teams ADD COLUMN division TEXT NOT NULL DEFAULT 'league';`
+**Files**: `src/pages/OfficialProfile.tsx` (amateur editor), `src/pages/Results.tsx` (amateur table)
 
-Need a section on Stats page where officials see match-by-match player performance data. Already have `match_performances` table and `addMatchPerformance` in context.
+## 6. Fix Stretched Official Profile Pics on Stats Page
 
-**Manager's profile**: Add "Record Match Day Stats" section — select a game, add player performances (position-specific stats + rating + POTM checkbox).
+Line 403-404 in Stats.tsx: the Avatar for officials doesn't have the `aspect-square object-cover` classes.
 
-**Stats page**: Add "Match Day Reports" section — games listed by date (newest first), expandable to show each player's stats, ranked by rating, POTM highlighted. Exportable as DOCX.
+**Fix**: Add `className="aspect-square object-cover object-center"` to the AvatarImage in the officials grid.
 
-**Files:**
-- `src/pages/OfficialProfile.tsx`: Add match performance recorder for manager
-- `src/pages/Stats.tsx`: Add match reports section
+**Files**: `src/pages/Stats.tsx` line 404
 
-## Task 6: Manager Edit/Remove Recent Scores
+## 7. Add Player Stats to Captain Profiles
 
-Covered in Task 1 — the new "Manage Recent Results" card.
+Currently captains route to `OfficialProfile` which doesn't show personal stats (goals, assists, etc.). Add a personal stats card section to `OfficialProfile` for captains, similar to what `PlayerProfile` shows — position-specific stat cards, weekly attendance display, and monthly contributions.
 
-## Task 7: Add Players Section for Coach & Manager
+**Files**: `src/pages/OfficialProfile.tsx` — add captain stats section after profile header
 
-Currently `addPlayer` exists in context but no UI. Add an "Add New Player" card for both `isCoach` and `isManager`:
-- Name, Squad Number, Position selector
-- Inserts via `addPlayer(name, squadNumber, position)`
+## 8. Universal Messaging System
 
-**Files:** `src/pages/OfficialProfile.tsx` — add card with condition `isCoach || isManager`
+Currently players can only message 3 officials. Expand:
+- **PlayerProfile**: Change recipient dropdown to list ALL members (players + officials)
+- **OfficialProfile**: Expand the existing inbox to also show a "Send Message" section where officials can select any team member as recipient
+- On login, check for unread messages and show a toast notification: "You have X unread messages"
 
-## Task 8: Fix New Players Contribution Display in Stats
+**Files**: `src/pages/PlayerProfile.tsx` (expand recipient list), `src/pages/OfficialProfile.tsx` (add send message section for all officials), `src/contexts/AuthContext.tsx` or `src/pages/Profile.tsx` (unread notification on login)
 
-In `Stats.tsx` contribution grid (line 408-427), new players (SCF-P31 to SCF-P35) still show ❌ for Dec/Jan. Fix by using `getContribMonthsForMember` to determine which months to show, and for months that don't apply, show `—` instead.
+## 9. CSS & Badge Fixes
 
-**Files:** `src/pages/Stats.tsx` — update contribution grid to check `NEW_PLAYER_IDS` and skip/show dash for inapplicable months
-
-## Task 9: Lovable Badge CSS
-
-Already exists but will re-verify/strengthen in `src/index.css`.
+- Strengthen Lovable badge CSS hiding in `src/index.css`
 
 ---
 
-## Summary of Files
+## Summary of Changes
 
 | File | Changes |
 |------|---------|
-| Supabase migration | Add `successful_tackles`, `direct_targets`, `direct_shots` to `members` |
-| `src/data/team-data.ts` | Add new stat fields to `TeamMember` interface |
-| `src/contexts/TeamDataContext.tsx` | Extend `updatePlayerStats` and `loadMembers` for new fields |
-| `src/pages/OfficialProfile.tsx` | Major: scores→coach only, events→coach only, manager gets edit/delete scores, expanded stats editor, match performance recorder, add player UI, overview archive |
-| `src/pages/Stats.tsx` | Overview 3-icon system + archive, match reports section, fix new player contribution display, updated performance table |
-| `src/pages/PlayerProfile.tsx` | Export visible Fri-Sun, new stat cards |
+| DB data update | Fix P36 name to "Oscar", insert Clyn as assistant_coach |
+| DB migration | Add `division` column to `league_teams` |
+| `src/data/team-data.ts` | Add `assistant_coach` and `fan` to Role type |
+| `src/contexts/AuthContext.tsx` | Include `assistant_coach` in `isOfficial` |
+| `src/contexts/TeamDataContext.tsx` | Fix `addPlayer` ID generation (auto-increment), add fan role support |
+| `src/pages/OfficialProfile.tsx` | Move scores/events to manager+captain, add assistant_coach permissions, add fan adding, amateur standings editor, captain stats section, universal send message, expand inbox |
+| `src/pages/Stats.tsx` | Fix official pic stretching, add Fans section below officials |
+| `src/pages/Results.tsx` | Add Amateur Standings table |
+| `src/pages/PlayerProfile.tsx` | Expand messaging to all members |
+| `src/pages/Profile.tsx` | Route `assistant_coach` and `fan` roles |
 | `src/index.css` | Strengthen Lovable badge hiding |
 
