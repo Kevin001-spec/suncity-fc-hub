@@ -19,7 +19,7 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 const PlayerProfile = () => {
   const { user } = useAuth();
-  const { members, profilePics, uploadProfilePicToStorage, attendance, currentWeekStart, gameScores, sendMessage } = useTeamData();
+  const { members, profilePics, uploadProfilePicToStorage, uploadMediaToStorage, attendance, currentWeekStart, gameScores, sendMessage } = useTeamData();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [msgRecipient, setMsgRecipient] = useState("");
@@ -235,7 +235,7 @@ const PlayerProfile = () => {
           </motion.div>
         )}
 
-        {/* Send Message to Officials */}
+        {/* Send Message */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
           <Card className="bg-card border-border card-glow">
             <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
@@ -245,9 +245,9 @@ const PlayerProfile = () => {
               <select value={msgRecipient} onChange={(e) => setMsgRecipient(e.target.value)}
                 className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
                 <option value="">Select recipient</option>
-                <option value="SCF-001">Fabian (Coach)</option>
-                <option value="SCF-003">Kevin (Manager)</option>
-                <option value="SCF-002">Fadhir (Finance)</option>
+                {members.filter(m => m.id !== user.id).map(m => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
+                ))}
               </select>
               <Textarea placeholder="Type your message..." value={msgContent} onChange={(e) => setMsgContent(e.target.value)}
                 className="bg-secondary border-border font-body" />

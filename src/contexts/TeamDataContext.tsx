@@ -68,7 +68,7 @@ interface TeamDataContextType {
   uploadProfilePicToStorage: (memberId: string, file: File) => Promise<string | null>;
   deleteMediaItem: (itemId: string, url: string) => Promise<void>;
   removePlayer: (playerId: string) => Promise<void>;
-  addPlayer: (name: string, squadNumber: number, position: string) => Promise<void>;
+  addPlayer: (name: string, squadNumber: number, position: string, role?: string) => Promise<void>;
   uploadHomepageImages: (files: File[]) => Promise<void>;
   deleteHomepageImage: (imageId: string, url: string) => Promise<void>;
   addMatchPerformance: (perf: Omit<MatchPerformance, "id">) => Promise<void>;
@@ -493,10 +493,18 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
     loadMembers();
   }, [loadMembers]);
 
-  const addPlayer = useCallback(async (name: string, squadNumber: number, position: string) => {
-    const newId = `SCF-P${String(squadNumber).padStart(2, "0")}`;
+  const addPlayer = useCallback(async (name: string, squadNumber: number, position: string, role: string = "player") => {
+    // Auto-increment ID to avoid collisions
+    const { data: maxRow } = await supabase.from("members").select("id").like("id", "SCF-P%").order("id", { ascending: false }).limit(1);
+    let nextNum = squadNumber;
+    if (maxRow && maxRow.length > 0) {
+      const maxId = (maxRow[0] as any).id as string;
+      const num = parseInt(maxId.replace("SCF-P", ""));
+      if (!isNaN(num) && num >= nextNum) nextNum = num + 1;
+    }
+    const newId = `SCF-P${String(nextNum).padStart(2, "0")}`;
     await supabase.from("members").insert({
-      id: newId, name, squad_number: squadNumber, position: position || null, role: "player",
+      id: newId, name, squad_number: squadNumber, position: position || null, role: role || "player",
     } as any);
     loadMembers();
   }, [loadMembers]);

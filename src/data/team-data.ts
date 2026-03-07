@@ -1,4 +1,4 @@
-export type Role = "coach" | "finance" | "manager" | "captain" | "player";
+export type Role = "coach" | "finance" | "manager" | "captain" | "player" | "assistant_coach" | "fan";
 
 export interface TeamMember {
   id: string;
@@ -150,9 +150,10 @@ export const officials: TeamMember[] = [
   { id: "SCF-007", name: "Lucario", role: "captain", username: "CPT-LUC", pin: "6842", phone: "0722725900", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-008", name: "Austin", role: "captain", username: "CPT-AUS", pin: "2059", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-009", name: "Brian (K)", role: "captain", username: "CPT-BK", pin: "1374", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
+  { id: "SCF-010", name: "Clyn", role: "assistant_coach", username: "AST-CLY", pin: "4291", goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
 ];
 
-// Players — Brian Kim is regular player (SCF-P35), not official
+// Players
 export const players: TeamMember[] = [
   { id: "SCF-P01", name: "Blaise", role: "player", squadNumber: 1, position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid" } },
   { id: "SCF-P02", name: "Bronze", role: "player", squadNumber: 2, position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },

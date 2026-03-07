@@ -1,0 +1,1 @@
+ALTER TABLE league_teams ADD COLUMN IF NOT EXISTS division TEXT NOT NULL DEFAULT 'league';

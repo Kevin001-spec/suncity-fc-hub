@@ -20,10 +20,10 @@ import { format } from "date-fns";
 import {
   Trophy, Calendar as CalendarIcon, Image, DollarSign, Users, CheckCircle, XCircle, Plus,
   TrendingUp, TrendingDown, Upload, Target, Save, Trash2, Download, UserMinus, Star, BarChart3, Edit,
-  UserPlus, MessageCircle, Send, Mail,
+  UserPlus, MessageCircle, Send, Mail, Footprints, Gamepad2, Shield, Hand, Crosshair,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { contributionMonths } from "@/data/team-data";
+import { contributionMonths, getContribMonthsForMember } from "@/data/team-data";
 import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
 import { getPositionGroup, getFullPositionName } from "@/data/team-data";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,6 +50,7 @@ interface LeagueTeam {
   goal_difference: number;
   points: number;
   is_own_team: boolean;
+  division: string;
 }
 
 const OfficialProfile = () => {
@@ -113,6 +114,11 @@ const OfficialProfile = () => {
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editTeamData, setEditTeamData] = useState({ played: 0, won: 0, drawn: 0, lost: 0, gd: 0, pts: 0 });
 
+  // Amateur standings
+  const [newAmateurTeamName, setNewAmateurTeamName] = useState("");
+  const [editingAmateurTeamId, setEditingAmateurTeamId] = useState<string | null>(null);
+  const [editAmateurTeamData, setEditAmateurTeamData] = useState({ played: 0, won: 0, drawn: 0, lost: 0, gd: 0, pts: 0 });
+
   // Contribution Events
   const [ceTitle, setCeTitle] = useState("");
   const [ceDesc, setCeDesc] = useState("");
@@ -135,10 +141,11 @@ const OfficialProfile = () => {
   const [editScoreData, setEditScoreData] = useState({ opponent: "", ourScore: 0, theirScore: 0 });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Add Player
+  // Add Player / Fan
   const [newPlayerName, setNewPlayerName] = useState("");
   const [newPlayerSquad, setNewPlayerSquad] = useState("");
   const [newPlayerPos, setNewPlayerPos] = useState("");
+  const [newMemberType, setNewMemberType] = useState<"player" | "fan">("player");
 
   // Match Performance Recorder
   const [perfGameId, setPerfGameId] = useState("");
@@ -155,9 +162,11 @@ const OfficialProfile = () => {
   const [perfRating, setPerfRating] = useState("5");
   const [perfIsPotm, setPerfIsPotm] = useState(false);
 
-  // Message reply
+  // Message reply + send
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
+  const [sendMsgTo, setSendMsgTo] = useState("");
+  const [sendMsgContent, setSendMsgContent] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -192,17 +201,23 @@ const OfficialProfile = () => {
   const isManager = user.role === "manager";
   const isFabian = user.id === "SCF-001";
   const isCaptain = user.role === "captain";
-  const canUploadMedia = ["coach", "manager", "captain"].includes(user.role);
+  const isAssistantCoach = user.role === "assistant_coach";
+  const canUploadMedia = ["coach", "manager", "captain", "assistant_coach"].includes(user.role);
   const canManageFinance = isFadhir || isCoach;
   const canApproveContributions = isFadhir || isCoach;
   const canDeletePhotos = isManager;
   const canManageContribEvents = isFadhir || isCaptain;
   const showContributions = !isFabian;
-  const canManageAttendance = isManager || user.id === "SCF-004";
-  const canReceiveMessages = isFabian || isManager || isFadhir;
+  const canManageAttendance = isManager || user.id === "SCF-004" || isAssistantCoach;
+  const canAddScoresEvents = isManager || isCaptain;
+  const canReceiveMessages = true; // All officials can receive messages now
 
   const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
   const ourScoreNum = parseInt(newOurScore) || 0;
+
+  // League team helpers
+  const leagueTeamsMain = leagueTeams.filter(t => !t.division || t.division === "league");
+  const leagueTeamsAmateur = leagueTeams.filter(t => t.division === "amateur");
 
   const addScore = () => {
     if (!newOpponent || !newOurScore || !newTheirScore) return;
@@ -300,14 +315,15 @@ const OfficialProfile = () => {
   };
 
   // League team management
-  const handleAddLeagueTeam = async () => {
-    if (!newTeamName) return;
-    const { data } = await supabase.from("league_teams").insert({ team_name: newTeamName, is_own_team: false } as any).select().single();
+  const handleAddLeagueTeam = async (division: string = "league") => {
+    const name = division === "amateur" ? newAmateurTeamName : newTeamName;
+    if (!name) return;
+    const { data } = await supabase.from("league_teams").insert({ team_name: name, is_own_team: false, division } as any).select().single();
     if (data) {
       setLeagueTeams(prev => [...prev, data as LeagueTeam].sort((a, b) => b.points - a.points));
       toast({ title: "Team Added" });
     }
-    setNewTeamName("");
+    if (division === "amateur") setNewAmateurTeamName(""); else setNewTeamName("");
   };
 
   const handleSaveLeagueTeam = async (teamId: string) => {
@@ -318,6 +334,16 @@ const OfficialProfile = () => {
     setLeagueTeams(prev => prev.map(t => t.id === teamId ? { ...t, played: editTeamData.played, won: editTeamData.won, drawn: editTeamData.drawn, lost: editTeamData.lost, goal_difference: editTeamData.gd, points: editTeamData.pts } : t).sort((a, b) => b.points - a.points));
     setEditingTeamId(null);
     toast({ title: "Standings Updated" });
+  };
+
+  const handleSaveAmateurTeam = async (teamId: string) => {
+    await supabase.from("league_teams").update({
+      played: editAmateurTeamData.played, won: editAmateurTeamData.won, drawn: editAmateurTeamData.drawn,
+      lost: editAmateurTeamData.lost, goal_difference: editAmateurTeamData.gd, points: editAmateurTeamData.pts,
+    } as any).eq("id", teamId);
+    setLeagueTeams(prev => prev.map(t => t.id === teamId ? { ...t, played: editAmateurTeamData.played, won: editAmateurTeamData.won, drawn: editAmateurTeamData.drawn, lost: editAmateurTeamData.lost, goal_difference: editAmateurTeamData.gd, points: editAmateurTeamData.pts } : t).sort((a, b) => b.points - a.points));
+    setEditingAmateurTeamId(null);
+    toast({ title: "Amateur Standings Updated" });
   };
 
   const handleDeleteLeagueTeam = async (teamId: string) => {
@@ -427,12 +453,12 @@ const OfficialProfile = () => {
     }
   }, [statsPlayerId]);
 
-  // Handle add player
+  // Handle add player/fan
   const handleAddPlayer = async () => {
     if (!newPlayerName || !newPlayerSquad) return;
-    await addPlayer(newPlayerName, parseInt(newPlayerSquad), newPlayerPos);
-    toast({ title: "Player Added", description: `${newPlayerName} (#${newPlayerSquad})` });
-    setNewPlayerName(""); setNewPlayerSquad(""); setNewPlayerPos("");
+    await addPlayer(newPlayerName, parseInt(newPlayerSquad), newPlayerPos, newMemberType);
+    toast({ title: `${newMemberType === "fan" ? "Fan" : "Player"} Added`, description: `${newPlayerName} (#${newPlayerSquad})` });
+    setNewPlayerName(""); setNewPlayerSquad(""); setNewPlayerPos(""); setNewMemberType("player");
   };
 
   // Handle edit score
@@ -479,8 +505,43 @@ const OfficialProfile = () => {
     setReplyTo(null); setReplyContent("");
   };
 
+  // Handle send message
+  const handleSendMsg = async () => {
+    if (!sendMsgTo || !sendMsgContent.trim()) return;
+    await sendMessage(user.id, sendMsgTo, sendMsgContent.trim());
+    toast({ title: "Message Sent" });
+    setSendMsgTo(""); setSendMsgContent("");
+  };
+
   // Messages for this official
   const myMessages = messages.filter(m => m.toId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Captain stats
+  const captainPosGroup = getPositionGroup(liveMember.position);
+  const getCaptainStatCards = () => {
+    if (captainPosGroup === "GK") {
+      return [
+        { icon: Hand, label: "Saves", value: liveMember.saves || 0 },
+        { icon: Shield, label: "Clean Sheets", value: liveMember.cleanSheets || 0 },
+        { icon: Crosshair, label: "Aerial Duels", value: liveMember.aerialDuels || 0 },
+      ];
+    }
+    if (captainPosGroup === "DEF") {
+      return [
+        { icon: Shield, label: "Tackles", value: liveMember.tackles || 0 },
+        { icon: Crosshair, label: "Interceptions", value: liveMember.interceptions || 0 },
+        { icon: Footprints, label: "Clearances", value: liveMember.clearances || 0 },
+        { icon: Target, label: "Direct Shots", value: liveMember.directShots || 0 },
+      ];
+    }
+    return [
+      { icon: Target, label: "Goals", value: liveMember.goals || 0 },
+      { icon: Footprints, label: "Assists", value: liveMember.assists || 0 },
+      { icon: Gamepad2, label: "Games", value: liveMember.gamesPlayed || 0 },
+      { icon: Shield, label: "Successful Tackles", value: liveMember.successfulTackles || 0 },
+      { icon: Crosshair, label: "Direct Targets", value: liveMember.directTargets || 0 },
+    ];
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -499,16 +560,37 @@ const OfficialProfile = () => {
             </button>
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
           </div>
-          <h2 className="font-heading text-2xl text-foreground mt-4">{user.name}</h2>
+          <h2 className="font-heading text-2xl text-foreground mt-4">{liveMember.name}</h2>
           <div className="flex items-center justify-center gap-2 mt-1">
-            <Badge className="bg-primary text-primary-foreground font-body capitalize">{user.role}</Badge>
+            <Badge className="bg-primary text-primary-foreground font-body capitalize">{user.role.replace("_", " ")}</Badge>
             <Badge variant="outline" className="border-primary/30 text-primary font-body">{user.id}</Badge>
           </div>
+          {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
         </motion.div>
 
+        {/* ===== CAPTAIN PERSONAL STATS ===== */}
+        {isCaptain && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> My Stats</CardTitle></CardHeader>
+              <CardContent>
+                <div className={`grid gap-4 ${getCaptainStatCards().length === 4 ? "grid-cols-4" : getCaptainStatCards().length === 5 ? "grid-cols-5" : "grid-cols-3"}`}>
+                  {getCaptainStatCards().map(({ icon: Icon, label, value }) => (
+                    <div key={label} className="text-center">
+                      <Icon className="w-5 h-5 text-primary mx-auto mb-1" />
+                      <p className="text-xl font-heading text-foreground">{value}</p>
+                      <p className="text-[10px] text-muted-foreground font-body">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Game Scores — COACH ONLY */}
-          {isCoach && (
+          {/* Game Scores — MANAGER & CAPTAINS ONLY */}
+          {canAddScoresEvents && (
             <Card className="bg-card border-border card-glow">
               <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Add Recent Results</CardTitle></CardHeader>
               <CardContent className="space-y-3">
@@ -535,8 +617,8 @@ const OfficialProfile = () => {
             </Card>
           )}
 
-          {/* Calendar Events — COACH ONLY */}
-          {isCoach && (
+          {/* Calendar Events — MANAGER & CAPTAINS ONLY */}
+          {canAddScoresEvents && (
             <Card className="bg-card border-border card-glow">
               <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-primary" /> Add Event</CardTitle></CardHeader>
               <CardContent className="space-y-3">
@@ -641,24 +723,30 @@ const OfficialProfile = () => {
           </Card>
         )}
 
-        {/* ===== COACH & MANAGER: Add New Player ===== */}
+        {/* ===== COACH & MANAGER: Add New Player / Fan ===== */}
         {(isCoach || isManager) && (
           <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><UserPlus className="w-5 h-5 text-primary" /> Add New Player</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><UserPlus className="w-5 h-5 text-primary" /> Add New Member</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <Input placeholder="Player name" value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} className="bg-secondary border-border font-body" />
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant={newMemberType === "player" ? "default" : "outline"} onClick={() => setNewMemberType("player")} className="font-body">Player</Button>
+                <Button variant={newMemberType === "fan" ? "default" : "outline"} onClick={() => setNewMemberType("fan")} className="font-body">Fan</Button>
+              </div>
+              <Input placeholder={newMemberType === "fan" ? "Fan name" : "Player name"} value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} className="bg-secondary border-border font-body" />
               <Input placeholder="Squad number" type="number" value={newPlayerSquad} onChange={(e) => setNewPlayerSquad(e.target.value)} className="bg-secondary border-border font-body" />
-              <select value={newPlayerPos} onChange={(e) => setNewPlayerPos(e.target.value)} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                <option value="">Select position</option>
-                <option value="GK">Goalkeeper</option>
-                <option value="DEF">Defender</option>
-                <option value="DEF (LB)">Defender (LB)</option>
-                <option value="DEF (CB)">Defender (CB)</option>
-                <option value="DEF (RB)">Defender (RB)</option>
-                <option value="MID">Midfielder</option>
-                <option value="ATT">Attacker</option>
-              </select>
-              <Button onClick={handleAddPlayer} disabled={!newPlayerName || !newPlayerSquad} className="w-full font-body"><UserPlus className="w-4 h-4 mr-1" /> Add Player</Button>
+              {newMemberType === "player" && (
+                <select value={newPlayerPos} onChange={(e) => setNewPlayerPos(e.target.value)} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  <option value="">Select position</option>
+                  <option value="GK">Goalkeeper</option>
+                  <option value="DEF">Defender</option>
+                  <option value="DEF (LB)">Defender (LB)</option>
+                  <option value="DEF (CB)">Defender (CB)</option>
+                  <option value="DEF (RB)">Defender (RB)</option>
+                  <option value="MID">Midfielder</option>
+                  <option value="ATT">Attacker</option>
+                </select>
+              )}
+              <Button onClick={handleAddPlayer} disabled={!newPlayerName || !newPlayerSquad} className="w-full font-body"><UserPlus className="w-4 h-4 mr-1" /> Add {newMemberType === "fan" ? "Fan" : "Player"}</Button>
             </CardContent>
           </Card>
         )}
@@ -692,11 +780,11 @@ const OfficialProfile = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-xs text-muted-foreground font-body">Successful Tackles</label>
+                      <label className="text-xs text-primary font-body">Successful Tackles</label>
                       <Input type="number" value={statsSuccessfulTackles} onChange={(e) => setStatsSuccessfulTackles(e.target.value)} className="bg-secondary border-border font-body" />
                     </div>
                     <div>
-                      <label className="text-xs text-muted-foreground font-body">Direct Targets</label>
+                      <label className="text-xs text-primary font-body">Direct Targets</label>
                       <Input type="number" value={statsDirectTargets} onChange={(e) => setStatsDirectTargets(e.target.value)} className="bg-secondary border-border font-body" />
                     </div>
                   </div>
@@ -806,10 +894,10 @@ const OfficialProfile = () => {
             <CardContent className="space-y-4">
               <div className="flex gap-2">
                 <Input placeholder="Team name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} className="bg-secondary border-border font-body" />
-                <Button onClick={handleAddLeagueTeam} disabled={!newTeamName} className="font-body"><Plus className="w-4 h-4 mr-1" /> Add</Button>
+                <Button onClick={() => handleAddLeagueTeam("league")} disabled={!newTeamName} className="font-body"><Plus className="w-4 h-4 mr-1" /> Add</Button>
               </div>
               <div className="space-y-2">
-                {leagueTeams.map((team, i) => (
+                {leagueTeamsMain.map((team, i) => (
                   <div key={team.id} className={`border rounded-lg p-3 ${team.is_own_team ? "border-primary/40 bg-primary/5" : "border-border"}`}>
                     <div className="flex items-center justify-between mb-2">
                       <span className={`font-body font-medium text-sm ${team.is_own_team ? "text-primary" : "text-foreground"}`}>
@@ -847,6 +935,60 @@ const OfficialProfile = () => {
                     )}
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== MANAGER: Amateur Standings Editor ===== */}
+        {isManager && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Amateur Standings Editor</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input placeholder="Amateur team name" value={newAmateurTeamName} onChange={(e) => setNewAmateurTeamName(e.target.value)} className="bg-secondary border-border font-body" />
+                <Button onClick={() => handleAddLeagueTeam("amateur")} disabled={!newAmateurTeamName} className="font-body"><Plus className="w-4 h-4 mr-1" /> Add</Button>
+              </div>
+              <div className="space-y-2">
+                {leagueTeamsAmateur.map((team, i) => (
+                  <div key={team.id} className={`border rounded-lg p-3 ${team.is_own_team ? "border-primary/40 bg-primary/5" : "border-border"}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`font-body font-medium text-sm ${team.is_own_team ? "text-primary" : "text-foreground"}`}>
+                        {i + 1}. {team.team_name} {team.is_own_team && "⭐"}
+                      </span>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
+                          setEditingAmateurTeamId(team.id);
+                          setEditAmateurTeamData({ played: team.played, won: team.won, drawn: team.drawn, lost: team.lost, gd: team.goal_difference, pts: team.points });
+                        }}><Edit className="w-3 h-3" /></Button>
+                        {!team.is_own_team && <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => handleDeleteLeagueTeam(team.id)}><Trash2 className="w-3 h-3" /></Button>}
+                      </div>
+                    </div>
+                    {editingAmateurTeamId === team.id ? (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-6 gap-1">
+                          {[["P", "played"], ["W", "won"], ["D", "drawn"], ["L", "lost"], ["GD", "gd"], ["Pts", "pts"]].map(([label, key]) => (
+                            <div key={key}>
+                              <label className="text-[10px] text-muted-foreground">{label}</label>
+                              <Input type="number" value={(editAmateurTeamData as any)[key]} onChange={(e) => setEditAmateurTeamData(prev => ({ ...prev, [key]: +e.target.value }))} className="h-8 text-xs bg-secondary border-border" />
+                            </div>
+                          ))}
+                        </div>
+                        <Button size="sm" onClick={() => handleSaveAmateurTeam(team.id)} className="font-body text-xs"><Save className="w-3 h-3 mr-1" /> Save</Button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-6 gap-2 text-xs text-muted-foreground font-body">
+                        <span>P: {team.played}</span>
+                        <span className="text-green-600">W: {team.won}</span>
+                        <span>D: {team.drawn}</span>
+                        <span className="text-destructive">L: {team.lost}</span>
+                        <span>GD: {team.goal_difference}</span>
+                        <span className="text-primary font-bold">Pts: {team.points}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {leagueTeamsAmateur.length === 0 && <p className="text-xs text-muted-foreground font-body">No amateur teams added yet</p>}
               </div>
             </CardContent>
           </Card>
@@ -912,20 +1054,26 @@ const OfficialProfile = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {members.filter((m) => m.id !== "SCF-001").map((m) => (
-                      <tr key={m.id} className="border-b border-border">
-                        <td className="py-2 text-foreground sticky left-0 bg-card font-medium whitespace-nowrap text-xs">{m.name}</td>
-                        {contributionMonths.map((month) => {
-                          const status = m.contributions[month.key] || "unpaid";
-                          return (
-                            <td key={month.key} className="py-2 text-center">
-                              <Checkbox checked={status === "paid"}
-                                onCheckedChange={(checked) => updateContributionDirect(m.id, month.key, checked ? "paid" : "unpaid")} />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                    {members.filter((m) => m.id !== "SCF-001").map((m) => {
+                      const memberMonths = getContribMonthsForMember(m.id);
+                      return (
+                        <tr key={m.id} className="border-b border-border">
+                          <td className="py-2 text-foreground sticky left-0 bg-card font-medium whitespace-nowrap text-xs">{m.name}</td>
+                          {contributionMonths.map((month) => {
+                            if (!memberMonths.some(mm => mm.key === month.key)) {
+                              return <td key={month.key} className="py-2 text-center text-muted-foreground">—</td>;
+                            }
+                            const status = m.contributions[month.key] || "unpaid";
+                            return (
+                              <td key={month.key} className="py-2 text-center">
+                                <Checkbox checked={status === "paid"}
+                                  onCheckedChange={(checked) => updateContributionDirect(m.id, month.key, checked ? "paid" : "unpaid")} />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1028,7 +1176,7 @@ const OfficialProfile = () => {
           </Card>
         )}
 
-        {/* Weekly Attendance — Manager + Ethan */}
+        {/* Weekly Attendance — Manager + Ethan + Assistant Coach */}
         {canManageAttendance && (
           <Card className="bg-card border-border card-glow">
             <CardHeader>
@@ -1267,8 +1415,27 @@ const OfficialProfile = () => {
           </Card>
         )}
 
-        {/* ===== MESSAGE INBOX for Fabian, Kevin, Fadhir ===== */}
-        {canReceiveMessages && myMessages.length > 0 && (
+        {/* ===== SEND MESSAGE (All officials) ===== */}
+        <Card className="bg-card border-border card-glow">
+          <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><MessageCircle className="w-5 h-5 text-primary" /> Send Message</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <select value={sendMsgTo} onChange={(e) => setSendMsgTo(e.target.value)}
+              className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+              <option value="">Select recipient</option>
+              {members.filter(m => m.id !== user.id).map(m => (
+                <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
+              ))}
+            </select>
+            <Textarea placeholder="Type your message..." value={sendMsgContent} onChange={(e) => setSendMsgContent(e.target.value)}
+              className="bg-secondary border-border font-body" />
+            <Button onClick={handleSendMsg} disabled={!sendMsgTo || !sendMsgContent.trim()} className="w-full font-body">
+              <Send className="w-4 h-4 mr-1" /> Send Message
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* ===== MESSAGE INBOX ===== */}
+        {myMessages.length > 0 && (
           <Card className="bg-card border-border card-glow">
             <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Mail className="w-5 h-5 text-primary" /> Message Inbox</CardTitle></CardHeader>
             <CardContent className="space-y-3">

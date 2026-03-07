@@ -358,6 +358,7 @@ export type Database = {
       league_teams: {
         Row: {
           created_at: string
+          division: string
           drawn: number
           goal_difference: number
           id: string
@@ -370,6 +371,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          division?: string
           drawn?: number
           goal_difference?: number
           id?: string
@@ -382,6 +384,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          division?: string
           drawn?: number
           goal_difference?: number
           id?: string
