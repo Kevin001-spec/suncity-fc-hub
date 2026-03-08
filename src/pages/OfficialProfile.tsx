@@ -326,28 +326,18 @@ const OfficialProfile = () => {
     setRemovePlayerId(""); setShowRemoveConfirm(false);
   };
 
-  // Expanded stats handler
   const handleUpdateStats = async () => {
     if (!statsPlayerId) return;
     const player = members.find(m => m.id === statsPlayerId);
-    const posGroup = getPositionGroup(player?.position);
-    const statsObj: Record<string, number> = {
-      goals: parseInt(statsGoals) || 0,
-      assists: parseInt(statsAssists) || 0,
-      gamesPlayed: parseInt(statsGames) || 0,
-      successfulTackles: parseInt(statsSuccessfulTackles) || 0,
-      directTargets: parseInt(statsDirectTargets) || 0,
+    const fields = getStatsForPosition(player?.position);
+    const statsObj: Record<string, number> = {};
+    const stateMap: Record<string, string> = {
+      saves: statsSaves, cleanSheets: statsCleanSheets, aerialDuels: statsAerialDuels,
+      tackles: statsTackles, interceptions: statsInterceptions, assists: statsAssists,
+      goals: statsGoals, directShots: statsDirectShots,
     };
-    if (posGroup === "GK") {
-      statsObj.saves = parseInt(statsSaves) || 0;
-      statsObj.cleanSheets = parseInt(statsCleanSheets) || 0;
-      statsObj.aerialDuels = parseInt(statsAerialDuels) || 0;
-    }
-    if (posGroup === "DEF") {
-      statsObj.tackles = parseInt(statsTackles) || 0;
-      statsObj.interceptions = parseInt(statsInterceptions) || 0;
-      statsObj.clearances = parseInt(statsClearances) || 0;
-      statsObj.directShots = parseInt(statsDirectShots) || 0;
+    for (const f of fields) {
+      statsObj[f.key] = parseInt(stateMap[f.key] || "0") || 0;
     }
     await updatePlayerStats(statsPlayerId, statsObj);
     toast({ title: "Stats Updated" });
@@ -530,22 +520,61 @@ const OfficialProfile = () => {
     setDeleteConfirmId(null);
   };
 
-  // Handle match performance
   const handleAddMatchPerf = async () => {
     if (!perfGameId || !perfPlayerId) return;
-    await addMatchPerformance({
+    const perfPlayer = members.find(m => m.id === perfPlayerId);
+    const perfPosGroup = getPositionGroup(perfPlayer?.position);
+    
+    // Build perf data — only position-relevant fields, rest default to 0
+    const perfData: any = {
       gameId: perfGameId, playerId: perfPlayerId,
-      goals: parseInt(perfGoals) || 0, assists: parseInt(perfAssists) || 0,
-      saves: parseInt(perfSaves) || 0, tackles: parseInt(perfTackles) || 0,
-      interceptions: parseInt(perfInterceptions) || 0, blocks: parseInt(perfBlocks) || 0,
-      clearances: parseInt(perfClearances) || 0, cleanSheet: perfCleanSheet,
-      aerialDuels: parseInt(perfAerialDuels) || 0, rating: parseFloat(perfRating) || 5,
-      isPotm: perfIsPotm,
-    });
-    toast({ title: "Performance Recorded" });
+      goals: 0, assists: 0, saves: 0, tackles: 0,
+      interceptions: 0, blocks: 0, clearances: 0,
+      cleanSheet: false, aerialDuels: 0, rating: 0, isPotm: false,
+    };
+    
+    if (perfPosGroup === "GK") {
+      perfData.saves = parseInt(perfSaves) || 0;
+      perfData.aerialDuels = parseInt(perfAerialDuels) || 0;
+      perfData.cleanSheet = perfCleanSheet;
+    } else if (perfPosGroup === "DEF") {
+      perfData.tackles = parseInt(perfTackles) || 0;
+      perfData.interceptions = parseInt(perfInterceptions) || 0;
+      perfData.goals = parseInt(perfGoals) || 0;
+      perfData.assists = parseInt(perfAssists) || 0;
+    } else {
+      perfData.goals = parseInt(perfGoals) || 0;
+      perfData.assists = parseInt(perfAssists) || 0;
+      perfData.tackles = parseInt(perfTackles) || 0;
+    }
+    
+    await addMatchPerformance(perfData);
+    
+    // Auto-calculate POTM for this game
+    const { data: allPerfs } = await supabase.from("match_performances")
+      .select("*").eq("game_id", perfGameId);
+    if (allPerfs && allPerfs.length > 0) {
+      let bestId = "";
+      let bestScore = -1;
+      for (const p of allPerfs) {
+        const score = calculatePotmScore({
+          goals: p.goals, assists: p.assists, saves: p.saves,
+          tackles: p.tackles, interceptions: p.interceptions,
+          cleanSheet: p.clean_sheet, aerialDuels: p.aerial_duels,
+        });
+        if (score > bestScore) { bestScore = score; bestId = p.id; }
+      }
+      // Reset all POTM flags, then set the best one
+      await supabase.from("match_performances").update({ is_potm: false } as any).eq("game_id", perfGameId);
+      if (bestId) {
+        await supabase.from("match_performances").update({ is_potm: true } as any).eq("id", bestId);
+      }
+    }
+    
+    toast({ title: "Performance Recorded", description: "POTM auto-calculated." });
     setPerfPlayerId(""); setPerfGoals("0"); setPerfAssists("0"); setPerfSaves("0");
     setPerfTackles("0"); setPerfInterceptions("0"); setPerfBlocks("0"); setPerfClearances("0");
-    setPerfCleanSheet(false); setPerfAerialDuels("0"); setPerfRating("5"); setPerfIsPotm(false);
+    setPerfCleanSheet(false); setPerfAerialDuels("0");
   };
 
   // Handle reply
