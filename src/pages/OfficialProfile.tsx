@@ -1500,6 +1500,23 @@ const OfficialProfile = () => {
         {/* Lineup Builder — Coach only */}
         {isCoach && <LineupBuilder />}
 
+        {/* ===== FAN MANAGEMENT — Coach & Manager ===== */}
+        {(isCoach || isManager) && (() => {
+          const fans = members.filter(m => m.role === "fan");
+          if (fans.length === 0) return null;
+          const BADGE_PRESETS = ["Super Fan", "Legend", "MVP Fan", "Rising Star", "OG Supporter"];
+          return (
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Star className="w-5 h-5 text-primary" /> Fan Management</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                {fans.map(fan => (
+                  <FanRow key={fan.id} fan={fan} profilePic={profilePics[fan.id]} badgePresets={BADGE_PRESETS} />
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })()}
+
         {/* Coach: First 11 Selector */}
         {isCoach && (
           <Card className="bg-card border-border card-glow">
