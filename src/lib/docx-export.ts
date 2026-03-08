@@ -30,13 +30,6 @@ const BORDER_LIGHT = {
   right: { style: BorderStyle.SINGLE, size: 1, color: "DDDDDD" },
 };
 
-const NO_BORDER = {
-  top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-  bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-  left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-  right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-};
-
 // ===== HELPER: Branded header =====
 async function createBrandedHeader(title: string): Promise<Paragraph[]> {
   const badgeBuffer = await fetchImageAsBuffer(suncityBadge);
@@ -95,28 +88,7 @@ function sectionHeading(text: string): Paragraph {
   });
 }
 
-// ===== HELPER: Key-value paragraph =====
-function kvParagraph(pairs: { label: string; value: string }[]): Paragraph {
-  const runs: TextRun[] = [];
-  pairs.forEach((p, i) => {
-    if (i > 0) runs.push(new TextRun({ text: "  •  ", size: 16, font: "Calibri", color: "CCCCCC" }));
-    runs.push(new TextRun({ text: `${p.label}: `, size: 16, font: "Calibri", color: "666666" }));
-    runs.push(new TextRun({ text: p.value, bold: true, size: 16, font: "Calibri", color: "193769" }));
-  });
-  return new Paragraph({ children: runs, spacing: { after: 60 } });
-}
-
-// ===== HELPER: Inline list =====
-function inlineList(items: string[], separator = "  |  "): Paragraph {
-  const runs: TextRun[] = [];
-  items.forEach((item, i) => {
-    if (i > 0) runs.push(new TextRun({ text: separator, size: 16, font: "Calibri", color: "CCCCCC" }));
-    runs.push(new TextRun({ text: item, size: 16, font: "Calibri" }));
-  });
-  return new Paragraph({ children: runs, spacing: { after: 60 } });
-}
-
-// ===== HELPER: Smart table (only when truly tabular) =====
+// ===== HELPER: Flexible smart table — always renders as a proper table =====
 function smartTable(head: string[][], body: string[][]): Table {
   const rows: TableRow[] = [];
   for (const headRow of head) {
@@ -151,11 +123,27 @@ function smartTable(head: string[][], body: string[][]): Table {
   return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, layout: TableLayoutType.AUTOFIT });
 }
 
+// ===== HELPER: Key-value paragraph for compact inline data =====
+function kvParagraph(pairs: { label: string; value: string }[]): Paragraph {
+  const runs: TextRun[] = [];
+  pairs.forEach((p, i) => {
+    if (i > 0) runs.push(new TextRun({ text: "  •  ", size: 16, font: "Calibri", color: "CCCCCC" }));
+    runs.push(new TextRun({ text: `${p.label}: `, size: 16, font: "Calibri", color: "666666" }));
+    runs.push(new TextRun({ text: p.value, bold: true, size: 16, font: "Calibri", color: "193769" }));
+  });
+  return new Paragraph({ children: runs, spacing: { after: 60 } });
+}
+
 export interface DocxTableData {
   head: string[][];
   body: string[][];
 }
 
+/**
+ * generateBrandedDocx — Always uses proper tables for multi-column data.
+ * Single-column data gets a section heading + bullet list.
+ * The system flexibly analyzes data and arranges in neat tables.
+ */
 export async function generateBrandedDocx(
   title: string,
   tables: DocxTableData[],
@@ -166,28 +154,18 @@ export async function generateBrandedDocx(
   const bodyElements: (Paragraph | Table)[] = [];
 
   for (const tableData of tables) {
-    // If single-column data, use paragraph list instead of table
+    // Single-column list data → section heading + list
     if (tableData.head.length > 0 && tableData.head[0].length === 1) {
       bodyElements.push(sectionHeading(tableData.head[0][0]));
       for (const row of tableData.body) {
         bodyElements.push(new Paragraph({
-          children: [new TextRun({ text: `  ${row[0]}`, size: 16, font: "Calibri" })],
+          children: [new TextRun({ text: `  • ${row[0]}`, size: 16, font: "Calibri" })],
           spacing: { after: 40 },
         }));
       }
       bodyElements.push(new Paragraph({ spacing: { after: 100 } }));
     }
-    // Two-column key-value data → use styled paragraphs
-    else if (tableData.head.length > 0 && tableData.head[0].length === 2 && tableData.body.length <= 12) {
-      if (tableData.head[0][0]) {
-        bodyElements.push(sectionHeading(tableData.head[0][0]));
-      }
-      for (const row of tableData.body) {
-        bodyElements.push(kvParagraph([{ label: row[0], value: row[1] }]));
-      }
-      bodyElements.push(new Paragraph({ spacing: { after: 100 } }));
-    }
-    // Multi-column tabular data → use smart table
+    // Multi-column data → ALWAYS use proper table
     else if (tableData.body.length > 0) {
       bodyElements.push(smartTable(tableData.head, tableData.body));
       bodyElements.push(new Paragraph({ spacing: { after: 120 } }));
@@ -236,67 +214,57 @@ export async function generatePlayerProfileDocx(
     }));
   }
 
-  // Player info as styled paragraph
+  // Player info
   children.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [
-        new TextRun({ text: playerName, bold: true, size: 26, font: "Calibri", color: "193769" }),
-      ],
+      children: [new TextRun({ text: playerName, bold: true, size: 26, font: "Calibri", color: "193769" })],
       spacing: { after: 20 },
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [
-        new TextRun({ text: `${playerId}  •  ${position}`, size: 18, font: "Calibri", color: "666666" }),
-      ],
+      children: [new TextRun({ text: `${playerId}  •  ${position}`, size: 18, font: "Calibri", color: "666666" })],
       spacing: { after: 120 },
     })
   );
 
-  // Stats as inline key-value pairs (grouped in rows of 3-4)
+  // Stats as table
   if (stats.length > 0) {
     children.push(sectionHeading("Performance Statistics"));
-    const statPairs = stats.map(s => ({ label: s.label, value: String(s.value) }));
-    // Group into rows of 3
-    for (let i = 0; i < statPairs.length; i += 3) {
-      children.push(kvParagraph(statPairs.slice(i, i + 3)));
-    }
+    const statsHead = [stats.map(s => s.label)];
+    const statsBody = [stats.map(s => String(s.value))];
+    children.push(smartTable(statsHead, statsBody));
     children.push(new Paragraph({ spacing: { after: 80 } }));
   }
 
-  // Attendance as inline icons
+  // Attendance as table
   if (attendanceDays.length > 0) {
     children.push(sectionHeading("Training Attendance"));
-    const attItems = attendanceDays.map(a => {
-      const icon = a.status === "present" ? "✅" : a.status === "excused" ? "🔵" : a.status === "no_activity" ? "➖" : "⬜";
-      return `${a.day}: ${icon}`;
-    });
-    children.push(inlineList(attItems, "   "));
+    const attHead = [attendanceDays.map(a => a.day)];
+    const attBody = [attendanceDays.map(a => {
+      return a.status === "present" ? "✅" : a.status === "excused" ? "🔵" : a.status === "no_activity" ? "➖" : "⬜";
+    })];
+    children.push(smartTable(attHead, attBody));
     children.push(new Paragraph({ spacing: { after: 80 } }));
   }
 
-  // Contributions as compact inline
+  // Contributions as table
   if (contributions.length > 0) {
     children.push(sectionHeading("Monthly Contributions"));
-    const contribItems = contributions.map(c => {
-      const icon = c.status === "paid" ? "✅" : "⬜";
-      return `${c.month}: ${icon}`;
-    });
-    children.push(inlineList(contribItems, "   "));
+    const contribHead = [contributions.map(c => c.month)];
+    const contribBody = [contributions.map(c => c.status === "paid" ? "✅" : "⬜")];
+    children.push(smartTable(contribHead, contribBody));
     children.push(new Paragraph({ spacing: { after: 80 } }));
   }
 
-  // Match History (comprehensive)
+  // Match History table
   if (matchHistory && matchHistory.length > 0) {
     children.push(sectionHeading("Match History"));
     const head = [["Opponent", "Date", "Result", "Type", "Venue"]];
     const body = matchHistory.map(m => [m.opponent, m.date, m.result, m.gameType, m.venue]);
     children.push(smartTable(head, body));
     children.push(new Paragraph({ spacing: { after: 80 } }));
-  }
-  // Legacy opponents if no match history
-  else if (opponents.length > 0) {
+  } else if (opponents.length > 0) {
     children.push(sectionHeading("Opponents Played Against"));
     const head = [["Opponent", "Date", "Result"]];
     const body = opponents.map(o => [o.opponent, o.date, o.result]);
@@ -304,7 +272,7 @@ export async function generatePlayerProfileDocx(
     children.push(new Paragraph({ spacing: { after: 80 } }));
   }
 
-  // Weekly logs as styled sections (not rigid tables)
+  // Weekly logs as tables
   if (weeklyLogs && weeklyLogs.length > 0) {
     children.push(sectionHeading("Weekly Activity Log"));
     for (const log of weeklyLogs) {
@@ -314,10 +282,9 @@ export async function generatePlayerProfileDocx(
       }));
       const nonZero = log.stats.filter(s => s.value > 0);
       if (nonZero.length > 0) {
-        const pairs = nonZero.map(s => ({ label: s.label, value: String(s.value) }));
-        for (let i = 0; i < pairs.length; i += 4) {
-          children.push(kvParagraph(pairs.slice(i, i + 4)));
-        }
+        const head = [nonZero.map(s => s.label)];
+        const body = [nonZero.map(s => String(s.value))];
+        children.push(smartTable(head, body));
       } else {
         children.push(new Paragraph({
           children: [new TextRun({ text: "No activity recorded", size: 15, font: "Calibri", color: "999999", italics: true })],

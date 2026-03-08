@@ -27,6 +27,7 @@ import { contributionMonths, getContribMonthsForMember } from "@/data/team-data"
 import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
 import { getPositionGroup, getFullPositionName } from "@/data/team-data";
 import { supabase } from "@/integrations/supabase/client";
+import { getStatsForPosition, getPerfFieldsForPosition, calculatePotmScore } from "@/lib/position-stats";
 import LineupBuilder from "@/components/LineupBuilder";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -325,28 +326,18 @@ const OfficialProfile = () => {
     setRemovePlayerId(""); setShowRemoveConfirm(false);
   };
 
-  // Expanded stats handler
   const handleUpdateStats = async () => {
     if (!statsPlayerId) return;
     const player = members.find(m => m.id === statsPlayerId);
-    const posGroup = getPositionGroup(player?.position);
-    const statsObj: Record<string, number> = {
-      goals: parseInt(statsGoals) || 0,
-      assists: parseInt(statsAssists) || 0,
-      gamesPlayed: parseInt(statsGames) || 0,
-      successfulTackles: parseInt(statsSuccessfulTackles) || 0,
-      directTargets: parseInt(statsDirectTargets) || 0,
+    const fields = getStatsForPosition(player?.position);
+    const statsObj: Record<string, number> = {};
+    const stateMap: Record<string, string> = {
+      saves: statsSaves, cleanSheets: statsCleanSheets, aerialDuels: statsAerialDuels,
+      tackles: statsTackles, interceptions: statsInterceptions, assists: statsAssists,
+      goals: statsGoals, directShots: statsDirectShots,
     };
-    if (posGroup === "GK") {
-      statsObj.saves = parseInt(statsSaves) || 0;
-      statsObj.cleanSheets = parseInt(statsCleanSheets) || 0;
-      statsObj.aerialDuels = parseInt(statsAerialDuels) || 0;
-    }
-    if (posGroup === "DEF") {
-      statsObj.tackles = parseInt(statsTackles) || 0;
-      statsObj.interceptions = parseInt(statsInterceptions) || 0;
-      statsObj.clearances = parseInt(statsClearances) || 0;
-      statsObj.directShots = parseInt(statsDirectShots) || 0;
+    for (const f of fields) {
+      statsObj[f.key] = parseInt(stateMap[f.key] || "0") || 0;
     }
     await updatePlayerStats(statsPlayerId, statsObj);
     toast({ title: "Stats Updated" });
@@ -529,22 +520,61 @@ const OfficialProfile = () => {
     setDeleteConfirmId(null);
   };
 
-  // Handle match performance
   const handleAddMatchPerf = async () => {
     if (!perfGameId || !perfPlayerId) return;
-    await addMatchPerformance({
+    const perfPlayer = members.find(m => m.id === perfPlayerId);
+    const perfPosGroup = getPositionGroup(perfPlayer?.position);
+    
+    // Build perf data — only position-relevant fields, rest default to 0
+    const perfData: any = {
       gameId: perfGameId, playerId: perfPlayerId,
-      goals: parseInt(perfGoals) || 0, assists: parseInt(perfAssists) || 0,
-      saves: parseInt(perfSaves) || 0, tackles: parseInt(perfTackles) || 0,
-      interceptions: parseInt(perfInterceptions) || 0, blocks: parseInt(perfBlocks) || 0,
-      clearances: parseInt(perfClearances) || 0, cleanSheet: perfCleanSheet,
-      aerialDuels: parseInt(perfAerialDuels) || 0, rating: parseFloat(perfRating) || 5,
-      isPotm: perfIsPotm,
-    });
-    toast({ title: "Performance Recorded" });
+      goals: 0, assists: 0, saves: 0, tackles: 0,
+      interceptions: 0, blocks: 0, clearances: 0,
+      cleanSheet: false, aerialDuels: 0, rating: 0, isPotm: false,
+    };
+    
+    if (perfPosGroup === "GK") {
+      perfData.saves = parseInt(perfSaves) || 0;
+      perfData.aerialDuels = parseInt(perfAerialDuels) || 0;
+      perfData.cleanSheet = perfCleanSheet;
+    } else if (perfPosGroup === "DEF") {
+      perfData.tackles = parseInt(perfTackles) || 0;
+      perfData.interceptions = parseInt(perfInterceptions) || 0;
+      perfData.goals = parseInt(perfGoals) || 0;
+      perfData.assists = parseInt(perfAssists) || 0;
+    } else {
+      perfData.goals = parseInt(perfGoals) || 0;
+      perfData.assists = parseInt(perfAssists) || 0;
+      perfData.tackles = parseInt(perfTackles) || 0;
+    }
+    
+    await addMatchPerformance(perfData);
+    
+    // Auto-calculate POTM for this game
+    const { data: allPerfs } = await supabase.from("match_performances")
+      .select("*").eq("game_id", perfGameId);
+    if (allPerfs && allPerfs.length > 0) {
+      let bestId = "";
+      let bestScore = -1;
+      for (const p of allPerfs) {
+        const score = calculatePotmScore({
+          goals: p.goals, assists: p.assists, saves: p.saves,
+          tackles: p.tackles, interceptions: p.interceptions,
+          cleanSheet: p.clean_sheet, aerialDuels: p.aerial_duels,
+        });
+        if (score > bestScore) { bestScore = score; bestId = p.id; }
+      }
+      // Reset all POTM flags, then set the best one
+      await supabase.from("match_performances").update({ is_potm: false } as any).eq("game_id", perfGameId);
+      if (bestId) {
+        await supabase.from("match_performances").update({ is_potm: true } as any).eq("id", bestId);
+      }
+    }
+    
+    toast({ title: "Performance Recorded", description: "POTM auto-calculated." });
     setPerfPlayerId(""); setPerfGoals("0"); setPerfAssists("0"); setPerfSaves("0");
     setPerfTackles("0"); setPerfInterceptions("0"); setPerfBlocks("0"); setPerfClearances("0");
-    setPerfCleanSheet(false); setPerfAerialDuels("0"); setPerfRating("5"); setPerfIsPotm(false);
+    setPerfCleanSheet(false); setPerfAerialDuels("0");
   };
 
   // Handle reply
@@ -566,31 +596,19 @@ const OfficialProfile = () => {
   // Messages for this official
   const myMessages = messages.filter(m => m.toId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  // Captain stats
-  const captainPosGroup = getPositionGroup(liveMember.position);
+  // Captain stats — position-specific
+  const captainStatFields = getStatsForPosition(liveMember.position);
+  const iconMapOfficial: Record<string, any> = {
+    saves: Hand, cleanSheets: Shield, aerialDuels: Crosshair,
+    tackles: Shield, interceptions: Crosshair, assists: Footprints,
+    goals: Target, directShots: Crosshair,
+  };
   const getCaptainStatCards = () => {
-    if (captainPosGroup === "GK") {
-      return [
-        { icon: Hand, label: "Saves", value: liveMember.saves || 0 },
-        { icon: Shield, label: "Clean Sheets", value: liveMember.cleanSheets || 0 },
-        { icon: Crosshair, label: "Aerial Duels", value: liveMember.aerialDuels || 0 },
-      ];
-    }
-    if (captainPosGroup === "DEF") {
-      return [
-        { icon: Shield, label: "Tackles", value: liveMember.tackles || 0 },
-        { icon: Crosshair, label: "Interceptions", value: liveMember.interceptions || 0 },
-        { icon: Footprints, label: "Clearances", value: liveMember.clearances || 0 },
-        { icon: Target, label: "Direct Shots", value: liveMember.directShots || 0 },
-      ];
-    }
-    return [
-      { icon: Target, label: "Goals", value: liveMember.goals || 0 },
-      { icon: Footprints, label: "Assists", value: liveMember.assists || 0 },
-      { icon: Gamepad2, label: "Games", value: liveMember.gamesPlayed || 0 },
-      { icon: Shield, label: "Successful Tackles", value: liveMember.successfulTackles || 0 },
-      { icon: Crosshair, label: "Direct Targets", value: liveMember.directTargets || 0 },
-    ];
+    return captainStatFields.map(sf => ({
+      icon: iconMapOfficial[sf.key] || Target,
+      label: sf.label,
+      value: (liveMember as any)[sf.key] || 0,
+    }));
   };
 
   return (
@@ -869,7 +887,7 @@ const OfficialProfile = () => {
           </Card>
         )}
 
-        {/* ===== MANAGER: Team Stats Editor (EXPANDED) ===== */}
+        {/* ===== MANAGER: Team Stats Editor (Position-Specific) ===== */}
         {isManager && (
           <Card className="bg-card border-border card-glow">
             <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Team Stats Editor</CardTitle></CardHeader>
@@ -879,82 +897,41 @@ const OfficialProfile = () => {
                 <option value="">Select player</option>
                 {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name} ({getFullPositionName(m.position)})</option>)}
               </select>
-              {statsPlayerId && (
-                <>
-                  {/* Common stats for all */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="text-xs text-muted-foreground font-body">Goals</label>
-                      <Input type="number" value={statsGoals} onChange={(e) => setStatsGoals(e.target.value)} className="bg-secondary border-border font-body" />
+              {statsPlayerId && selectedStatsPlayer && (() => {
+                const fields = getStatsForPosition(selectedStatsPlayer.position);
+                const stateSetters: Record<string, [string, (v: string) => void]> = {
+                  saves: [statsSaves, setStatsSaves],
+                  cleanSheets: [statsCleanSheets, setStatsCleanSheets],
+                  aerialDuels: [statsAerialDuels, setStatsAerialDuels],
+                  tackles: [statsTackles, setStatsTackles],
+                  interceptions: [statsInterceptions, setStatsInterceptions],
+                  assists: [statsAssists, setStatsAssists],
+                  goals: [statsGoals, setStatsGoals],
+                  directShots: [statsDirectShots, setStatsDirectShots],
+                };
+                return (
+                  <>
+                    <p className="text-xs text-muted-foreground font-body">Showing stats for: <span className="text-primary font-medium">{getFullPositionName(selectedStatsPlayer.position)}</span></p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {fields.map(f => {
+                        const [val, setter] = stateSetters[f.key] || ["0", () => {}];
+                        return (
+                          <div key={f.key}>
+                            <label className="text-xs text-primary font-body">{f.label}</label>
+                            <Input type="number" value={val} onChange={(e) => setter(e.target.value)} className="bg-secondary border-border font-body" />
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground font-body">Assists</label>
-                      <Input type="number" value={statsAssists} onChange={(e) => setStatsAssists(e.target.value)} className="bg-secondary border-border font-body" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground font-body">Games</label>
-                      <Input type="number" value={statsGames} onChange={(e) => setStatsGames(e.target.value)} className="bg-secondary border-border font-body" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-xs text-primary font-body">Successful Tackles</label>
-                      <Input type="number" value={statsSuccessfulTackles} onChange={(e) => setStatsSuccessfulTackles(e.target.value)} className="bg-secondary border-border font-body" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-primary font-body">Direct Targets</label>
-                      <Input type="number" value={statsDirectTargets} onChange={(e) => setStatsDirectTargets(e.target.value)} className="bg-secondary border-border font-body" />
-                    </div>
-                  </div>
-
-                  {/* GK-specific */}
-                  {selectedPosGroup === "GK" && (
-                    <div className="grid grid-cols-3 gap-2 border-t border-border pt-2">
-                      <div>
-                        <label className="text-xs text-primary font-body">Saves</label>
-                        <Input type="number" value={statsSaves} onChange={(e) => setStatsSaves(e.target.value)} className="bg-secondary border-border font-body" />
-                      </div>
-                      <div>
-                        <label className="text-xs text-primary font-body">Clean Sheets</label>
-                        <Input type="number" value={statsCleanSheets} onChange={(e) => setStatsCleanSheets(e.target.value)} className="bg-secondary border-border font-body" />
-                      </div>
-                      <div>
-                        <label className="text-xs text-primary font-body">Aerial Duels</label>
-                        <Input type="number" value={statsAerialDuels} onChange={(e) => setStatsAerialDuels(e.target.value)} className="bg-secondary border-border font-body" />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* DEF-specific */}
-                  {selectedPosGroup === "DEF" && (
-                    <div className="grid grid-cols-2 gap-2 border-t border-border pt-2">
-                      <div>
-                        <label className="text-xs text-primary font-body">Tackles</label>
-                        <Input type="number" value={statsTackles} onChange={(e) => setStatsTackles(e.target.value)} className="bg-secondary border-border font-body" />
-                      </div>
-                      <div>
-                        <label className="text-xs text-primary font-body">Interceptions</label>
-                        <Input type="number" value={statsInterceptions} onChange={(e) => setStatsInterceptions(e.target.value)} className="bg-secondary border-border font-body" />
-                      </div>
-                      <div>
-                        <label className="text-xs text-primary font-body">Clearances</label>
-                        <Input type="number" value={statsClearances} onChange={(e) => setStatsClearances(e.target.value)} className="bg-secondary border-border font-body" />
-                      </div>
-                      <div>
-                        <label className="text-xs text-primary font-body">Direct Shots</label>
-                        <Input type="number" value={statsDirectShots} onChange={(e) => setStatsDirectShots(e.target.value)} className="bg-secondary border-border font-body" />
-                      </div>
-                    </div>
-                  )}
-
-                  <Button onClick={handleUpdateStats} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
-                </>
-              )}
+                    <Button onClick={handleUpdateStats} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
         )}
 
-        {/* ===== MANAGER: Match Day Performance Recorder ===== */}
+        {/* ===== MANAGER: Match Day Performance Recorder (Position-Specific, Auto POTM) ===== */}
         {isManager && (
           <Card className="bg-card border-border card-glow">
             <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Star className="w-5 h-5 text-primary" /> Record Match Day Stats</CardTitle></CardHeader>
@@ -971,39 +948,118 @@ const OfficialProfile = () => {
                     <option value="">Select player</option>
                     {playerMembers.map(m => <option key={m.id} value={m.id}>{m.name} ({getFullPositionName(m.position)})</option>)}
                   </select>
-                  {perfPlayerId && (
-                    <>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div><label className="text-xs text-muted-foreground font-body">Goals</label><Input type="number" value={perfGoals} onChange={(e) => setPerfGoals(e.target.value)} className="bg-secondary border-border font-body" /></div>
-                        <div><label className="text-xs text-muted-foreground font-body">Assists</label><Input type="number" value={perfAssists} onChange={(e) => setPerfAssists(e.target.value)} className="bg-secondary border-border font-body" /></div>
-                        <div><label className="text-xs text-muted-foreground font-body">Rating (1-10)</label><Input type="number" min="1" max="10" step="0.5" value={perfRating} onChange={(e) => setPerfRating(e.target.value)} className="bg-secondary border-border font-body" /></div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div><label className="text-xs text-muted-foreground font-body">Saves</label><Input type="number" value={perfSaves} onChange={(e) => setPerfSaves(e.target.value)} className="bg-secondary border-border font-body" /></div>
-                        <div><label className="text-xs text-muted-foreground font-body">Tackles</label><Input type="number" value={perfTackles} onChange={(e) => setPerfTackles(e.target.value)} className="bg-secondary border-border font-body" /></div>
-                        <div><label className="text-xs text-muted-foreground font-body">Interceptions</label><Input type="number" value={perfInterceptions} onChange={(e) => setPerfInterceptions(e.target.value)} className="bg-secondary border-border font-body" /></div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div><label className="text-xs text-muted-foreground font-body">Blocks</label><Input type="number" value={perfBlocks} onChange={(e) => setPerfBlocks(e.target.value)} className="bg-secondary border-border font-body" /></div>
-                        <div><label className="text-xs text-muted-foreground font-body">Clearances</label><Input type="number" value={perfClearances} onChange={(e) => setPerfClearances(e.target.value)} className="bg-secondary border-border font-body" /></div>
-                        <div><label className="text-xs text-muted-foreground font-body">Aerial Duels</label><Input type="number" value={perfAerialDuels} onChange={(e) => setPerfAerialDuels(e.target.value)} className="bg-secondary border-border font-body" /></div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2 text-sm font-body text-foreground">
-                          <Checkbox checked={perfCleanSheet} onCheckedChange={(c) => setPerfCleanSheet(!!c)} /> Clean Sheet
-                        </label>
-                        <label className="flex items-center gap-2 text-sm font-body text-primary">
-                          <Checkbox checked={perfIsPotm} onCheckedChange={(c) => setPerfIsPotm(!!c)} /> ⭐ Player of the Match
-                        </label>
-                      </div>
-                      <Button onClick={handleAddMatchPerf} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Record Performance</Button>
-                    </>
-                  )}
+                  {perfPlayerId && (() => {
+                    const perfPlayer = members.find(m => m.id === perfPlayerId);
+                    const perfPosGroup = getPositionGroup(perfPlayer?.position);
+                    const perfFields = getPerfFieldsForPosition(perfPlayer?.position);
+                    const perfStateMap: Record<string, [string, (v: string) => void]> = {
+                      goals: [perfGoals, setPerfGoals],
+                      assists: [perfAssists, setPerfAssists],
+                      saves: [perfSaves, setPerfSaves],
+                      tackles: [perfTackles, setPerfTackles],
+                      interceptions: [perfInterceptions, setPerfInterceptions],
+                      aerialDuels: [perfAerialDuels, setPerfAerialDuels],
+                    };
+                    return (
+                      <>
+                        <p className="text-xs text-muted-foreground font-body">Position: <span className="text-primary font-medium">{getFullPositionName(perfPlayer?.position)}</span></p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {perfFields.filter(f => f.key !== "cleanSheet").map(f => {
+                            const [val, setter] = perfStateMap[f.key] || ["0", () => {}];
+                            return (
+                              <div key={f.key}>
+                                <label className="text-xs text-muted-foreground font-body">{f.label}</label>
+                                <Input type="number" value={val} onChange={(e) => setter(e.target.value)} className="bg-secondary border-border font-body" />
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {perfPosGroup === "GK" && (
+                          <label className="flex items-center gap-2 text-sm font-body text-foreground">
+                            <Checkbox checked={perfCleanSheet} onCheckedChange={(c) => setPerfCleanSheet(!!c)} /> Clean Sheet
+                          </label>
+                        )}
+                        <p className="text-xs text-muted-foreground font-body italic">⭐ Player of the Match is auto-determined by the system</p>
+                        <Button onClick={handleAddMatchPerf} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Record Performance</Button>
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </CardContent>
           </Card>
         )}
+
+        {/* ===== Post-Match Analytics (Officials Only) ===== */}
+        {isManager && matchPerformances.length > 0 && (() => {
+          // Group performances by game
+          const perfByGame: Record<string, typeof matchPerformances> = {};
+          matchPerformances.forEach(p => {
+            if (!perfByGame[p.gameId]) perfByGame[p.gameId] = [];
+            perfByGame[p.gameId].push(p);
+          });
+          const gameIds = Object.keys(perfByGame);
+          if (gameIds.length < 2) return null;
+          
+          // Find latest game
+          const sortedGames = gameIds
+            .map(gid => ({ gid, game: gameScores.find(g => g.id === gid) }))
+            .filter(x => x.game)
+            .sort((a, b) => new Date(b.game!.date).getTime() - new Date(a.game!.date).getTime());
+          
+          if (sortedGames.length < 2) return null;
+          const latestGameId = sortedGames[0].gid;
+          const prevGameId = sortedGames[1].gid;
+          const latestPerfs = perfByGame[latestGameId] || [];
+          const prevPerfs = perfByGame[prevGameId] || [];
+          
+          const deltas = latestPerfs.map(lp => {
+            const prevP = prevPerfs.find(pp => pp.playerId === lp.playerId);
+            if (!prevP) return null;
+            const player = members.find(m => m.id === lp.playerId);
+            const currTotal = lp.goals + lp.assists + lp.saves + lp.tackles + lp.interceptions;
+            const prevTotal = prevP.goals + prevP.assists + prevP.saves + prevP.tackles + prevP.interceptions;
+            return { player, delta: currTotal - prevTotal, curr: currTotal, prev: prevTotal };
+          }).filter(Boolean) as { player: any; delta: number; curr: number; prev: number }[];
+          
+          if (deltas.length === 0) return null;
+          deltas.sort((a, b) => b.delta - a.delta);
+          const mostImproved = deltas[0];
+          const dropped = deltas.filter(d => d.delta < 0);
+          
+          return (
+            <Card className="bg-card border-border card-glow border-primary/20">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary" /> Post-Match Analytics
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {mostImproved && mostImproved.delta > 0 && (
+                  <div className="p-3 rounded-lg bg-primary/10 border border-primary/30">
+                    <p className="text-xs text-primary font-heading tracking-wider mb-1">🔥 MOST IMPROVED</p>
+                    <p className="font-body text-foreground font-medium">{mostImproved.player?.name}</p>
+                    <p className="text-xs text-muted-foreground font-body">
+                      Previous: {mostImproved.prev} pts → Current: {mostImproved.curr} pts
+                      <span className="text-primary ml-2">+{mostImproved.delta}</span>
+                    </p>
+                  </div>
+                )}
+                {dropped.length > 0 && (
+                  <div>
+                    <p className="text-xs text-destructive font-heading tracking-wider mb-2">📉 PERFORMANCE DROP</p>
+                    {dropped.map((d, i) => (
+                      <div key={i} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+                        <span className="font-body text-sm text-foreground">{d.player?.name}</span>
+                        <span className="text-xs text-destructive font-body">{d.prev} → {d.curr} ({d.delta})</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* ===== MANAGER: League Standings Editor ===== */}
         {isManager && (

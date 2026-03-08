@@ -7,14 +7,13 @@ import Navbar from "@/components/Navbar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { type TeamMember, getFullPositionName, getPositionGroup } from "@/data/team-data";
+import { getStatsForPosition } from "@/lib/position-stats";
 
 const positionGroupOrder: Record<string, number> = { "GK": 1, "DEF": 2, "MID": 3, "ATT": 4 };
 const positionGroupLabels: Record<string, string> = { "GK": "Goalkeepers", "DEF": "Defenders", "MID": "Midfielders", "ATT": "Attackers" };
 
 const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profilePic?: string; onClose: () => void }) => {
-  const posGroup = getPositionGroup(member.position);
-  const isGK = posGroup === "GK";
-  const isDEF = posGroup === "DEF";
+  const statFields = getStatsForPosition(member.position);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -31,27 +30,13 @@ const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profi
           {member.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body mt-1">Field Captain</Badge>}
           {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(member.position)}</p>}
           {member.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{member.squadNumber}</p>}
-          <div className={`grid gap-3 mt-4 pt-4 border-t border-border ${isDEF ? "grid-cols-4" : "grid-cols-3"}`}>
-            {isGK ? (
-              <>
-                <div><p className="text-xl font-heading text-primary">{member.saves || 0}</p><p className="text-xs text-muted-foreground font-body">Saves</p></div>
-                <div><p className="text-xl font-heading text-primary">{member.cleanSheets || 0}</p><p className="text-xs text-muted-foreground font-body">Clean Sheets</p></div>
-                <div><p className="text-xl font-heading text-primary">{member.aerialDuels || 0}</p><p className="text-xs text-muted-foreground font-body">Aerial Duels</p></div>
-              </>
-            ) : isDEF ? (
-              <>
-                <div><p className="text-xl font-heading text-primary">{member.tackles || 0}</p><p className="text-xs text-muted-foreground font-body">Tackles</p></div>
-                <div><p className="text-xl font-heading text-primary">{member.interceptions || 0}</p><p className="text-xs text-muted-foreground font-body">Int.</p></div>
-                <div><p className="text-xl font-heading text-primary">{member.blocks || 0}</p><p className="text-xs text-muted-foreground font-body">Blocks</p></div>
-                <div><p className="text-xl font-heading text-primary">{member.clearances || 0}</p><p className="text-xs text-muted-foreground font-body">Clear.</p></div>
-              </>
-            ) : (
-              <>
-                <div><p className="text-xl font-heading text-primary">{member.goals || 0}</p><p className="text-xs text-muted-foreground font-body">Goals</p></div>
-                <div><p className="text-xl font-heading text-primary">{member.assists || 0}</p><p className="text-xs text-muted-foreground font-body">Assists</p></div>
-                <div><p className="text-xl font-heading text-primary">{member.gamesPlayed || 0}</p><p className="text-xs text-muted-foreground font-body">Games</p></div>
-              </>
-            )}
+          <div className={`grid gap-3 mt-4 pt-4 border-t border-border`} style={{ gridTemplateColumns: `repeat(${Math.min(statFields.length, 5)}, 1fr)` }}>
+            {statFields.map(sf => (
+              <div key={sf.key}>
+                <p className="text-xl font-heading text-primary">{(member as any)[sf.key] || 0}</p>
+                <p className="text-xs text-muted-foreground font-body">{sf.label}</p>
+              </div>
+            ))}
           </div>
         </div>
       </motion.div>
@@ -63,8 +48,6 @@ const Players = () => {
   const { user } = useAuth();
   const { members, profilePics } = useTeamData();
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
-
-  if (!user) return <Navigate to="/" replace />;
 
   const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
 
@@ -89,6 +72,8 @@ const Players = () => {
     }
     return groups;
   }, [sortedPlayers]);
+
+  if (!user) return <Navigate to="/" replace />;
 
   return (
     <div className="min-h-screen bg-background">

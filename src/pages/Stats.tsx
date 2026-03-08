@@ -493,6 +493,54 @@ const Stats = () => {
           </Card>
         </motion.div>
 
+        {/* ===== MAN OF THE MATCH — Latest Game ===== */}
+        {matchReportsByGame.length > 0 && (() => {
+          const latestReport = matchReportsByGame[0];
+          const potm = latestReport.performances.find(p => p.isPotm);
+          if (!potm) return null;
+          const potmPlayer = members.find(m => m.id === potm.playerId);
+          const potmPic = profilePics[potm.playerId];
+          const nonZeroStats = [
+            potm.goals > 0 && `${potm.goals} Goals`,
+            potm.assists > 0 && `${potm.assists} Assists`,
+            potm.saves > 0 && `${potm.saves} Saves`,
+            potm.tackles > 0 && `${potm.tackles} Tackles`,
+            potm.interceptions > 0 && `${potm.interceptions} Interceptions`,
+            potm.cleanSheet && "Clean Sheet",
+            potm.aerialDuels > 0 && `${potm.aerialDuels} Aerial Duels`,
+          ].filter(Boolean);
+          return (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.11 }}>
+              <Card className="bg-card border-primary/30 card-glow overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none" />
+                <CardHeader className="relative">
+                  <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+                    <Award className="w-6 h-6 text-primary" /> ⭐ Man of the Match
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground font-body">vs {latestReport.game!.opponent} — {latestReport.game!.date}</p>
+                </CardHeader>
+                <CardContent className="relative">
+                  <div className="flex items-center gap-4">
+                    <Avatar className="w-16 h-16 border-2 border-primary">
+                      {potmPic && <AvatarImage src={potmPic} className="aspect-square object-cover object-center" />}
+                      <AvatarFallback className="bg-secondary text-primary font-heading text-xl">{potmPlayer?.name?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h3 className="font-heading text-xl text-foreground">{potmPlayer?.name}</h3>
+                      <p className="text-sm text-primary font-body">{getFullPositionName(potmPlayer?.position)}</p>
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {nonZeroStats.map((stat, i) => (
+                          <Badge key={i} variant="outline" className="border-primary/30 text-primary font-body text-xs">{stat}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          );
+        })()}
+
         {/* ===== MATCH DAY REPORTS ===== */}
         {isOfficial && matchReportsByGame.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
@@ -525,7 +573,6 @@ const Stats = () => {
                               <th className="text-left py-1">Player</th>
                               <th className="text-right py-1">Goals</th>
                               <th className="text-right py-1">Assists</th>
-                              <th className="text-right py-1">Rating</th>
                               <th className="text-center py-1">POTM</th>
                             </tr>
                           </thead>
@@ -538,7 +585,6 @@ const Stats = () => {
                                   <td className="py-1 text-foreground">{player?.name || p.playerId}</td>
                                   <td className="py-1 text-right">{p.goals}</td>
                                   <td className="py-1 text-right">{p.assists}</td>
-                                  <td className="py-1 text-right font-heading text-primary">{p.rating}</td>
                                   <td className="py-1 text-center">{p.isPotm ? "⭐" : ""}</td>
                                 </tr>
                               );
