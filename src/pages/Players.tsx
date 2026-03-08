@@ -49,8 +49,6 @@ const Players = () => {
   const { members, profilePics } = useTeamData();
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
 
-  if (!user) return <Navigate to="/" replace />;
-
   const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
 
   const sortedPlayers = useMemo(() => {
@@ -74,6 +72,8 @@ const Players = () => {
     }
     return groups;
   }, [sortedPlayers]);
+
+  if (!user) return <Navigate to="/" replace />;
 
   return (
     <div className="min-h-screen bg-background">
