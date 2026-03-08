@@ -41,6 +41,7 @@ const PlayerProfile = () => {
   useEffect(() => {
     if (user?.id && !isFan) {
       loadWeeklyStatsLogs(user.id).then(setWeeklyLogs);
+      loadPlayerGameLogs(user.id).then(setPlayerGameLogs);
     }
   }, [user?.id, isFan]);
 
