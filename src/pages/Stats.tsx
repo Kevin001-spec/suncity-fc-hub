@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { type TeamMember, getFullPositionName, getPositionGroup } from "@/data/team-data";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
 import { Navigate } from "react-router-dom";
