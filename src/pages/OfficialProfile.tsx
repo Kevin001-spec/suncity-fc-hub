@@ -27,6 +27,7 @@ import { contributionMonths, getContribMonthsForMember } from "@/data/team-data"
 import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
 import { getPositionGroup, getFullPositionName } from "@/data/team-data";
 import { supabase } from "@/integrations/supabase/client";
+import { getStatsForPosition, getPerfFieldsForPosition, calculatePotmScore } from "@/lib/position-stats";
 import LineupBuilder from "@/components/LineupBuilder";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
