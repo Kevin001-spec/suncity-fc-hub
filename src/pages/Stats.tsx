@@ -400,8 +400,10 @@ const Stats = () => {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {officials.map(o => {
                   const pic = profilePics[o.id];
+                  const memberData = members.find(m => m.id === o.id) || o;
                   return (
-                    <div key={o.id} className="p-3 rounded-lg border border-border bg-secondary/30 flex items-center gap-3">
+                    <button key={o.id} onClick={() => setSelectedMemberCard(memberData)}
+                      className="p-3 rounded-lg border border-border bg-secondary/30 flex items-center gap-3 hover:bg-secondary/50 transition-all text-left cursor-pointer">
                       <Avatar className="w-10 h-10 border border-primary/20 shrink-0">
                         {pic && <AvatarImage src={pic} className="aspect-square object-cover object-center" />}
                         <AvatarFallback className="bg-secondary text-primary font-heading text-xs">{o.name.slice(0, 2).toUpperCase()}</AvatarFallback>
@@ -410,7 +412,7 @@ const Stats = () => {
                         <p className="font-body font-medium text-foreground text-sm">{o.name}</p>
                         <p className="text-xs text-primary font-body capitalize">{o.role}</p>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -432,7 +434,8 @@ const Stats = () => {
                   {members.filter(m => m.role === "fan").map(f => {
                     const pic = profilePics[f.id];
                     return (
-                      <div key={f.id} className="p-3 rounded-lg border border-border bg-secondary/30 flex items-center gap-3">
+                      <button key={f.id} onClick={() => setSelectedMemberCard(f)}
+                        className="p-3 rounded-lg border border-border bg-secondary/30 flex items-center gap-3 hover:bg-secondary/50 transition-all text-left cursor-pointer">
                         <Avatar className="w-10 h-10 border border-primary/20 shrink-0">
                           {pic && <AvatarImage src={pic} className="aspect-square object-cover object-center" />}
                           <AvatarFallback className="bg-secondary text-primary font-heading text-xs">{f.name.slice(0, 2).toUpperCase()}</AvatarFallback>
@@ -440,8 +443,9 @@ const Stats = () => {
                         <div>
                           <p className="font-body font-medium text-foreground text-sm">{f.name}</p>
                           <p className="text-xs text-primary font-body">Fan</p>
+                          {f.fanBadge && <Badge variant="outline" className="text-[10px] border-primary/30 text-primary mt-0.5">{f.fanBadge}</Badge>}
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -725,6 +729,16 @@ const Stats = () => {
             </CardContent>
           </Card>
         </motion.div>
+        {/* Member Card Overlay */}
+        <AnimatePresence>
+          {selectedMemberCard && (
+            <MemberCardOverlay
+              member={selectedMemberCard}
+              profilePic={profilePics[selectedMemberCard.id]}
+              onClose={() => setSelectedMemberCard(null)}
+            />
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );
