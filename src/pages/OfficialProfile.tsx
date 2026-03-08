@@ -628,65 +628,9 @@ const OfficialProfile = () => {
               </CardContent>
             </Card>
           </motion.div>
-          )}
 
-          {/* Game Stats Form — appears after adding a score */}
-          {lastAddedGameId && canAddScoresEvents && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <Card className="bg-card border-border card-glow border-primary/30">
-                <CardHeader>
-                  <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-primary" /> Match Stats — vs {lastAddedOpponent}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="overflow-x-auto">
-                    <table className="w-full font-body text-sm">
-                      <thead>
-                        <tr className="border-b border-border text-muted-foreground">
-                          <th className="text-left py-2 px-2">Stat</th>
-                          <th className="text-center py-2 px-2">1st Half</th>
-                          <th className="text-center py-2 px-2">2nd Half</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {([
-                          ["Shots", "shots"],
-                          ["Shots on Target", "shotsOnTarget"],
-                          ["Penalties", "penalties"],
-                          ["Freekicks", "freekicks"],
-                          ["Corner Kicks", "cornerKicks"],
-                          ["Fouls", "fouls"],
-                          ["Offsides", "offsides"],
-                          ["Yellow Cards", "yellowCards"],
-                          ["Red Cards", "redCards"],
-                        ] as [string, keyof typeof firstHalfStats][]).map(([label, key]) => (
-                          <tr key={key} className="border-b border-border">
-                            <td className="py-2 px-2 text-foreground">{label}</td>
-                            <td className="py-1 px-1">
-                              <Input type="number" min={0} value={firstHalfStats[key]}
-                                onChange={(e) => setFirstHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
-                                className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
-                            </td>
-                            <td className="py-1 px-1">
-                              <Input type="number" min={0} value={secondHalfStats[key]}
-                                onChange={(e) => setSecondHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
-                                className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button onClick={handleSaveGameStats} className="flex-1 font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
-                    <Button variant="outline" onClick={() => setLastAddedGameId(null)} className="font-body">Skip</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
 
-        <div className="grid md:grid-cols-2 gap-6">
+
           {/* Game Scores — MANAGER & CAPTAINS ONLY */}
           {canAddScoresEvents && (
             <Card className="bg-card border-border card-glow">
