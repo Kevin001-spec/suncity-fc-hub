@@ -596,31 +596,19 @@ const OfficialProfile = () => {
   // Messages for this official
   const myMessages = messages.filter(m => m.toId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  // Captain stats
-  const captainPosGroup = getPositionGroup(liveMember.position);
+  // Captain stats — position-specific
+  const captainStatFields = getStatsForPosition(liveMember.position);
+  const iconMapOfficial: Record<string, any> = {
+    saves: Hand, cleanSheets: Shield, aerialDuels: Crosshair,
+    tackles: Shield, interceptions: Crosshair, assists: Footprints,
+    goals: Target, directShots: Crosshair,
+  };
   const getCaptainStatCards = () => {
-    if (captainPosGroup === "GK") {
-      return [
-        { icon: Hand, label: "Saves", value: liveMember.saves || 0 },
-        { icon: Shield, label: "Clean Sheets", value: liveMember.cleanSheets || 0 },
-        { icon: Crosshair, label: "Aerial Duels", value: liveMember.aerialDuels || 0 },
-      ];
-    }
-    if (captainPosGroup === "DEF") {
-      return [
-        { icon: Shield, label: "Tackles", value: liveMember.tackles || 0 },
-        { icon: Crosshair, label: "Interceptions", value: liveMember.interceptions || 0 },
-        { icon: Footprints, label: "Clearances", value: liveMember.clearances || 0 },
-        { icon: Target, label: "Direct Shots", value: liveMember.directShots || 0 },
-      ];
-    }
-    return [
-      { icon: Target, label: "Goals", value: liveMember.goals || 0 },
-      { icon: Footprints, label: "Assists", value: liveMember.assists || 0 },
-      { icon: Gamepad2, label: "Games", value: liveMember.gamesPlayed || 0 },
-      { icon: Shield, label: "Successful Tackles", value: liveMember.successfulTackles || 0 },
-      { icon: Crosshair, label: "Direct Targets", value: liveMember.directTargets || 0 },
-    ];
+    return captainStatFields.map(sf => ({
+      icon: iconMapOfficial[sf.key] || Target,
+      label: sf.label,
+      value: (liveMember as any)[sf.key] || 0,
+    }));
   };
 
   return (
