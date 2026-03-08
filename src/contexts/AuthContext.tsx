@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
-import { TeamMember, authenticateMember } from "@/data/team-data";
+import { TeamMember } from "@/data/team-data";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
 
 interface AuthContextType {
   user: TeamMember | null;
@@ -32,43 +31,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id]);
 
   const login = useCallback(async (identifier: string, pin?: string): Promise<{ success: boolean; error?: string }> => {
-    const upperId = identifier.toUpperCase();
+    try {
+      const { data, error } = await supabase.functions.invoke("authenticate", {
+        body: { memberId: identifier, pin: pin || undefined },
+      });
 
-    // Try fan login (SCF-F prefix — no PIN)
-    if (upperId.startsWith("SCF-F")) {
-      const { data } = await supabase.from("members").select("*").eq("id", upperId).single();
-      if (data && (data as any).role === "fan") {
-        const fanMember: TeamMember = {
-          id: data.id, name: data.name, role: "fan",
-          profilePic: (data as any).profile_pic_url,
-          fanBadge: (data as any).fan_badge,
-          fanPoints: (data as any).fan_points || 0,
-          favouriteMoment: (data as any).favourite_moment,
+      if (error) {
+        return { success: false, error: "Authentication failed. Please try again." };
+      }
+
+      if (data?.success && data.member) {
+        const m = data.member;
+        const member: TeamMember = {
+          id: m.id,
+          name: m.name,
+          role: m.role,
+          position: m.position || undefined,
+          squadNumber: m.squad_number || undefined,
+          profilePic: m.profile_pic_url || undefined,
+          fanBadge: m.fan_badge || undefined,
+          fanPoints: m.fan_points || 0,
+          favouriteMoment: m.favourite_moment || undefined,
           contributions: {},
         };
-        setUser(fanMember);
-        localStorage.setItem("suncity_user", JSON.stringify(fanMember));
+        setUser(member);
+        localStorage.setItem("suncity_user", JSON.stringify(member));
         return { success: true };
       }
-      return { success: false, error: "Invalid Fan ID." };
-    }
 
-    // Standard auth
-    const member = authenticateMember(identifier, pin);
-    if (member) {
-      // Refresh from DB to get latest name/data
-      supabase.from("members").select("*").eq("id", member.id).single().then(({ data }) => {
-        if (data) {
-          const refreshed = { ...member, name: data.name, position: data.position, profilePic: data.profile_pic_url };
-          setUser(refreshed);
-          localStorage.setItem("suncity_user", JSON.stringify(refreshed));
-        }
-      });
-      setUser(member);
-      localStorage.setItem("suncity_user", JSON.stringify(member));
-      return { success: true };
+      return { success: false, error: data?.error || "Invalid credentials." };
+    } catch {
+      return { success: false, error: "Authentication failed. Please try again." };
     }
-    return { success: false, error: "Invalid credentials. Check your ID or PIN." };
   }, []);
 
   const logout = useCallback(() => {
