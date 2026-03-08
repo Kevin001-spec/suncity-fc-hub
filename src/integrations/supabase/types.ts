@@ -50,6 +50,13 @@ export type Database = {
             referencedRelation: "members"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "attendance_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "members_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       calendar_events: {
@@ -171,6 +178,13 @@ export type Database = {
             referencedRelation: "members"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "contributions_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       financial_expenses: {
@@ -270,6 +284,13 @@ export type Database = {
             columns: ["player_id"]
             isOneToOne: false
             referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_scorers_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "members_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -484,6 +505,13 @@ export type Database = {
             columns: ["player_id"]
             isOneToOne: false
             referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lineup_positions_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "members_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -736,6 +764,13 @@ export type Database = {
             referencedRelation: "members"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "pending_approvals_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "members_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       player_game_log: {
@@ -874,7 +909,96 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      members_safe: {
+        Row: {
+          aerial_duels: number | null
+          assists: number | null
+          blocks: number | null
+          clean_sheets: number | null
+          clearances: number | null
+          created_at: string | null
+          direct_shots: number | null
+          direct_targets: number | null
+          excused: boolean | null
+          excused_days: string[] | null
+          excused_type: string | null
+          fan_badge: string | null
+          fan_points: number | null
+          favourite_moment: string | null
+          games_played: number | null
+          goals: number | null
+          id: string | null
+          interceptions: number | null
+          name: string | null
+          position: string | null
+          profile_pic_url: string | null
+          role: string | null
+          saves: number | null
+          squad_number: number | null
+          successful_tackles: number | null
+          tackles: number | null
+          username: string | null
+        }
+        Insert: {
+          aerial_duels?: number | null
+          assists?: number | null
+          blocks?: number | null
+          clean_sheets?: number | null
+          clearances?: number | null
+          created_at?: string | null
+          direct_shots?: number | null
+          direct_targets?: number | null
+          excused?: boolean | null
+          excused_days?: string[] | null
+          excused_type?: string | null
+          fan_badge?: string | null
+          fan_points?: number | null
+          favourite_moment?: string | null
+          games_played?: number | null
+          goals?: number | null
+          id?: string | null
+          interceptions?: number | null
+          name?: string | null
+          position?: string | null
+          profile_pic_url?: string | null
+          role?: string | null
+          saves?: number | null
+          squad_number?: number | null
+          successful_tackles?: number | null
+          tackles?: number | null
+          username?: string | null
+        }
+        Update: {
+          aerial_duels?: number | null
+          assists?: number | null
+          blocks?: number | null
+          clean_sheets?: number | null
+          clearances?: number | null
+          created_at?: string | null
+          direct_shots?: number | null
+          direct_targets?: number | null
+          excused?: boolean | null
+          excused_days?: string[] | null
+          excused_type?: string | null
+          fan_badge?: string | null
+          fan_points?: number | null
+          favourite_moment?: string | null
+          games_played?: number | null
+          goals?: number | null
+          id?: string | null
+          interceptions?: number | null
+          name?: string | null
+          position?: string | null
+          profile_pic_url?: string | null
+          role?: string | null
+          saves?: number | null
+          squad_number?: number | null
+          successful_tackles?: number | null
+          tackles?: number | null
+          username?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
