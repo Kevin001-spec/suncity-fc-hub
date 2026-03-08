@@ -39,6 +39,7 @@ const Stats = () => {
   const [overviewDialog, setOverviewDialog] = useState<string | null>(null);
   const [selectedArchive, setSelectedArchive] = useState<any | null>(null);
   const [matchReportGameId, setMatchReportGameId] = useState<string | null>(null);
+  const [selectedMemberCard, setSelectedMemberCard] = useState<TeamMember | null>(null);
 
   // Load overviews and season config
   useEffect(() => {
