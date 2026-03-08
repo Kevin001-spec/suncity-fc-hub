@@ -178,7 +178,7 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
 
   // ===== LOAD ALL DATA FROM SUPABASE =====
   const loadMembers = useCallback(async () => {
-    const { data } = await supabase.from("members").select("*");
+    const { data } = await supabase.from("members_safe" as any).select("*");
     if (data && data.length > 0) {
       const { data: contribs } = await supabase.from("contributions").select("*");
       const contribMap: Record<string, Record<string, string>> = {};
