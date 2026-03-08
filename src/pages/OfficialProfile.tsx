@@ -54,6 +54,42 @@ interface LeagueTeam {
   division: string;
 }
 
+// Fan Management Row Component
+const FanRow = ({ fan, profilePic, badgePresets }: { fan: any; profilePic?: string; badgePresets: string[] }) => {
+  const { updateFanBadge, updateFanPoints } = useTeamData();
+  const { toast } = useToast();
+  const [badge, setBadge] = useState(fan.fanBadge || "");
+  const [points, setPoints] = useState(String(fan.fanPoints || 0));
+
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-lg border border-border">
+      <Avatar className="w-10 h-10 border border-primary/20">
+        {profilePic && <AvatarImage src={profilePic} className="aspect-square object-cover object-center" />}
+        <AvatarFallback className="bg-secondary text-primary font-heading text-sm">{fan.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+      </Avatar>
+      <div className="flex-1 space-y-2">
+        <p className="font-body text-sm text-foreground font-medium">{fan.name} <span className="text-xs text-muted-foreground">({fan.id})</span></p>
+        <div className="flex gap-2">
+          <select value={badge} onChange={(e) => setBadge(e.target.value)}
+            className="flex-1 h-8 rounded-md border border-input bg-secondary px-2 text-foreground font-body text-xs">
+            <option value="">No badge</option>
+            {badgePresets.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <Input type="number" value={points} onChange={(e) => setPoints(e.target.value)}
+            onFocus={(e) => { if (e.target.value === "0") setPoints(""); }}
+            onBlur={(e) => { if (e.target.value === "") setPoints("0"); }}
+            className="w-20 h-8 text-xs bg-secondary border-border font-body" placeholder="Points" />
+          <Button size="sm" className="h-8 text-xs font-body" onClick={async () => {
+            await updateFanBadge(fan.id, badge);
+            await updateFanPoints(fan.id, parseInt(points) || 0);
+            toast({ title: "Fan Updated", description: `${fan.name} — ${badge || "No badge"}, ${points} pts` });
+          }}><Save className="w-3 h-3 mr-1" /> Save</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const OfficialProfile = () => {
   const { user } = useAuth();
   const {
@@ -491,15 +527,15 @@ const OfficialProfile = () => {
 
   // Handle add player/fan
   const handleAddPlayer = async () => {
-    if (!newPlayerName || (!newPlayerSquad && newMemberType === "player")) return;
-    const newId = await addPlayer(newPlayerName, parseInt(newPlayerSquad) || 0, newPlayerPos, newMemberType);
+    if (!newPlayerName) return;
+    const newId = await addPlayer(newPlayerName, 0, newPlayerPos, newMemberType);
     if (newMemberType === "fan") {
       setAddedFanId(newId);
       toast({ title: "Fan Added", description: `${newPlayerName} — Login ID: ${newId}` });
     } else {
-      toast({ title: "Player Added", description: `${newPlayerName} (#${newPlayerSquad})` });
+      toast({ title: "Player Added", description: `${newPlayerName} added.` });
     }
-    setNewPlayerName(""); setNewPlayerSquad(""); setNewPlayerPos(""); setNewMemberType("player");
+    setNewPlayerName(""); setNewPlayerPos(""); setNewMemberType("player");
   };
 
   // Handle edit score
@@ -601,7 +637,7 @@ const OfficialProfile = () => {
   const iconMapOfficial: Record<string, any> = {
     saves: Hand, cleanSheets: Shield, aerialDuels: Crosshair,
     tackles: Shield, interceptions: Crosshair, assists: Footprints,
-    goals: Target, directShots: Crosshair,
+    goals: Target, directShots: Crosshair, successfulTackles: Shield,
   };
   const getCaptainStatCards = () => {
     return captainStatFields.map(sf => ({
@@ -734,11 +770,15 @@ const OfficialProfile = () => {
                           <td className="py-1 px-1">
                             <Input type="number" min={0} value={firstHalfStats[key]}
                               onChange={(e) => setFirstHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
+                              onFocus={(e) => { if (e.target.value === "0") setFirstHalfStats(p => ({ ...p, [key]: "" as any })); }}
+                              onBlur={(e) => { if (e.target.value === "") setFirstHalfStats(p => ({ ...p, [key]: 0 })); }}
                               className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
                           </td>
                           <td className="py-1 px-1">
                             <Input type="number" min={0} value={secondHalfStats[key]}
                               onChange={(e) => setSecondHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
+                              onFocus={(e) => { if (e.target.value === "0") setSecondHalfStats(p => ({ ...p, [key]: "" as any })); }}
+                              onBlur={(e) => { if (e.target.value === "") setSecondHalfStats(p => ({ ...p, [key]: 0 })); }}
                               className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
                           </td>
                         </tr>
@@ -869,7 +909,6 @@ const OfficialProfile = () => {
                 <Button variant={newMemberType === "fan" ? "default" : "outline"} onClick={() => setNewMemberType("fan")} className="font-body">Fan</Button>
               </div>
               <Input placeholder={newMemberType === "fan" ? "Fan name" : "Player name"} value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} className="bg-secondary border-border font-body" />
-              <Input placeholder="Squad number" type="number" value={newPlayerSquad} onChange={(e) => setNewPlayerSquad(e.target.value)} className="bg-secondary border-border font-body" />
               {newMemberType === "player" && (
                 <select value={newPlayerPos} onChange={(e) => setNewPlayerPos(e.target.value)} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
                   <option value="">Select position</option>
@@ -882,7 +921,7 @@ const OfficialProfile = () => {
                   <option value="ATT">Attacker</option>
                 </select>
               )}
-              <Button onClick={handleAddPlayer} disabled={!newPlayerName || !newPlayerSquad} className="w-full font-body"><UserPlus className="w-4 h-4 mr-1" /> Add {newMemberType === "fan" ? "Fan" : "Player"}</Button>
+              <Button onClick={handleAddPlayer} disabled={!newPlayerName} className="w-full font-body"><UserPlus className="w-4 h-4 mr-1" /> Add {newMemberType === "fan" ? "Fan" : "Player"}</Button>
             </CardContent>
           </Card>
         )}
@@ -908,6 +947,7 @@ const OfficialProfile = () => {
                   assists: [statsAssists, setStatsAssists],
                   goals: [statsGoals, setStatsGoals],
                   directShots: [statsDirectShots, setStatsDirectShots],
+                  successfulTackles: [statsSuccessfulTackles, setStatsSuccessfulTackles],
                 };
                 return (
                   <>
@@ -918,7 +958,7 @@ const OfficialProfile = () => {
                         return (
                           <div key={f.key}>
                             <label className="text-xs text-primary font-body">{f.label}</label>
-                            <Input type="number" value={val} onChange={(e) => setter(e.target.value)} className="bg-secondary border-border font-body" />
+                            <Input type="number" value={val} onChange={(e) => setter(e.target.value)} onFocus={(e) => { if (e.target.value === "0") setter(""); }} onBlur={(e) => { if (e.target.value === "") setter("0"); }} className="bg-secondary border-border font-body" />
                           </div>
                         );
                       })}
@@ -969,7 +1009,7 @@ const OfficialProfile = () => {
                             return (
                               <div key={f.key}>
                                 <label className="text-xs text-muted-foreground font-body">{f.label}</label>
-                                <Input type="number" value={val} onChange={(e) => setter(e.target.value)} className="bg-secondary border-border font-body" />
+                                <Input type="number" value={val} onChange={(e) => setter(e.target.value)} onFocus={(e) => { if (e.target.value === "0") setter(""); }} onBlur={(e) => { if (e.target.value === "") setter("0"); }} className="bg-secondary border-border font-body" />
                               </div>
                             );
                           })}
@@ -1495,6 +1535,23 @@ const OfficialProfile = () => {
 
         {/* Lineup Builder — Coach only */}
         {isCoach && <LineupBuilder />}
+
+        {/* ===== FAN MANAGEMENT — Coach & Manager ===== */}
+        {(isCoach || isManager) && (() => {
+          const fans = members.filter(m => m.role === "fan");
+          if (fans.length === 0) return null;
+          const BADGE_PRESETS = ["Super Fan", "Legend", "MVP Fan", "Rising Star", "OG Supporter"];
+          return (
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Star className="w-5 h-5 text-primary" /> Fan Management</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                {fans.map(fan => (
+                  <FanRow key={fan.id} fan={fan} profilePic={profilePics[fan.id]} badgePresets={BADGE_PRESETS} />
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* Coach: First 11 Selector */}
         {isCoach && (

@@ -29,6 +29,7 @@ const MID_ATT_STATS: StatField[] = [
   { key: "goals", label: "Goals", dbColumn: "goals" },
   { key: "assists", label: "Assists", dbColumn: "assists" },
   { key: "directShots", label: "Shots on Target", dbColumn: "direct_shots" },
+  { key: "successfulTackles", label: "Successful Tackles", dbColumn: "successful_tackles" },
 ];
 
 export function getStatsForPosition(position?: string): StatField[] {

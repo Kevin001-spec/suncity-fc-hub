@@ -21,7 +21,7 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const iconMap: Record<string, any> = {
   saves: Hand, cleanSheets: Shield, aerialDuels: Crosshair,
   tackles: Shield, interceptions: Crosshair, assists: Footprints,
-  goals: Target, directShots: Target,
+  goals: Target, directShots: Target, successfulTackles: Shield,
 };
 
 const PlayerProfile = () => {
@@ -168,7 +168,7 @@ const PlayerProfile = () => {
             <Badge variant="outline" className="border-primary/30 text-primary font-body">{user.id}</Badge>
           </div>
           {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
-          {liveMember.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{liveMember.squadNumber}</p>}
+          
         </motion.div>
 
         {/* Stats */}
