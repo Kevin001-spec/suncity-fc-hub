@@ -146,6 +146,10 @@ const OfficialProfile = () => {
   const [newPlayerSquad, setNewPlayerSquad] = useState("");
   const [newPlayerPos, setNewPlayerPos] = useState("");
   const [newMemberType, setNewMemberType] = useState<"player" | "fan">("player");
+  const [newGameType, setNewGameType] = useState("friendly");
+  const [newVenue, setNewVenue] = useState("");
+  const [newScoreDate, setNewScoreDate] = useState("");
+  const [addedFanId, setAddedFanId] = useState<string | null>(null);
 
   // Match Performance Recorder
   const [perfGameId, setPerfGameId] = useState("");
@@ -207,7 +211,7 @@ const OfficialProfile = () => {
   const canApproveContributions = isFadhir || isCoach;
   const canDeletePhotos = isManager;
   const canManageContribEvents = isFadhir || isCaptain;
-  const showContributions = !isFabian;
+  const showContributions = !isFabian && !isAssistantCoach;
   const canManageAttendance = isManager || user.id === "SCF-004" || isAssistantCoach;
   const canAddScoresEvents = isManager || isCaptain;
   const canReceiveMessages = true; // All officials can receive messages now
@@ -222,12 +226,15 @@ const OfficialProfile = () => {
   const addScore = () => {
     if (!newOpponent || !newOurScore || !newTheirScore) return;
     addGameScore({
-      date: new Date().toISOString().split("T")[0],
+      date: newScoreDate || new Date().toISOString().split("T")[0],
       opponent: newOpponent, ourScore: parseInt(newOurScore), theirScore: parseInt(newTheirScore),
       scorers: scorers.filter(Boolean),
+      gameType: newGameType,
+      venue: newVenue,
     });
     toast({ title: "Score Added", description: `vs ${newOpponent} recorded.` });
     setNewOpponent(""); setNewOurScore(""); setNewTheirScore(""); setScorers([]);
+    setNewGameType("friendly"); setNewVenue(""); setNewScoreDate("");
   };
 
   const addEvent = () => {
@@ -455,9 +462,14 @@ const OfficialProfile = () => {
 
   // Handle add player/fan
   const handleAddPlayer = async () => {
-    if (!newPlayerName || !newPlayerSquad) return;
-    await addPlayer(newPlayerName, parseInt(newPlayerSquad), newPlayerPos, newMemberType);
-    toast({ title: `${newMemberType === "fan" ? "Fan" : "Player"} Added`, description: `${newPlayerName} (#${newPlayerSquad})` });
+    if (!newPlayerName || (!newPlayerSquad && newMemberType === "player")) return;
+    const newId = await addPlayer(newPlayerName, parseInt(newPlayerSquad) || 0, newPlayerPos, newMemberType);
+    if (newMemberType === "fan") {
+      setAddedFanId(newId);
+      toast({ title: "Fan Added", description: `${newPlayerName} — Login ID: ${newId}` });
+    } else {
+      toast({ title: "Player Added", description: `${newPlayerName} (#${newPlayerSquad})` });
+    }
     setNewPlayerName(""); setNewPlayerSquad(""); setNewPlayerPos(""); setNewMemberType("player");
   };
 
@@ -569,7 +581,7 @@ const OfficialProfile = () => {
         </motion.div>
 
         {/* ===== CAPTAIN PERSONAL STATS ===== */}
-        {isCaptain && (
+        {(isCaptain || isFadhir) && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
             <Card className="bg-card border-border card-glow">
               <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> My Stats</CardTitle></CardHeader>
@@ -599,6 +611,20 @@ const OfficialProfile = () => {
                   <Input placeholder="Our score" type="number" value={newOurScore} onChange={(e) => { setNewOurScore(e.target.value); setScorers([]); }} className="bg-secondary border-border font-body" />
                   <Input placeholder="Their score" type="number" value={newTheirScore} onChange={(e) => setNewTheirScore(e.target.value)} className="bg-secondary border-border font-body" />
                 </div>
+                <Input type="date" value={newScoreDate} onChange={(e) => setNewScoreDate(e.target.value)} className="bg-secondary border-border font-body" placeholder="Date played" />
+                <select value={newGameType} onChange={(e) => setNewGameType(e.target.value)}
+                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  <option value="friendly">Friendly</option>
+                  <option value="league">League (Kanjuri)</option>
+                  <option value="amateur">Amateur</option>
+                </select>
+                <select value={newVenue} onChange={(e) => setNewVenue(e.target.value)}
+                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  <option value="">Select venue</option>
+                  <option value="Kanjuri Grounds">Kanjuri Grounds</option>
+                  <option value="G-Town">G-Town</option>
+                  <option value="School Field">School Field</option>
+                </select>
                 {ourScoreNum > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground font-body">Who scored? ({ourScoreNum} goal{ourScoreNum > 1 ? "s" : ""})</p>

@@ -72,10 +72,10 @@ const Login = () => {
   // Exclude "contributions" section from story
   const storyEntries = Object.entries(teamBackground).filter(([key]) => key !== "contributions");
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setLoading(true);
     setError("");
-    const result = isPlayer ? login(memberId) : login(memberId, pin);
+    const result = await (isPlayer ? login(memberId) : login(memberId, pin));
     if (result.success) {
       navigate("/dashboard");
     } else {

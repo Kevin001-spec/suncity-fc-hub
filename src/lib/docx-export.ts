@@ -8,7 +8,16 @@ import suncityBadge from "@/assets/suncity-badge.png";
 
 async function fetchImageAsBuffer(url: string): Promise<ArrayBuffer | null> {
   try {
-    const response = await fetch(url);
+    // Strip query parameters to avoid cache-buster breaking image fetch
+    const cleanUrl = url.split("?")[0];
+    const response = await fetch(cleanUrl);
+    if (!response.ok) {
+      // Retry with original URL if clean URL fails
+      const retryResponse = await fetch(url);
+      if (!retryResponse.ok) return null;
+      const blob = await retryResponse.blob();
+      return await blob.arrayBuffer();
+    }
     const blob = await response.blob();
     return await blob.arrayBuffer();
   } catch {
@@ -163,7 +172,8 @@ export async function generatePlayerProfileDocx(
   attendanceDays: { day: string; status: string }[],
   opponents: { opponent: string; date: string; result: string }[],
   contributions: { month: string; status: string }[],
-  profilePicUrl?: string
+  profilePicUrl?: string,
+  weeklyLogs?: { weekStart: string; stats: { label: string; value: number }[] }[]
 ) {
   const badgeBuffer = await fetchImageAsBuffer(suncityBadge);
   const profileBuffer = profilePicUrl ? await fetchImageAsBuffer(profilePicUrl) : null;
@@ -296,6 +306,33 @@ export async function generatePlayerProfileDocx(
       ),
     ];
     children.push(new Table({ rows: oppRows, width: { size: 100, type: WidthType.PERCENTAGE } }));
+    children.push(new Paragraph({ spacing: { after: 200 } }));
+  }
+
+  // Weekly Stats History
+  if (weeklyLogs && weeklyLogs.length > 0) {
+    children.push(new Paragraph({
+      children: [new TextRun({ text: "Weekly Activity Log", bold: true, size: 22, font: "Calibri" })],
+      spacing: { after: 100 },
+    }));
+    for (const log of weeklyLogs) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: `Week of ${log.weekStart}`, bold: true, size: 18, font: "Calibri", color: "193769" })],
+        spacing: { after: 60 },
+      }));
+      const logRows = log.stats.filter(s => s.value > 0).map(s =>
+        new TableRow({
+          children: [
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: s.label, size: 16, font: "Calibri" })] })], borders: BORDER }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: String(s.value), bold: true, size: 16, font: "Calibri" })] })], borders: BORDER }),
+          ],
+        })
+      );
+      if (logRows.length > 0) {
+        children.push(new Table({ rows: logRows, width: { size: 100, type: WidthType.PERCENTAGE } }));
+      }
+      children.push(new Paragraph({ spacing: { after: 100 } }));
+    }
   }
 
   children.push(new Paragraph({
