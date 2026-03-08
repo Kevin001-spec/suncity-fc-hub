@@ -54,6 +54,42 @@ interface LeagueTeam {
   division: string;
 }
 
+// Fan Management Row Component
+const FanRow = ({ fan, profilePic, badgePresets }: { fan: any; profilePic?: string; badgePresets: string[] }) => {
+  const { updateFanBadge, updateFanPoints } = useTeamData();
+  const { toast } = useToast();
+  const [badge, setBadge] = useState(fan.fanBadge || "");
+  const [points, setPoints] = useState(String(fan.fanPoints || 0));
+
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-lg border border-border">
+      <Avatar className="w-10 h-10 border border-primary/20">
+        {profilePic && <AvatarImage src={profilePic} className="aspect-square object-cover object-center" />}
+        <AvatarFallback className="bg-secondary text-primary font-heading text-sm">{fan.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+      </Avatar>
+      <div className="flex-1 space-y-2">
+        <p className="font-body text-sm text-foreground font-medium">{fan.name} <span className="text-xs text-muted-foreground">({fan.id})</span></p>
+        <div className="flex gap-2">
+          <select value={badge} onChange={(e) => setBadge(e.target.value)}
+            className="flex-1 h-8 rounded-md border border-input bg-secondary px-2 text-foreground font-body text-xs">
+            <option value="">No badge</option>
+            {badgePresets.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <Input type="number" value={points} onChange={(e) => setPoints(e.target.value)}
+            onFocus={(e) => { if (e.target.value === "0") setPoints(""); }}
+            onBlur={(e) => { if (e.target.value === "") setPoints("0"); }}
+            className="w-20 h-8 text-xs bg-secondary border-border font-body" placeholder="Points" />
+          <Button size="sm" className="h-8 text-xs font-body" onClick={async () => {
+            await updateFanBadge(fan.id, badge);
+            await updateFanPoints(fan.id, parseInt(points) || 0);
+            toast({ title: "Fan Updated", description: `${fan.name} — ${badge || "No badge"}, ${points} pts` });
+          }}><Save className="w-3 h-3 mr-1" /> Save</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const OfficialProfile = () => {
   const { user } = useAuth();
   const {
