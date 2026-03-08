@@ -28,8 +28,7 @@ const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profi
           <h3 className="font-heading text-lg text-foreground">{member.name}</h3>
           <p className="text-primary font-body text-sm">{member.id}</p>
           {member.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body mt-1">Field Captain</Badge>}
-          {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(member.position)}</p>}
-          {member.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{member.squadNumber}</p>}
+           {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(member.position)}</p>}
           <div className={`grid gap-3 mt-4 pt-4 border-t border-border`} style={{ gridTemplateColumns: `repeat(${Math.min(statFields.length, 5)}, 1fr)` }}>
             {statFields.map(sf => (
               <div key={sf.key}>
@@ -103,7 +102,6 @@ const Players = () => {
                     <p className="text-xs text-muted-foreground font-body">
                       {member.role === "captain" ? "Field Captain • " : ""}
                       {getFullPositionName(member.position)}
-                      {member.squadNumber ? ` • #${member.squadNumber}` : ""}
                     </p>
                   </div>
                   <Avatar className="w-12 h-12 border border-primary/20 ml-3">

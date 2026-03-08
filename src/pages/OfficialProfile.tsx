@@ -491,15 +491,15 @@ const OfficialProfile = () => {
 
   // Handle add player/fan
   const handleAddPlayer = async () => {
-    if (!newPlayerName || (!newPlayerSquad && newMemberType === "player")) return;
-    const newId = await addPlayer(newPlayerName, parseInt(newPlayerSquad) || 0, newPlayerPos, newMemberType);
+    if (!newPlayerName) return;
+    const newId = await addPlayer(newPlayerName, 0, newPlayerPos, newMemberType);
     if (newMemberType === "fan") {
       setAddedFanId(newId);
       toast({ title: "Fan Added", description: `${newPlayerName} — Login ID: ${newId}` });
     } else {
-      toast({ title: "Player Added", description: `${newPlayerName} (#${newPlayerSquad})` });
+      toast({ title: "Player Added", description: `${newPlayerName} added.` });
     }
-    setNewPlayerName(""); setNewPlayerSquad(""); setNewPlayerPos(""); setNewMemberType("player");
+    setNewPlayerName(""); setNewPlayerPos(""); setNewMemberType("player");
   };
 
   // Handle edit score
@@ -601,7 +601,7 @@ const OfficialProfile = () => {
   const iconMapOfficial: Record<string, any> = {
     saves: Hand, cleanSheets: Shield, aerialDuels: Crosshair,
     tackles: Shield, interceptions: Crosshair, assists: Footprints,
-    goals: Target, directShots: Crosshair,
+    goals: Target, directShots: Crosshair, successfulTackles: Shield,
   };
   const getCaptainStatCards = () => {
     return captainStatFields.map(sf => ({
@@ -734,11 +734,15 @@ const OfficialProfile = () => {
                           <td className="py-1 px-1">
                             <Input type="number" min={0} value={firstHalfStats[key]}
                               onChange={(e) => setFirstHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
+                              onFocus={(e) => { if (e.target.value === "0") setFirstHalfStats(p => ({ ...p, [key]: "" as any })); }}
+                              onBlur={(e) => { if (e.target.value === "") setFirstHalfStats(p => ({ ...p, [key]: 0 })); }}
                               className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
                           </td>
                           <td className="py-1 px-1">
                             <Input type="number" min={0} value={secondHalfStats[key]}
                               onChange={(e) => setSecondHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
+                              onFocus={(e) => { if (e.target.value === "0") setSecondHalfStats(p => ({ ...p, [key]: "" as any })); }}
+                              onBlur={(e) => { if (e.target.value === "") setSecondHalfStats(p => ({ ...p, [key]: 0 })); }}
                               className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
                           </td>
                         </tr>
@@ -869,7 +873,6 @@ const OfficialProfile = () => {
                 <Button variant={newMemberType === "fan" ? "default" : "outline"} onClick={() => setNewMemberType("fan")} className="font-body">Fan</Button>
               </div>
               <Input placeholder={newMemberType === "fan" ? "Fan name" : "Player name"} value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} className="bg-secondary border-border font-body" />
-              <Input placeholder="Squad number" type="number" value={newPlayerSquad} onChange={(e) => setNewPlayerSquad(e.target.value)} className="bg-secondary border-border font-body" />
               {newMemberType === "player" && (
                 <select value={newPlayerPos} onChange={(e) => setNewPlayerPos(e.target.value)} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
                   <option value="">Select position</option>
@@ -882,7 +885,7 @@ const OfficialProfile = () => {
                   <option value="ATT">Attacker</option>
                 </select>
               )}
-              <Button onClick={handleAddPlayer} disabled={!newPlayerName || !newPlayerSquad} className="w-full font-body"><UserPlus className="w-4 h-4 mr-1" /> Add {newMemberType === "fan" ? "Fan" : "Player"}</Button>
+              <Button onClick={handleAddPlayer} disabled={!newPlayerName} className="w-full font-body"><UserPlus className="w-4 h-4 mr-1" /> Add {newMemberType === "fan" ? "Fan" : "Player"}</Button>
             </CardContent>
           </Card>
         )}
@@ -908,6 +911,7 @@ const OfficialProfile = () => {
                   assists: [statsAssists, setStatsAssists],
                   goals: [statsGoals, setStatsGoals],
                   directShots: [statsDirectShots, setStatsDirectShots],
+                  successfulTackles: [statsSuccessfulTackles, setStatsSuccessfulTackles],
                 };
                 return (
                   <>
@@ -918,7 +922,7 @@ const OfficialProfile = () => {
                         return (
                           <div key={f.key}>
                             <label className="text-xs text-primary font-body">{f.label}</label>
-                            <Input type="number" value={val} onChange={(e) => setter(e.target.value)} className="bg-secondary border-border font-body" />
+                            <Input type="number" value={val} onChange={(e) => setter(e.target.value)} onFocus={(e) => { if (e.target.value === "0") setter(""); }} onBlur={(e) => { if (e.target.value === "") setter("0"); }} className="bg-secondary border-border font-body" />
                           </div>
                         );
                       })}
@@ -969,7 +973,7 @@ const OfficialProfile = () => {
                             return (
                               <div key={f.key}>
                                 <label className="text-xs text-muted-foreground font-body">{f.label}</label>
-                                <Input type="number" value={val} onChange={(e) => setter(e.target.value)} className="bg-secondary border-border font-body" />
+                                <Input type="number" value={val} onChange={(e) => setter(e.target.value)} onFocus={(e) => { if (e.target.value === "0") setter(""); }} onBlur={(e) => { if (e.target.value === "") setter("0"); }} className="bg-secondary border-border font-body" />
                               </div>
                             );
                           })}

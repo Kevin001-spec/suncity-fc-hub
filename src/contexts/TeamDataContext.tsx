@@ -704,15 +704,15 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
       } as any);
     } else {
       const { data: maxRow } = await supabase.from("members").select("id").like("id", "SCF-P%").order("id", { ascending: false }).limit(1);
-      let nextNum = squadNumber;
+      let nextNum = 1;
       if (maxRow && maxRow.length > 0) {
         const maxId = (maxRow[0] as any).id as string;
         const num = parseInt(maxId.replace("SCF-P", ""));
-        if (!isNaN(num) && num >= nextNum) nextNum = num + 1;
+        if (!isNaN(num)) nextNum = num + 1;
       }
       newId = `SCF-P${String(nextNum).padStart(2, "0")}`;
       await supabase.from("members").insert({
-        id: newId, name, squad_number: squadNumber, position: position || null, role: role || "player",
+        id: newId, name, squad_number: null, position: position || null, role: role || "player",
       } as any);
     }
     loadMembers();
