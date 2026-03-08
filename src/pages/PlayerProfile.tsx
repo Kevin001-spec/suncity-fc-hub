@@ -14,8 +14,15 @@ import { Target, Footprints, Gamepad2, Upload, Calendar, Download, Shield, Hand,
 import { useToast } from "@/hooks/use-toast";
 import { getContribMonthsForMember, getFullPositionName, getPositionGroup, type WeeklyStatsLog, type PlayerGameLog } from "@/data/team-data";
 import { generatePlayerProfileDocx } from "@/lib/docx-export";
+import { getStatsForPosition } from "@/lib/position-stats";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+
+const iconMap: Record<string, any> = {
+  saves: Hand, cleanSheets: Shield, aerialDuels: Crosshair,
+  tackles: Shield, interceptions: Crosshair, assists: Footprints,
+  goals: Target, directShots: Target,
+};
 
 const PlayerProfile = () => {
   const { user } = useAuth();
@@ -79,32 +86,14 @@ const PlayerProfile = () => {
     .filter(game => game.scorers?.includes(user.id))
     .map(game => ({ opponent: game.opponent, date: game.date, result: `${game.ourScore}-${game.theirScore}` }));
 
-  const getStatCards = () => {
-    if (posGroup === "GK") {
-      return [
-        { icon: Hand, label: "Saves", value: liveMember.saves || 0 },
-        { icon: Shield, label: "Clean Sheets", value: liveMember.cleanSheets || 0 },
-        { icon: Crosshair, label: "Aerial Duels", value: liveMember.aerialDuels || 0 },
-      ];
-    }
-    if (posGroup === "DEF") {
-      return [
-        { icon: Shield, label: "Tackles", value: liveMember.tackles || 0 },
-        { icon: Crosshair, label: "Interceptions", value: liveMember.interceptions || 0 },
-        { icon: Footprints, label: "Clearances", value: liveMember.clearances || 0 },
-        { icon: Target, label: "Direct Shots", value: liveMember.directShots || 0 },
-      ];
-    }
-    return [
-      { icon: Target, label: "Goals", value: liveMember.goals || 0 },
-      { icon: Footprints, label: "Assists", value: liveMember.assists || 0 },
-      { icon: Gamepad2, label: "Games", value: liveMember.gamesPlayed || 0 },
-      { icon: Shield, label: "Successful Tackles", value: liveMember.successfulTackles || 0 },
-      { icon: Crosshair, label: "Direct Targets", value: liveMember.directTargets || 0 },
-    ];
-  };
+  // Position-specific stats using centralized definition
+  const statFields = getStatsForPosition(liveMember?.position);
+  const statCards = isFan ? [] : statFields.map(sf => ({
+    icon: iconMap[sf.key] || Target,
+    label: sf.label,
+    value: (liveMember as any)?.[sf.key] || 0,
+  }));
 
-  const statCards = isFan ? [] : getStatCards();
   const memberContribMonths = getContribMonthsForMember(user.id);
 
   const handleExportProfile = async (detailed = false) => {
@@ -121,21 +110,10 @@ const PlayerProfile = () => {
     if (detailed && weeklyLogs.length > 0) {
       logsForExport = weeklyLogs.map(log => ({
         weekStart: log.weekStart,
-        stats: [
-          { label: "Goals", value: log.goals },
-          { label: "Assists", value: log.assists },
-          { label: "Games Played", value: log.gamesPlayed },
-          { label: "Saves", value: log.saves },
-          { label: "Clean Sheets", value: log.cleanSheets },
-          { label: "Aerial Duels", value: log.aerialDuels },
-          { label: "Tackles", value: log.tackles },
-          { label: "Interceptions", value: log.interceptions },
-          { label: "Blocks", value: log.blocks },
-          { label: "Clearances", value: log.clearances },
-          { label: "Successful Tackles", value: log.successfulTackles },
-          { label: "Direct Targets", value: log.directTargets },
-          { label: "Direct Shots", value: log.directShots },
-        ],
+        stats: statFields.map(sf => ({
+          label: sf.label,
+          value: (log as any)[sf.key] || 0,
+        })),
       }));
     }
 
@@ -151,19 +129,27 @@ const PlayerProfile = () => {
     if (!msgRecipient || !msgContent.trim()) return;
     await sendMessage(user.id, msgRecipient, msgContent.trim());
     toast({ title: "Message Sent" });
-    setMsgContent(""); setMsgRecipient("");
+    setMsgRecipient("");
+    setMsgContent("");
   };
 
-  const handleSaveMoment = async () => {
-    if (!momentText.trim()) return;
-    await updateFavouriteMoment(user.id, momentText.trim());
-    toast({ title: "Moment Saved", description: "Your favourite team moment has been updated." });
-  };
+  const matchHistory = playerGameLogs.map(log => {
+    const game = gameScores.find(g => g.id === log.gameId);
+    if (!game) return null;
+    return {
+      opponent: game.opponent,
+      date: new Date(game.date).toLocaleDateString(),
+      result: `${game.ourScore}-${game.theirScore}`,
+      gameType: game.gameType || "friendly",
+      venue: game.venue || "—",
+    };
+  }).filter(Boolean) as { opponent: string; date: string; result: string; gameType: string; venue: string }[];
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+        {/* Profile Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
           <div className="relative inline-block">
             <Avatar className="w-24 h-24 border-2 border-primary mx-auto">
@@ -178,225 +164,25 @@ const PlayerProfile = () => {
           </div>
           <h2 className="font-heading text-2xl text-foreground mt-4">{liveMember.name}</h2>
           <div className="flex items-center justify-center gap-2 mt-1">
+            <Badge className="bg-primary text-primary-foreground font-body capitalize">{user.role}</Badge>
             <Badge variant="outline" className="border-primary/30 text-primary font-body">{user.id}</Badge>
-            {user.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body">Field Captain</Badge>}
-            {isFan && <Badge className="bg-primary text-primary-foreground font-body">Fan</Badge>}
           </div>
-          {!isFan && liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
-          {!isFan && liveMember.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{liveMember.squadNumber}</p>}
-
-          {/* Fan badge & points */}
-          {isFan && liveMember.fanBadge && (
-            <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/20 to-primary/5 border border-primary/30">
-              <Star className="w-4 h-4 text-primary fill-primary" />
-              <span className="font-heading text-sm text-primary">{liveMember.fanBadge}</span>
-            </div>
-          )}
-          {isFan && (
-            <p className="text-sm text-primary font-heading mt-2">⭐ {liveMember.fanPoints || 0} Points</p>
-          )}
-
-          {showExport && !isFan && (
-            <div className="flex gap-2 justify-center mt-3">
-              <Button onClick={() => handleExportProfile(false)} variant="outline" size="sm" className="font-body text-xs border-primary/30 text-primary">
-                <Download className="w-3 h-3 mr-1" /> Export This Week
-              </Button>
-              {showDetailedExport && weeklyLogs.length > 0 && (
-                <Button onClick={() => handleExportProfile(true)} variant="outline" size="sm" className="font-body text-xs border-primary/30 text-primary">
-                  <Download className="w-3 h-3 mr-1" /> Export Full Record
-                </Button>
-              )}
-            </div>
-          )}
+          {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
+          {liveMember.squadNumber && <p className="text-muted-foreground font-body text-sm mt-1">Squad #{liveMember.squadNumber}</p>}
         </motion.div>
 
-        {/* Stats Cards (not for fans) */}
+        {/* Stats */}
         {!isFan && statCards.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-            className={`grid gap-4 ${statCards.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}>
-            {statCards.map(({ icon: Icon, label, value }) => (
-              <Card key={label} className="bg-card border-border card-glow text-center">
-                <CardContent className="pt-6 pb-4">
-                  <Icon className="w-6 h-6 text-primary mx-auto mb-2" />
-                  <p className="text-2xl font-heading text-foreground">{value}</p>
-                  <p className="text-xs text-muted-foreground font-body">{label}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </motion.div>
-        )}
-
-        {/* Fan: Favourite Moment */}
-        {isFan && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
             <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                <Heart className="w-5 h-5 text-primary" /> Favourite Team Moment
-              </CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <Textarea placeholder="Share your favourite team moment..." value={momentText} onChange={(e) => setMomentText(e.target.value)}
-                  className="bg-secondary border-border font-body" rows={3} />
-                <Button onClick={handleSaveMoment} disabled={!momentText.trim()} className="w-full font-body">
-                  <Heart className="w-4 h-4 mr-1" /> Save Moment
-                </Button>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Fan: Upload Photos */}
-        {isFan && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                <Upload className="w-5 h-5 text-primary" /> Upload Photos
-              </CardTitle></CardHeader>
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground">Performance Stats</CardTitle></CardHeader>
               <CardContent>
-                <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors">
-                  <Upload className="w-8 h-8 text-muted-foreground mb-2" />
-                  <span className="text-sm text-muted-foreground font-body">Click to select photos</span>
-                  <input ref={mediaInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} />
-                </label>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Weekly Attendance (not for fans) */}
-        {!isFan && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader>
-                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary" /> This Week's Attendance
-                </CardTitle>
-                <p className="text-xs text-muted-foreground font-body">Week of {currentWeekStart}</p>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-2 justify-between">
-                  {DAYS.map((day) => {
-                    const record = myAttendance.find((a) => a.day === day);
-                    const status = record?.status || "absent";
-                    const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : "⬜";
-                    const colors: Record<string, string> = {
-                      present: "bg-green-500/20 border-green-500/40",
-                      absent: "bg-muted/30 border-border",
-                      excused: "bg-blue-500/20 border-blue-500/30",
-                      no_activity: "bg-muted border-border",
-                    };
-                    return (
-                      <div key={day} className="text-center flex-1">
-                        <p className="text-xs text-muted-foreground font-body mb-1">{day.slice(0, 3)}</p>
-                        <div className={`w-10 h-10 mx-auto rounded-lg border-2 flex items-center justify-center text-sm ${colors[status]}`}>
-                          {display}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Monthly Contributions (not for fans) */}
-        {!isFan && !isFabianExempt && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground">Monthly Contributions</CardTitle></CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-3">
-                  {memberContribMonths.map(({ key, label }) => {
-                    const status = liveMember.contributions[key] || "unpaid";
-                    const isPaid = status === "paid";
-                    return (
-                      <div key={key} className={`px-4 py-3 rounded-xl border-2 text-center transition-all ${
-                        isPaid ? "border-primary/40 bg-primary/10 player-card-glow" : "border-border bg-muted/30"
-                      }`}>
-                        <p className="text-xs font-body text-muted-foreground">{label}</p>
-                        <div className="mt-1">
-                          {isPaid ? (
-                            <div className="flex items-center gap-1 justify-center">
-                              <span className="text-green-600">✅</span>
-                              <span className="text-sm font-heading text-green-600">Paid</span>
-                            </div>
-                          ) : (
-                            <span className="text-sm font-body text-muted-foreground">⬜ Unpaid</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Weekly Activity Log (not for fans) */}
-        {!isFan && weeklyLogs.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary" /> Weekly Activity Log
-              </CardTitle></CardHeader>
-              <CardContent>
-                <Accordion type="single" collapsible className="w-full">
-                  {weeklyLogs.map((log) => {
-                    const nonZeroStats = [
-                      { label: "Goals", value: log.goals },
-                      { label: "Assists", value: log.assists },
-                      { label: "Games", value: log.gamesPlayed },
-                      { label: "Saves", value: log.saves },
-                      { label: "Clean Sheets", value: log.cleanSheets },
-                      { label: "Aerial Duels", value: log.aerialDuels },
-                      { label: "Tackles", value: log.tackles },
-                      { label: "Interceptions", value: log.interceptions },
-                      { label: "Blocks", value: log.blocks },
-                      { label: "Clearances", value: log.clearances },
-                      { label: "Successful Tackles", value: log.successfulTackles },
-                      { label: "Direct Targets", value: log.directTargets },
-                      { label: "Direct Shots", value: log.directShots },
-                    ].filter(s => s.value > 0);
-                    if (nonZeroStats.length === 0) return null;
-                    return (
-                      <AccordionItem key={log.id} value={log.id}>
-                        <AccordionTrigger className="font-body text-sm text-foreground">
-                          Week of {log.weekStart}
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {nonZeroStats.map(s => (
-                              <div key={s.label} className="text-center p-2 rounded-lg bg-secondary/50 border border-border">
-                                <p className="text-lg font-heading text-primary">{s.value}</p>
-                                <p className="text-[10px] text-muted-foreground font-body">{s.label}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    );
-                  })}
-                </Accordion>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Opponents Played Against */}
-        {!isFan && opponentsPlayed.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground">Opponents Played Against</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {opponentsPlayed.map((game, i) => (
-                    <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                      <span className="font-body text-sm text-foreground">vs {game.opponent}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground font-body">{new Date(game.date).toLocaleDateString()}</span>
-                        <Badge variant="outline" className="text-xs border-primary/30 text-primary">{game.result}</Badge>
-                      </div>
+                <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.min(statCards.length, 5)}, 1fr)` }}>
+                  {statCards.map(({ icon: Icon, label, value }) => (
+                    <div key={label} className="text-center">
+                      <Icon className="w-5 h-5 text-primary mx-auto mb-1" />
+                      <p className="text-xl font-heading text-foreground">{value}</p>
+                      <p className="text-[10px] text-muted-foreground font-body">{label}</p>
                     </div>
                   ))}
                 </div>
@@ -405,28 +191,194 @@ const PlayerProfile = () => {
           </motion.div>
         )}
 
-        {/* Send Message */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+        {/* Fan Profile */}
+        {isFan && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Heart className="w-5 h-5 text-primary" /> Fan Profile</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                {liveMember.fanBadge && (
+                  <div className="flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-primary" />
+                    <Badge className="bg-primary text-primary-foreground">{liveMember.fanBadge}</Badge>
+                  </div>
+                )}
+                <div className="flex gap-4">
+                  <div className="text-center flex-1 p-3 bg-secondary/50 rounded-lg">
+                    <Star className="w-5 h-5 text-primary mx-auto mb-1" />
+                    <p className="text-2xl font-heading text-primary">{liveMember.fanPoints || 0}</p>
+                    <p className="text-xs text-muted-foreground font-body">Fan Points</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-body text-muted-foreground">My Favourite Sun City Moment</label>
+                  <Textarea value={momentText} onChange={(e) => setMomentText(e.target.value)}
+                    placeholder="Share your favourite team moment..."
+                    className="bg-secondary border-border font-body" />
+                  <Button onClick={async () => {
+                    await updateFavouriteMoment(user.id, momentText);
+                    toast({ title: "Moment Saved!" });
+                  }} size="sm" className="font-body">Save Moment</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Training Attendance */}
+        {!isFan && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Calendar className="w-5 h-5 text-primary" /> Training Attendance</CardTitle></CardHeader>
+              <CardContent>
+                <div className="flex gap-3 justify-center">
+                  {DAYS.map((day) => {
+                    const record = myAttendance.find((a) => a.day === day);
+                    const status = record?.status || "";
+                    const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : "⬜";
+                    const colors = status === "present" ? "border-green-500/40 bg-green-500/10"
+                      : status === "excused" ? "border-blue-500/40 bg-blue-500/10"
+                      : status === "no_activity" ? "border-border bg-muted/30"
+                      : "border-border bg-muted/10";
+                    return (
+                      <div key={day} className={`flex flex-col items-center p-2 rounded-lg border-2 ${colors}`}>
+                        <span className="text-xs font-body text-muted-foreground mb-1">{day.slice(0, 3)}</span>
+                        <span className="text-lg">{display}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground font-body mt-2 text-center">Week of {currentWeekStart}</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Match History */}
+        {!isFan && matchHistory.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><MapPin className="w-5 h-5 text-primary" /> Match History</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {matchHistory.map((m, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                      <div>
+                        <p className="font-body text-sm text-foreground">vs {m.opponent}</p>
+                        <p className="text-xs text-muted-foreground">{m.date} • {m.gameType} • {m.venue}</p>
+                      </div>
+                      <Badge variant="outline" className="border-primary/30 text-primary font-heading">{m.result}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Contributions */}
+        {!isFan && !isFabianExempt && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground">My Contributions</CardTitle></CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-3">
+                  {memberContribMonths.map(({ key, label }) => {
+                    const status = liveMember.contributions[key] || "unpaid";
+                    const isPaid = status === "paid";
+                    const isPending = status === "pending";
+                    return (
+                      <div key={key} className={`px-4 py-3 rounded-xl border-2 text-center ${isPaid ? "border-primary/40 bg-primary/10" : isPending ? "border-yellow-500/40 bg-yellow-500/10" : "border-border bg-muted/30"}`}>
+                        <p className="text-xs font-body text-muted-foreground">{label}</p>
+                        {isPaid ? <span className="text-green-600">✅</span> : isPending ? <span>⏳</span> : <span className="text-muted-foreground">⬜</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Export buttons */}
+        {!isFan && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
+            <div className="flex gap-3 flex-wrap">
+              <Button variant="outline" onClick={() => handleExportProfile(false)} className="font-body text-xs border-primary/30 text-primary" disabled={!showExport}>
+                <Download className="w-3 h-3 mr-1" /> Export Weekly Profile
+              </Button>
+              <Button variant="outline" onClick={() => handleExportProfile(true)} className="font-body text-xs border-primary/30 text-primary" disabled={!showDetailedExport}>
+                <Download className="w-3 h-3 mr-1" /> Export Detailed Profile
+              </Button>
+              {!showExport && <p className="text-xs text-muted-foreground font-body self-center">Available Fri-Sun</p>}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Media Upload */}
+        {!isFan && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Upload className="w-5 h-5 text-primary" /> Upload to Gallery</CardTitle></CardHeader>
+              <CardContent>
+                <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors">
+                  <Upload className="w-6 h-6 text-muted-foreground mb-1" />
+                  <span className="text-xs text-muted-foreground font-body">Click to upload photos</span>
+                  <input ref={mediaInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} />
+                </label>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Message */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
           <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-              <MessageCircle className="w-5 h-5 text-primary" /> Send Message
-            </CardTitle></CardHeader>
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><MessageCircle className="w-5 h-5 text-primary" /> Send Message to Official</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <select value={msgRecipient} onChange={(e) => setMsgRecipient(e.target.value)}
                 className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
                 <option value="">Select recipient</option>
-                {members.filter(m => m.id !== user.id).map(m => (
+                {members.filter(m => ["coach", "manager", "finance", "captain", "assistant_coach"].includes(m.role) && m.id !== user.id).map(m => (
                   <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
                 ))}
               </select>
               <Textarea placeholder="Type your message..." value={msgContent} onChange={(e) => setMsgContent(e.target.value)}
                 className="bg-secondary border-border font-body" />
               <Button onClick={handleSendMessage} disabled={!msgRecipient || !msgContent.trim()} className="w-full font-body">
-                <Send className="w-4 h-4 mr-1" /> Send Message
+                <Send className="w-4 h-4 mr-1" /> Send
               </Button>
             </CardContent>
           </Card>
         </motion.div>
+
+        {/* Weekly Logs Accordion */}
+        {!isFan && weeklyLogs.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground">Weekly Activity Log</CardTitle></CardHeader>
+              <CardContent>
+                <Accordion type="single" collapsible>
+                  {weeklyLogs.slice(0, 8).map((log) => (
+                    <AccordionItem key={log.id} value={log.id}>
+                      <AccordionTrigger className="font-body text-sm text-foreground">Week of {log.weekStart}</AccordionTrigger>
+                      <AccordionContent>
+                        <div className="grid grid-cols-3 gap-3">
+                          {statFields.map(sf => (
+                            <div key={sf.key} className="text-center p-2 bg-secondary/50 rounded-lg">
+                              <p className="text-lg font-heading text-primary">{(log as any)[sf.key] || 0}</p>
+                              <p className="text-[10px] text-muted-foreground font-body">{sf.label}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
       </main>
     </div>
   );
