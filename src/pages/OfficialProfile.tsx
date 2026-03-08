@@ -151,6 +151,12 @@ const OfficialProfile = () => {
   const [newScoreDate, setNewScoreDate] = useState("");
   const [addedFanId, setAddedFanId] = useState<string | null>(null);
 
+  // Game Stats form state
+  const [lastAddedGameId, setLastAddedGameId] = useState<string | null>(null);
+  const [lastAddedOpponent, setLastAddedOpponent] = useState("");
+  const [firstHalfStats, setFirstHalfStats] = useState({ shots: 0, shotsOnTarget: 0, penalties: 0, freekicks: 0, cornerKicks: 0, fouls: 0, offsides: 0, yellowCards: 0, redCards: 0 });
+  const [secondHalfStats, setSecondHalfStats] = useState({ shots: 0, shotsOnTarget: 0, penalties: 0, freekicks: 0, cornerKicks: 0, fouls: 0, offsides: 0, yellowCards: 0, redCards: 0 });
+
   // Match Performance Recorder
   const [perfGameId, setPerfGameId] = useState("");
   const [perfPlayerId, setPerfPlayerId] = useState("");
@@ -223,18 +229,42 @@ const OfficialProfile = () => {
   const leagueTeamsMain = leagueTeams.filter(t => !t.division || t.division === "league");
   const leagueTeamsAmateur = leagueTeams.filter(t => t.division === "amateur");
 
-  const addScore = () => {
+  const addScore = async () => {
     if (!newOpponent || !newOurScore || !newTheirScore) return;
-    addGameScore({
+    const opponentName = newOpponent;
+    const result = await addGameScore({
       date: newScoreDate || new Date().toISOString().split("T")[0],
       opponent: newOpponent, ourScore: parseInt(newOurScore), theirScore: parseInt(newTheirScore),
       scorers: scorers.filter(Boolean),
       gameType: newGameType,
       venue: newVenue,
     });
-    toast({ title: "Score Added", description: `vs ${newOpponent} recorded.` });
+    toast({ title: "Score Added", description: `vs ${opponentName} recorded. Now add match stats below.` });
+    if (result?.id) {
+      setLastAddedGameId(result.id);
+      setLastAddedOpponent(opponentName);
+      setFirstHalfStats({ shots: 0, shotsOnTarget: 0, penalties: 0, freekicks: 0, cornerKicks: 0, fouls: 0, offsides: 0, yellowCards: 0, redCards: 0 });
+      setSecondHalfStats({ shots: 0, shotsOnTarget: 0, penalties: 0, freekicks: 0, cornerKicks: 0, fouls: 0, offsides: 0, yellowCards: 0, redCards: 0 });
+    }
     setNewOpponent(""); setNewOurScore(""); setNewTheirScore(""); setScorers([]);
     setNewGameType("friendly"); setNewVenue(""); setNewScoreDate("");
+  };
+
+  const handleSaveGameStats = async () => {
+    if (!lastAddedGameId) return;
+    const { saveGameStats } = { saveGameStats: async (gameId: string, half: string, stats: any) => {
+      await supabase.from("game_stats").upsert({
+        game_id: gameId, half,
+        shots: stats.shots, shots_on_target: stats.shotsOnTarget, penalties: stats.penalties,
+        freekicks: stats.freekicks, corner_kicks: stats.cornerKicks, fouls: stats.fouls,
+        offsides: stats.offsides, yellow_cards: stats.yellowCards, red_cards: stats.redCards,
+      } as any, { onConflict: "game_id,half" });
+    }};
+    await saveGameStats(lastAddedGameId, "first", firstHalfStats);
+    await saveGameStats(lastAddedGameId, "second", secondHalfStats);
+    toast({ title: "Game Stats Saved", description: `Stats for vs ${lastAddedOpponent} recorded.` });
+    setLastAddedGameId(null);
+    setLastAddedOpponent("");
   };
 
   const addEvent = () => {

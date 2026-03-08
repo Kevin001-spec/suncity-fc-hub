@@ -54,7 +54,7 @@ interface TeamDataContextType {
   gameStats: GameStats[];
   playerGameLogs: PlayerGameLog[];
 
-  addGameScore: (score: Omit<GameScore, "id">) => void;
+  addGameScore: (score: Omit<GameScore, "id">) => Promise<any>;
   deleteGameScore: (id: string) => void;
   updateGameScore: (id: string, data: Partial<GameScore>) => void;
   addCalendarEvent: (event: Omit<CalendarEvent, "id">) => void;
