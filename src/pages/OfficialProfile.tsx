@@ -151,6 +151,12 @@ const OfficialProfile = () => {
   const [newScoreDate, setNewScoreDate] = useState("");
   const [addedFanId, setAddedFanId] = useState<string | null>(null);
 
+  // Game Stats form state
+  const [lastAddedGameId, setLastAddedGameId] = useState<string | null>(null);
+  const [lastAddedOpponent, setLastAddedOpponent] = useState("");
+  const [firstHalfStats, setFirstHalfStats] = useState({ shots: 0, shotsOnTarget: 0, penalties: 0, freekicks: 0, cornerKicks: 0, fouls: 0, offsides: 0, yellowCards: 0, redCards: 0 });
+  const [secondHalfStats, setSecondHalfStats] = useState({ shots: 0, shotsOnTarget: 0, penalties: 0, freekicks: 0, cornerKicks: 0, fouls: 0, offsides: 0, yellowCards: 0, redCards: 0 });
+
   // Match Performance Recorder
   const [perfGameId, setPerfGameId] = useState("");
   const [perfPlayerId, setPerfPlayerId] = useState("");
@@ -223,18 +229,42 @@ const OfficialProfile = () => {
   const leagueTeamsMain = leagueTeams.filter(t => !t.division || t.division === "league");
   const leagueTeamsAmateur = leagueTeams.filter(t => t.division === "amateur");
 
-  const addScore = () => {
+  const addScore = async () => {
     if (!newOpponent || !newOurScore || !newTheirScore) return;
-    addGameScore({
+    const opponentName = newOpponent;
+    const result = await addGameScore({
       date: newScoreDate || new Date().toISOString().split("T")[0],
       opponent: newOpponent, ourScore: parseInt(newOurScore), theirScore: parseInt(newTheirScore),
       scorers: scorers.filter(Boolean),
       gameType: newGameType,
       venue: newVenue,
     });
-    toast({ title: "Score Added", description: `vs ${newOpponent} recorded.` });
+    toast({ title: "Score Added", description: `vs ${opponentName} recorded. Now add match stats below.` });
+    if (result?.id) {
+      setLastAddedGameId(result.id);
+      setLastAddedOpponent(opponentName);
+      setFirstHalfStats({ shots: 0, shotsOnTarget: 0, penalties: 0, freekicks: 0, cornerKicks: 0, fouls: 0, offsides: 0, yellowCards: 0, redCards: 0 });
+      setSecondHalfStats({ shots: 0, shotsOnTarget: 0, penalties: 0, freekicks: 0, cornerKicks: 0, fouls: 0, offsides: 0, yellowCards: 0, redCards: 0 });
+    }
     setNewOpponent(""); setNewOurScore(""); setNewTheirScore(""); setScorers([]);
     setNewGameType("friendly"); setNewVenue(""); setNewScoreDate("");
+  };
+
+  const handleSaveGameStats = async () => {
+    if (!lastAddedGameId) return;
+    const { saveGameStats } = { saveGameStats: async (gameId: string, half: string, stats: any) => {
+      await supabase.from("game_stats").upsert({
+        game_id: gameId, half,
+        shots: stats.shots, shots_on_target: stats.shotsOnTarget, penalties: stats.penalties,
+        freekicks: stats.freekicks, corner_kicks: stats.cornerKicks, fouls: stats.fouls,
+        offsides: stats.offsides, yellow_cards: stats.yellowCards, red_cards: stats.redCards,
+      } as any, { onConflict: "game_id,half" });
+    }};
+    await saveGameStats(lastAddedGameId, "first", firstHalfStats);
+    await saveGameStats(lastAddedGameId, "second", secondHalfStats);
+    toast({ title: "Game Stats Saved", description: `Stats for vs ${lastAddedOpponent} recorded.` });
+    setLastAddedGameId(null);
+    setLastAddedOpponent("");
   };
 
   const addEvent = () => {
@@ -643,7 +673,61 @@ const OfficialProfile = () => {
             </Card>
           )}
 
-          {/* Calendar Events — MANAGER & CAPTAINS ONLY */}
+          {/* Game Stats Form — appears after adding a score */}
+          {lastAddedGameId && canAddScoresEvents && (
+            <Card className="bg-card border-border card-glow border-primary/30">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-primary" /> Match Stats — vs {lastAddedOpponent}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="overflow-x-auto">
+                  <table className="w-full font-body text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-muted-foreground">
+                        <th className="text-left py-2 px-2">Stat</th>
+                        <th className="text-center py-2 px-2">1st Half</th>
+                        <th className="text-center py-2 px-2">2nd Half</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {([
+                        ["Shots", "shots"],
+                        ["Shots on Target", "shotsOnTarget"],
+                        ["Penalties", "penalties"],
+                        ["Freekicks", "freekicks"],
+                        ["Corner Kicks", "cornerKicks"],
+                        ["Fouls", "fouls"],
+                        ["Offsides", "offsides"],
+                        ["Yellow Cards", "yellowCards"],
+                        ["Red Cards", "redCards"],
+                      ] as [string, keyof typeof firstHalfStats][]).map(([label, key]) => (
+                        <tr key={key} className="border-b border-border">
+                          <td className="py-2 px-2 text-foreground">{label}</td>
+                          <td className="py-1 px-1">
+                            <Input type="number" min={0} value={firstHalfStats[key]}
+                              onChange={(e) => setFirstHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
+                              className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
+                          </td>
+                          <td className="py-1 px-1">
+                            <Input type="number" min={0} value={secondHalfStats[key]}
+                              onChange={(e) => setSecondHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
+                              className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleSaveGameStats} className="flex-1 font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
+                  <Button variant="outline" onClick={() => setLastAddedGameId(null)} className="font-body">Skip</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {canAddScoresEvents && (
             <Card className="bg-card border-border card-glow">
               <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-primary" /> Add Event</CardTitle></CardHeader>

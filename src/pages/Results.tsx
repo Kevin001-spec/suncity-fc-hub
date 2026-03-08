@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
@@ -6,7 +6,7 @@ import { Navigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trophy, MapPin } from "lucide-react";
+import { Trophy, MapPin, BarChart3 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface LeagueTeam {
@@ -22,16 +22,61 @@ interface LeagueTeam {
   division: string;
 }
 
+interface GameStatRow {
+  id: string;
+  game_id: string;
+  half: string;
+  shots: number;
+  shots_on_target: number;
+  penalties: number;
+  freekicks: number;
+  corner_kicks: number;
+  fouls: number;
+  offsides: number;
+  yellow_cards: number;
+  red_cards: number;
+}
+
+const STAT_LABELS: [string, keyof Omit<GameStatRow, "id" | "game_id" | "half">][] = [
+  ["Shots", "shots"],
+  ["Shots on Target", "shots_on_target"],
+  ["Penalties", "penalties"],
+  ["Freekicks", "freekicks"],
+  ["Corner Kicks", "corner_kicks"],
+  ["Fouls", "fouls"],
+  ["Offsides", "offsides"],
+  ["Yellow Cards", "yellow_cards"],
+  ["Red Cards", "red_cards"],
+];
+
 const Results = () => {
   const { user } = useAuth();
   const { members, gameScores } = useTeamData();
   const [leagueTeams, setLeagueTeams] = useState<LeagueTeam[]>([]);
+  const [latestGameStats, setLatestGameStats] = useState<GameStatRow[]>([]);
 
   useEffect(() => {
     supabase.from("league_teams").select("*").then(({ data }) => {
       if (data) setLeagueTeams((data as LeagueTeam[]).sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference));
     });
   }, []);
+
+  // Find most recent game and load its stats
+  const latestGame = useMemo(() => {
+    if (gameScores.length === 0) return null;
+    return [...gameScores].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+  }, [gameScores]);
+
+  useEffect(() => {
+    if (!latestGame) return;
+    supabase.from("game_stats").select("*").eq("game_id", latestGame.id).then(({ data }) => {
+      if (data && data.length > 0) setLatestGameStats(data as GameStatRow[]);
+      else setLatestGameStats([]);
+    });
+  }, [latestGame]);
+
+  const firstHalf = latestGameStats.find(s => s.half === "first");
+  const secondHalf = latestGameStats.find(s => s.half === "second");
 
   const mainTeams = leagueTeams.filter(t => !t.division || t.division === "league");
   const amateurTeams = leagueTeams.filter(t => t.division === "amateur");
@@ -52,6 +97,50 @@ const Results = () => {
           <h1 className="font-heading text-2xl gold-text">Match Results</h1>
           <p className="text-muted-foreground text-sm font-body mt-1">All game history & league standings</p>
         </motion.div>
+
+        {/* Latest Game Stats Table */}
+        {latestGame && (firstHalf || secondHalf) && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-primary" /> Match Stats — vs {latestGame.opponent}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground font-body">
+                  {new Date(latestGame.date).toLocaleDateString()} · {latestGame.ourScore} - {latestGame.theirScore}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full font-body text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-muted-foreground">
+                        <th className="text-left py-2 px-2">Stat</th>
+                        <th className="text-center py-2 px-2">1st Half</th>
+                        <th className="text-center py-2 px-2">2nd Half</th>
+                        <th className="text-center py-2 px-2 font-heading">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {STAT_LABELS.map(([label, key]) => {
+                        const f = firstHalf ? (firstHalf[key] as number) || 0 : 0;
+                        const s = secondHalf ? (secondHalf[key] as number) || 0 : 0;
+                        return (
+                          <tr key={key} className="border-b border-border">
+                            <td className="py-2 px-2 text-foreground">{label}</td>
+                            <td className="py-2 px-2 text-center">{f}</td>
+                            <td className="py-2 px-2 text-center">{s}</td>
+                            <td className="py-2 px-2 text-center font-heading text-primary">{f + s}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         {/* League Standings */}
         {mainTeams.length > 0 && (
