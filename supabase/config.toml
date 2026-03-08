@@ -1,1 +1,4 @@
 project_id = "chsxlkpfjssedmybztar"
+
+[functions.authenticate]
+verify_jwt = false
