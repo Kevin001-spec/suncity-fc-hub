@@ -14,6 +14,8 @@ import {
   type MatchPerformance,
   type Message,
   type WeeklyStatsLog,
+  type GameStats,
+  type PlayerGameLog,
 } from "@/data/team-data";
 
 interface LineupPosition {
@@ -49,6 +51,8 @@ interface TeamDataContextType {
   matchPerformances: MatchPerformance[];
   messages: Message[];
   weeklyStatsLogs: WeeklyStatsLog[];
+  gameStats: GameStats[];
+  playerGameLogs: PlayerGameLog[];
 
   addGameScore: (score: Omit<GameScore, "id">) => void;
   deleteGameScore: (id: string) => void;
@@ -80,6 +84,8 @@ interface TeamDataContextType {
   updateFanPoints: (fanId: string, points: number) => Promise<void>;
   updateFavouriteMoment: (fanId: string, moment: string) => Promise<void>;
   loadWeeklyStatsLogs: (playerId: string) => Promise<WeeklyStatsLog[]>;
+  saveGameStats: (gameId: string, half: string, stats: Omit<GameStats, "id" | "gameId" | "half">) => Promise<void>;
+  loadPlayerGameLogs: (playerId: string) => Promise<PlayerGameLog[]>;
   refreshData: () => void;
 }
 
@@ -107,7 +113,68 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
   const [matchPerformances, setMatchPerformances] = useState<MatchPerformance[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [weeklyStatsLogs, setWeeklyStatsLogs] = useState<WeeklyStatsLog[]>([]);
+  const [gameStats, setGameStats] = useState<GameStats[]>([]);
+  const [playerGameLogs, setPlayerGameLogs] = useState<PlayerGameLog[]>([]);
   const currentWeekStart = getWeekStart();
+
+  // ===== THURSDAY STAT RESET WITH ARCHIVAL =====
+  const checkAndResetWeeklyStats = useCallback(async (loadedMembers: TeamMember[]) => {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0=Sun, 5=Fri, 6=Sat
+    // Reset happens on Friday (5), Saturday (6), or Sunday (0)
+    if (dayOfWeek !== 5 && dayOfWeek !== 6 && dayOfWeek !== 0) return;
+
+    const playerMembers = loadedMembers.filter(m => m.role === "player" || m.role === "captain" || m.role === "finance");
+    if (playerMembers.length === 0) return;
+
+    // Check if we already archived this week
+    const { data: existingLogs } = await supabase.from("weekly_stats_log")
+      .select("player_id").eq("week_start", currentWeekStart);
+    
+    const archivedPlayerIds = new Set((existingLogs || []).map((l: any) => l.player_id));
+
+    for (const member of playerMembers) {
+      // Skip if already archived this week
+      if (archivedPlayerIds.has(member.id)) continue;
+      
+      // Check if there are any non-zero stats to archive
+      const hasStats = (member.goals || 0) > 0 || (member.assists || 0) > 0 || 
+        (member.gamesPlayed || 0) > 0 || (member.saves || 0) > 0 ||
+        (member.cleanSheets || 0) > 0 || (member.aerialDuels || 0) > 0 ||
+        (member.tackles || 0) > 0 || (member.interceptions || 0) > 0 ||
+        (member.blocks || 0) > 0 || (member.clearances || 0) > 0 ||
+        (member.successfulTackles || 0) > 0 || (member.directTargets || 0) > 0 ||
+        (member.directShots || 0) > 0;
+      
+      if (!hasStats) continue;
+
+      // Archive current stats to weekly_stats_log
+      await supabase.from("weekly_stats_log").insert({
+        player_id: member.id,
+        week_start: currentWeekStart,
+        goals: member.goals || 0,
+        assists: member.assists || 0,
+        games_played: member.gamesPlayed || 0,
+        saves: member.saves || 0,
+        clean_sheets: member.cleanSheets || 0,
+        aerial_duels: member.aerialDuels || 0,
+        tackles: member.tackles || 0,
+        interceptions: member.interceptions || 0,
+        blocks: member.blocks || 0,
+        clearances: member.clearances || 0,
+        successful_tackles: member.successfulTackles || 0,
+        direct_targets: member.directTargets || 0,
+        direct_shots: member.directShots || 0,
+      } as any);
+
+      // Reset stats to 0 in members table
+      await supabase.from("members").update({
+        goals: 0, assists: 0, games_played: 0, saves: 0,
+        clean_sheets: 0, aerial_duels: 0, tackles: 0, interceptions: 0,
+        blocks: 0, clearances: 0, successful_tackles: 0, direct_targets: 0, direct_shots: 0,
+      } as any).eq("id", member.id);
+    }
+  }, [currentWeekStart]);
 
   // ===== LOAD ALL DATA FROM SUPABASE =====
   const loadMembers = useCallback(async () => {
@@ -139,7 +206,9 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
       const pics: Record<string, string> = {};
       mapped.forEach((m) => { if (m.profilePic) pics[m.id] = m.profilePic; });
       setProfilePics(pics);
+      return mapped;
     }
+    return null;
   }, []);
 
   const loadGameScores = useCallback(async () => {
@@ -238,11 +307,24 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
     })));
   }, []);
 
+  const loadGameStats = useCallback(async () => {
+    const { data } = await supabase.from("game_stats").select("*");
+    if (data) setGameStats(data.map((s: any) => ({
+      id: s.id, gameId: s.game_id, half: s.half,
+      shots: s.shots, shotsOnTarget: s.shots_on_target, penalties: s.penalties,
+      freekicks: s.freekicks, cornerKicks: s.corner_kicks, fouls: s.fouls,
+      offsides: s.offsides, yellowCards: s.yellow_cards, redCards: s.red_cards,
+    })));
+  }, []);
+
   const refreshData = useCallback(() => {
-    loadMembers(); loadGameScores(); loadCalendarEvents(); loadFinancialRecords();
+    loadMembers().then((loaded) => {
+      if (loaded) checkAndResetWeeklyStats(loaded);
+    });
+    loadGameScores(); loadCalendarEvents(); loadFinancialRecords();
     loadMediaItems(); loadPendingApprovals(); loadLineup(); loadAttendance();
-    loadHomepageImages(); loadMatchPerformances(); loadMessages();
-  }, [loadMembers, loadGameScores, loadCalendarEvents, loadFinancialRecords, loadMediaItems, loadPendingApprovals, loadLineup, loadAttendance, loadHomepageImages, loadMatchPerformances, loadMessages]);
+    loadHomepageImages(); loadMatchPerformances(); loadMessages(); loadGameStats();
+  }, [loadMembers, loadGameScores, loadCalendarEvents, loadFinancialRecords, loadMediaItems, loadPendingApprovals, loadLineup, loadAttendance, loadHomepageImages, loadMatchPerformances, loadMessages, loadGameStats, checkAndResetWeeklyStats]);
 
   useEffect(() => { refreshData(); }, [refreshData]);
   useEffect(() => {
@@ -289,6 +371,11 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
             goals: ((memberData as any).goals || 0) + goalsForPlayer,
             games_played: ((memberData as any).games_played || 0) + 1,
           }).eq("id", pid);
+          // Auto-link player to this game
+          await supabase.from("player_game_log").upsert(
+            { player_id: pid, game_id: data.id } as any,
+            { onConflict: "player_id,game_id" }
+          );
         }
       }
     }
@@ -316,14 +403,17 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (!error) { loadGameScores(); loadMembers(); }
+    return data; // Return the created game for game stats form
   }, [loadGameScores, loadMembers]);
 
   const deleteGameScore = useCallback(async (id: string) => {
     await supabase.from("game_scorers").delete().eq("game_id", id);
     await supabase.from("match_performances").delete().eq("game_id", id);
+    await supabase.from("game_stats").delete().eq("game_id", id);
+    await supabase.from("player_game_log").delete().eq("game_id", id);
     await supabase.from("game_scores").delete().eq("id", id);
-    loadGameScores(); loadMatchPerformances();
-  }, [loadGameScores, loadMatchPerformances]);
+    loadGameScores(); loadMatchPerformances(); loadGameStats();
+  }, [loadGameScores, loadMatchPerformances, loadGameStats]);
 
   const updateGameScore = useCallback(async (id: string, data: Partial<GameScore>) => {
     const updates: any = {};
@@ -432,6 +522,22 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
     if (stats.directShots !== undefined) dbStats.direct_shots = stats.directShots;
     await supabase.from("members").update(dbStats).eq("id", playerId);
 
+    // If games_played increased, auto-link player to the most recent game
+    if (oldData && stats.gamesPlayed !== undefined) {
+      const oldGames = (oldData as any).games_played || 0;
+      if (stats.gamesPlayed > oldGames) {
+        // Find the most recent game score
+        const { data: recentGame } = await supabase.from("game_scores")
+          .select("id").order("created_at", { ascending: false }).limit(1).single();
+        if (recentGame) {
+          await supabase.from("player_game_log").upsert(
+            { player_id: playerId, game_id: recentGame.id } as any,
+            { onConflict: "player_id,game_id" }
+          );
+        }
+      }
+    }
+
     // Calculate deltas and log to weekly_stats_log
     if (oldData) {
       const old = oldData as any;
@@ -454,7 +560,6 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
       };
       const hasAnyDelta = Object.entries(delta).some(([k, v]) => k !== "player_id" && k !== "week_start" && (v as number) > 0);
       if (hasAnyDelta) {
-        // Upsert: add to existing week log if exists
         const { data: existing } = await supabase.from("weekly_stats_log")
           .select("*").eq("player_id", playerId).eq("week_start", currentWeekStart).single();
         if (existing) {
@@ -578,6 +683,7 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
     await supabase.from("attendance").delete().eq("player_id", playerId);
     await supabase.from("contributions").delete().eq("member_id", playerId);
     await supabase.from("pending_approvals").delete().eq("player_id", playerId);
+    await supabase.from("player_game_log").delete().eq("player_id", playerId);
     await supabase.from("members").delete().eq("id", playerId);
     loadMembers();
   }, [loadMembers]);
@@ -585,7 +691,6 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
   const addPlayer = useCallback(async (name: string, squadNumber: number, position: string, role: string = "player"): Promise<string> => {
     let newId: string;
     if (role === "fan") {
-      // Fan IDs: SCF-F01, SCF-F02, etc.
       const { data: maxRow } = await supabase.from("members").select("id").like("id", "SCF-F%").order("id", { ascending: false }).limit(1);
       let nextNum = 1;
       if (maxRow && maxRow.length > 0) {
@@ -598,7 +703,6 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
         id: newId, name, role: "fan", squad_number: null, position: null,
       } as any);
     } else {
-      // Player IDs: auto-increment
       const { data: maxRow } = await supabase.from("members").select("id").like("id", "SCF-P%").order("id", { ascending: false }).limit(1);
       let nextNum = squadNumber;
       if (maxRow && maxRow.length > 0) {
@@ -690,12 +794,49 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
     return [];
   }, []);
 
+  const saveGameStats = useCallback(async (gameId: string, half: string, stats: Omit<GameStats, "id" | "gameId" | "half">) => {
+    // Upsert: check if exists
+    const { data: existing } = await supabase.from("game_stats")
+      .select("id").eq("game_id", gameId).eq("half", half).single();
+    if (existing) {
+      await supabase.from("game_stats").update({
+        shots: stats.shots, shots_on_target: stats.shotsOnTarget,
+        penalties: stats.penalties, freekicks: stats.freekicks,
+        corner_kicks: stats.cornerKicks, fouls: stats.fouls,
+        offsides: stats.offsides, yellow_cards: stats.yellowCards,
+        red_cards: stats.redCards,
+      } as any).eq("id", existing.id);
+    } else {
+      await supabase.from("game_stats").insert({
+        game_id: gameId, half,
+        shots: stats.shots, shots_on_target: stats.shotsOnTarget,
+        penalties: stats.penalties, freekicks: stats.freekicks,
+        corner_kicks: stats.cornerKicks, fouls: stats.fouls,
+        offsides: stats.offsides, yellow_cards: stats.yellowCards,
+        red_cards: stats.redCards,
+      } as any);
+    }
+    loadGameStats();
+  }, [loadGameStats]);
+
+  const loadPlayerGameLogs = useCallback(async (playerId: string): Promise<PlayerGameLog[]> => {
+    const { data } = await supabase.from("player_game_log").select("*")
+      .eq("player_id", playerId).order("created_at", { ascending: false });
+    if (data) {
+      return data.map((d: any) => ({
+        id: d.id, playerId: d.player_id, gameId: d.game_id, createdAt: d.created_at,
+      }));
+    }
+    return [];
+  }, []);
+
   return (
     <TeamDataContext.Provider
       value={{
         members, gameScores, calendarEvents, financialRecords, mediaItems,
         pendingApprovals, lineup, profilePics, attendance, currentWeekStart,
         homepageImages, matchPerformances, messages, weeklyStatsLogs,
+        gameStats, playerGameLogs,
         addGameScore, deleteGameScore, updateGameScore,
         addCalendarEvent, addMediaItems,
         requestContribution, approveContribution, rejectContribution,
@@ -707,7 +848,7 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
         uploadHomepageImages, deleteHomepageImage,
         addMatchPerformance, sendMessage, markMessageRead,
         updateFanBadge, updateFanPoints, updateFavouriteMoment,
-        loadWeeklyStatsLogs,
+        loadWeeklyStatsLogs, saveGameStats, loadPlayerGameLogs,
         refreshData,
       }}
     >

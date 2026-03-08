@@ -307,6 +307,62 @@ export type Database = {
         }
         Relationships: []
       }
+      game_stats: {
+        Row: {
+          corner_kicks: number | null
+          created_at: string | null
+          fouls: number | null
+          freekicks: number | null
+          game_id: string
+          half: string
+          id: string
+          offsides: number | null
+          penalties: number | null
+          red_cards: number | null
+          shots: number | null
+          shots_on_target: number | null
+          yellow_cards: number | null
+        }
+        Insert: {
+          corner_kicks?: number | null
+          created_at?: string | null
+          fouls?: number | null
+          freekicks?: number | null
+          game_id: string
+          half?: string
+          id?: string
+          offsides?: number | null
+          penalties?: number | null
+          red_cards?: number | null
+          shots?: number | null
+          shots_on_target?: number | null
+          yellow_cards?: number | null
+        }
+        Update: {
+          corner_kicks?: number | null
+          created_at?: string | null
+          fouls?: number | null
+          freekicks?: number | null
+          game_id?: string
+          half?: string
+          id?: string
+          offsides?: number | null
+          penalties?: number | null
+          red_cards?: number | null
+          shots?: number | null
+          shots_on_target?: number | null
+          yellow_cards?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_stats_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "game_scores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       homepage_images: {
         Row: {
           created_at: string
@@ -678,6 +734,35 @@ export type Database = {
             columns: ["player_id"]
             isOneToOne: false
             referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      player_game_log: {
+        Row: {
+          created_at: string | null
+          game_id: string
+          id: string
+          player_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          game_id: string
+          id?: string
+          player_id: string
+        }
+        Update: {
+          created_at?: string | null
+          game_id?: string
+          id?: string
+          player_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_game_log_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "game_scores"
             referencedColumns: ["id"]
           },
         ]

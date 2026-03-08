@@ -10,16 +10,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Target, Footprints, Gamepad2, Upload, Calendar, Download, Shield, Hand, Crosshair, MessageCircle, Send, Star, Heart } from "lucide-react";
+import { Target, Footprints, Gamepad2, Upload, Calendar, Download, Shield, Hand, Crosshair, MessageCircle, Send, Star, Heart, Trophy, MapPin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getContribMonthsForMember, getFullPositionName, getPositionGroup, type WeeklyStatsLog } from "@/data/team-data";
+import { getContribMonthsForMember, getFullPositionName, getPositionGroup, type WeeklyStatsLog, type PlayerGameLog } from "@/data/team-data";
 import { generatePlayerProfileDocx } from "@/lib/docx-export";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 const PlayerProfile = () => {
   const { user } = useAuth();
-  const { members, profilePics, uploadProfilePicToStorage, uploadMediaToStorage, attendance, currentWeekStart, gameScores, sendMessage, updateFavouriteMoment, loadWeeklyStatsLogs } = useTeamData();
+  const { members, profilePics, uploadProfilePicToStorage, uploadMediaToStorage, attendance, currentWeekStart, gameScores, sendMessage, updateFavouriteMoment, loadWeeklyStatsLogs, loadPlayerGameLogs } = useTeamData();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -27,6 +27,7 @@ const PlayerProfile = () => {
   const [msgContent, setMsgContent] = useState("");
   const [weeklyLogs, setWeeklyLogs] = useState<WeeklyStatsLog[]>([]);
   const [momentText, setMomentText] = useState("");
+  const [playerGameLogs, setPlayerGameLogs] = useState<PlayerGameLog[]>([]);
 
   const liveMember = members.find((m) => m.id === user?.id) || user;
   const isFan = user?.role === "fan";
@@ -40,6 +41,7 @@ const PlayerProfile = () => {
   useEffect(() => {
     if (user?.id && !isFan) {
       loadWeeklyStatsLogs(user.id).then(setWeeklyLogs);
+      loadPlayerGameLogs(user.id).then(setPlayerGameLogs);
     }
   }, [user?.id, isFan]);
 

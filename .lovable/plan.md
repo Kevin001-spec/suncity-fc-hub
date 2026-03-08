@@ -1,132 +1,109 @@
 
 
-# Comprehensive System Update Plan
+# System Update Plan
 
-This plan covers: Thursday stat reset with permanent weekly archival, intelligent match-player linking, flexible DOCX export redesign, game stats recording (first/second half), fan management UI, and league standings on Stats page.
+## Task 1: Move "Add Recent Results" and "Add Events" to Coach Profile Only
 
----
+Currently `canManageScores` and `canManageEvents` include coach, manager, and captain. Change:
+- **Add Score** card: Show only for `isCoach` (not manager/captain)
+- **Add Event** card: Show only for `isCoach`
+- **Manager gets a NEW "Edit/Remove Recent Scores"** card instead — shows list of `gameScores` with Edit/Delete buttons per entry
 
-## 1. Database Migrations
+**Files:** `src/pages/OfficialProfile.tsx`
+- Change line 399 condition from `canManageScores` to `isCoach`
+- Change line 427 condition from `canManageEvents` to `isCoach`
+- Add new Manager card: "Manage Recent Results" with list of games, each having Edit (inline fields) and Delete (with confirm) buttons
 
-### New table: `game_stats`
-Records team-level match statistics per half:
-```sql
-CREATE TABLE game_stats (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  game_id UUID NOT NULL,
-  half TEXT NOT NULL DEFAULT 'first', -- 'first' or 'second'
-  shots INT DEFAULT 0,
-  shots_on_target INT DEFAULT 0,
-  penalties INT DEFAULT 0,
-  freekicks INT DEFAULT 0,
-  corner_kicks INT DEFAULT 0,
-  fouls INT DEFAULT 0,
-  offsides INT DEFAULT 0,
-  yellow_cards INT DEFAULT 0,
-  red_cards INT DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+## Task 2: Update Team Stats Editor with Position-Specific Stats
+
+The stats editor (lines 484-516) only has Goals/Assists/Games fields. Update to show position-appropriate fields:
+- **All players**: Goals, Assists, Games Played, Successful Tackles, Direct Targets (new fields needed)
+- **Defenders only**: Additional Tackles, Interceptions, Clearances, Direct Shots
+- **GK**: Saves, Clean Sheets, Aerial Duels
+
+**Database migration**: Add `successful_tackles` and `direct_targets` columns (and `direct_shots` for DEF) to `members` table.
+
+**Files:**
+- Supabase migration: `ALTER TABLE members ADD COLUMN successful_tackles INT DEFAULT 0, ADD COLUMN direct_targets INT DEFAULT 0, ADD COLUMN direct_shots INT DEFAULT 0;`
+- `src/data/team-data.ts`: Add new fields to `TeamMember` interface
+- `src/pages/OfficialProfile.tsx`: Expand stats editor — add state variables for all new stats, detect selected player's position group, show relevant fields dynamically
+- `src/contexts/TeamDataContext.tsx`: Extend `updatePlayerStats` mapping to include new fields
+- `src/pages/PlayerProfile.tsx`: Update `getStatCards()` to show new stats for each position
+- `src/pages/Stats.tsx`: Update performance table columns
+
+## Task 3: Overview Tracking System (Weekly/Monthly/Season) — 3 Icons
+
+This is the repeating core request. Currently there's a single "Weekly Overview" card that shows Fri-Sun. Need to transform into 3 icons like the gallery:
+
+**Design:**
+- 3 icon buttons on Stats page (and officials dashboard): 📅 Weekly, 📊 Monthly, 🏆 Season
+- **Weekly**: Icon always visible. Clickable only Fri-Sun. Opens dialog with overview data. After Sunday, auto-archive to `weekly_overviews` table.
+- **Monthly**: Icon always visible. Clickable after 3 weekly reports exist. Opens dialog with monthly summary.
+- **Season**: Icon always visible. Clickable only when coach's end date has passed. Opens dialog with all-time stats.
+- Each includes "Most Improved" tracking (compare current vs previous week data for discipline, goals, assists).
+- **Archive Section**: On officials stats/profile — permanent archive of past reports, displayed as clickable date icons (like gallery), separated by type (weekly/monthly/season).
+
+**Files:**
+- `src/pages/Stats.tsx`: Replace the single weekly overview with 3 icon system + archive section
+- `src/pages/OfficialProfile.tsx`: Add archive section for officials
+- Logic: Load `weekly_overviews` and `season_config` from Supabase, compute available reports
+
+## Task 4: Player DOCX Export (Friday-Sunday)
+
+Currently `isFriday = new Date().getDay() === 5`. Change to show Fri-Sun:
+```
+const showExport = [0, 5, 6].includes(new Date().getDay());
 ```
 
-### New table: `player_game_log`
-Links players to specific games they participated in (auto-populated when manager adds +1 games_played):
-```sql
-CREATE TABLE player_game_log (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  player_id TEXT NOT NULL,
-  game_id UUID NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(player_id, game_id)
-);
-```
+The export already calls `generatePlayerProfileDocx` — just need to update the visibility condition.
 
-Both tables get public RLS policies (matching existing pattern).
+**Files:** `src/pages/PlayerProfile.tsx` — change line 33
 
----
+## Task 5: Match Day Performance Tracking on Officials Stats
 
-## 2. Thursday Stat Reset with Permanent Archival
+Need a section on Stats page where officials see match-by-match player performance data. Already have `match_performances` table and `addMatchPerformance` in context.
 
-**`TeamDataContext.tsx`**: Add a `checkAndResetWeeklyStats()` function that runs on load:
-- Check current day: if day > Thursday (i.e. Friday+), check if a weekly log already exists for the current week for each player
-- If not, archive current stats to `weekly_stats_log` then reset all stat fields (goals, assists, games_played, saves, etc.) to 0 in `members` table
-- This ensures: stats are visible Mon-Thu, archived and reset on Friday, weekly logs are permanent
-- Add a flag column or use the existing `weekly_stats_log` entries to avoid double-archiving
+**Manager's profile**: Add "Record Match Day Stats" section — select a game, add player performances (position-specific stats + rating + POTM checkbox).
 
-**Key logic**: On app load, if `dayOfWeek >= 5` (Fri) and no log exists for this week for a player, archive current stats and reset to 0. Data is never lost — it moves to `weekly_stats_log`.
+**Stats page**: Add "Match Day Reports" section — games listed by date (newest first), expandable to show each player's stats, ranked by rating, POTM highlighted. Exportable as DOCX.
 
----
+**Files:**
+- `src/pages/OfficialProfile.tsx`: Add match performance recorder for manager
+- `src/pages/Stats.tsx`: Add match reports section
 
-## 3. Intelligent Match-Player Linking
+## Task 6: Manager Edit/Remove Recent Scores
 
-**`TeamDataContext.tsx`**: When `updatePlayerStats` is called and `gamesPlayed` increases:
-- Find the most recent game score (the one just added by the manager)
-- Auto-insert into `player_game_log` with (player_id, game_id)
+Covered in Task 1 — the new "Manage Recent Results" card.
 
-**`PlayerProfile.tsx`**: New "Match History" section:
-- Load from `player_game_log` joined with `game_scores` data
-- Display each match the player participated in: opponent, date, result, game type (friendly/league/amateur), venue
-- Show comprehensively — nothing hidden
+## Task 7: Add Players Section for Coach & Manager
 
----
+Currently `addPlayer` exists in context but no UI. Add an "Add New Player" card for both `isCoach` and `isManager`:
+- Name, Squad Number, Position selector
+- Inserts via `addPlayer(name, squadNumber, position)`
 
-## 4. Game Stats Form (Manager Profile)
+**Files:** `src/pages/OfficialProfile.tsx` — add card with condition `isCoach || isManager`
 
-**`OfficialProfile.tsx`**: After the "Add Recent Results" card succeeds, show a "Game Stats" dialog/section:
-- Two columns: First Half / Second Half
-- Fields: Shots, Shots on Target, Penalties, Freekicks, Corner Kicks, Fouls, Offsides, Yellow Cards, Red Cards
-- Save to `game_stats` table with the game_id from the just-added score
+## Task 8: Fix New Players Contribution Display in Stats
 
-**`Stats.tsx` / `Results.tsx`**: When viewing match reports, also load and display `game_stats` for each game (first half + second half summary).
+In `Stats.tsx` contribution grid (line 408-427), new players (SCF-P31 to SCF-P35) still show ❌ for Dec/Jan. Fix by using `getContribMonthsForMember` to determine which months to show, and for months that don't apply, show `—` instead.
+
+**Files:** `src/pages/Stats.tsx` — update contribution grid to check `NEW_PLAYER_IDS` and skip/show dash for inapplicable months
+
+## Task 9: Lovable Badge CSS
+
+Already exists but will re-verify/strengthen in `src/index.css`.
 
 ---
 
-## 5. Flexible DOCX Export Redesign
-
-**`docx-export.ts`**: Redesign both `generateBrandedDocx` and `generatePlayerProfileDocx`:
-- Replace strict table-only layout with mixed content: section headings, key-value pairs as paragraphs, only use tables when data is truly tabular (standings, multi-column data)
-- For player profiles: use styled paragraphs for stats (e.g. "Goals: 5 | Assists: 3 | Games: 8"), attendance as inline text with emoji, contributions as a compact list
-- Weekly logs: each week as a styled heading + inline stat summary paragraph rather than rigid table rows
-- Financial reports: use paragraph-based layout with indented expenses
-- Keep branding: badge image + "SUNCITY FC" + motto at top, footer at bottom
-- Ensure profile image displays correctly (already fixed with query param stripping)
-
----
-
-## 6. Fan Management UI (Manager Profile)
-
-**`OfficialProfile.tsx`**: Add a "Fan Management" card for the manager:
-- List all fans with their current badge, points
-- For each fan: buttons to assign badge (`Super Fan`, `Stadium Regular`, `Top Fan`)
-- Button to add +2 points (for match/training attendance)
-- Auto-rank: on Sunday, the fan with most points auto-gets `Super Fan` badge (checked on load)
-
----
-
-## 7. League & Amateur Standings on Stats Page
-
-**`Stats.tsx`**: Load `league_teams` from Supabase and display:
-- "Kanjuri League Standings" table
-- "Amateur League Standings" table below it
-- Both visible to everyone, read-only
-
----
-
-## 8. Export Buttons Visibility
-
-Player profile export buttons should appear Friday to Sunday only (already implemented). Add the "Export Full Record" button that includes comprehensive match history from `player_game_log` with game details.
-
----
-
-## Files Changed
+## Summary of Files
 
 | File | Changes |
 |------|---------|
-| DB migration | Create `game_stats` and `player_game_log` tables with RLS |
-| `src/data/team-data.ts` | Add `GameStats`, `PlayerGameLog` interfaces |
-| `src/contexts/TeamDataContext.tsx` | Thursday reset logic, game stats CRUD, player game log auto-linking, fan management methods |
-| `src/pages/OfficialProfile.tsx` | Game stats form after adding score, fan management card with badges/points |
-| `src/pages/PlayerProfile.tsx` | Match history section from player_game_log, updated export with comprehensive data |
-| `src/pages/Stats.tsx` | League + amateur standings tables for everyone, game stats in match reports |
-| `src/pages/Results.tsx` | Show game stats (first/second half) on result cards |
-| `src/lib/docx-export.ts` | Redesign to flexible paragraph-based layout, remove strict tabular design |
+| Supabase migration | Add `successful_tackles`, `direct_targets`, `direct_shots` to `members` |
+| `src/data/team-data.ts` | Add new stat fields to `TeamMember` interface |
+| `src/contexts/TeamDataContext.tsx` | Extend `updatePlayerStats` and `loadMembers` for new fields |
+| `src/pages/OfficialProfile.tsx` | Major: scores→coach only, events→coach only, manager gets edit/delete scores, expanded stats editor, match performance recorder, add player UI, overview archive |
+| `src/pages/Stats.tsx` | Overview 3-icon system + archive, match reports section, fix new player contribution display, updated performance table |
+| `src/pages/PlayerProfile.tsx` | Export visible Fri-Sun, new stat cards |
+| `src/index.css` | Strengthen Lovable badge hiding |
 
