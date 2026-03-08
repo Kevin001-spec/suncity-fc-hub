@@ -28,29 +28,29 @@ const PlayerProfile = () => {
   const [weeklyLogs, setWeeklyLogs] = useState<WeeklyStatsLog[]>([]);
   const [momentText, setMomentText] = useState("");
 
-  if (!user) return <Navigate to="/" replace />;
-
-  const liveMember = members.find((m) => m.id === user.id) || user;
-  const isFan = user.role === "fan";
-  const isFabianExempt = user.id === "SCF-001";
-  const posGroup = getPositionGroup(liveMember.position);
+  const liveMember = members.find((m) => m.id === user?.id) || user;
+  const isFan = user?.role === "fan";
+  const isFabianExempt = user?.id === "SCF-001";
+  const posGroup = getPositionGroup(liveMember?.position);
   const dayOfWeek = new Date().getDay();
-  const showExport = dayOfWeek >= 5 || dayOfWeek === 0; // Fri-Sun
+  const showExport = dayOfWeek >= 5 || dayOfWeek === 0;
   const showDetailedExport = showExport;
 
   // Load weekly stats logs
   useEffect(() => {
-    if (user.id && !isFan) {
+    if (user?.id && !isFan) {
       loadWeeklyStatsLogs(user.id).then(setWeeklyLogs);
     }
-  }, [user.id, isFan]);
+  }, [user?.id, isFan]);
 
   // Init moment text
   useEffect(() => {
-    if (isFan && liveMember.favouriteMoment) {
+    if (isFan && liveMember?.favouriteMoment) {
       setMomentText(liveMember.favouriteMoment);
     }
-  }, [isFan, liveMember.favouriteMoment]);
+  }, [isFan, liveMember?.favouriteMoment]);
+
+  if (!user) return <Navigate to="/" replace />;
 
   const handleProfilePicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
