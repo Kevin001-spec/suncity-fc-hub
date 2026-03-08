@@ -26,6 +26,9 @@ export interface TeamMember {
   excused?: boolean;
   excusedType?: string;
   excusedDays?: string[];
+  fanBadge?: string;
+  fanPoints?: number;
+  favouriteMoment?: string;
   contributions: Record<string, "paid" | "pending" | "unpaid">;
 }
 
@@ -36,6 +39,8 @@ export interface GameScore {
   ourScore: number;
   theirScore: number;
   scorers?: string[];
+  gameType?: string;
+  venue?: string;
 }
 
 export interface CalendarEvent {
@@ -101,6 +106,26 @@ export interface Message {
   toId: string;
   content: string;
   read: boolean;
+  createdAt: string;
+}
+
+export interface WeeklyStatsLog {
+  id: string;
+  playerId: string;
+  weekStart: string;
+  goals: number;
+  assists: number;
+  gamesPlayed: number;
+  saves: number;
+  cleanSheets: number;
+  aerialDuels: number;
+  tackles: number;
+  interceptions: number;
+  blocks: number;
+  clearances: number;
+  successfulTackles: number;
+  directTargets: number;
+  directShots: number;
   createdAt: string;
 }
 
@@ -223,9 +248,16 @@ export const teamBackground = {
 
 export function authenticateMember(identifier: string, pin?: string): TeamMember | null {
   const upperId = identifier.toUpperCase();
+  // Player login (SCF-P prefix) — no PIN needed
   if (upperId.includes("P")) {
     const player = players.find((p) => p.id.toUpperCase() === upperId);
     if (player) return player;
+  }
+  // Fan login (SCF-F prefix) — no PIN needed
+  if (upperId.includes("F") && upperId.startsWith("SCF-F")) {
+    // Fans are loaded from DB, so we check allMembers but also return a basic structure
+    // The actual auth will be handled by the login flow checking Supabase
+    return null; // Will be handled by DB lookup in AuthContext
   }
   if (pin) {
     const official = officials.find((o) => o.id.toUpperCase() === upperId && o.pin === pin);

@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface AuthContextType {
   user: TeamMember | null;
-  login: (identifier: string, pin?: string) => { success: boolean; error?: string };
+  login: (identifier: string, pin?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isOfficial: boolean;
 }
@@ -25,14 +25,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq("to_id", user.id).eq("read", false)
         .then(({ count }) => {
           if (count && count > 0) {
-            // Use a custom event to show toast after mount
             window.dispatchEvent(new CustomEvent("suncity-unread", { detail: count }));
           }
         });
     }
   }, [user?.id]);
 
-  const login = useCallback((identifier: string, pin?: string) => {
+  const login = useCallback(async (identifier: string, pin?: string): Promise<{ success: boolean; error?: string }> => {
+    const upperId = identifier.toUpperCase();
+
+    // Try fan login (SCF-F prefix — no PIN)
+    if (upperId.startsWith("SCF-F")) {
+      const { data } = await supabase.from("members").select("*").eq("id", upperId).single();
+      if (data && (data as any).role === "fan") {
+        const fanMember: TeamMember = {
+          id: data.id, name: data.name, role: "fan",
+          profilePic: (data as any).profile_pic_url,
+          fanBadge: (data as any).fan_badge,
+          fanPoints: (data as any).fan_points || 0,
+          favouriteMoment: (data as any).favourite_moment,
+          contributions: {},
+        };
+        setUser(fanMember);
+        localStorage.setItem("suncity_user", JSON.stringify(fanMember));
+        return { success: true };
+      }
+      return { success: false, error: "Invalid Fan ID." };
+    }
+
+    // Standard auth
     const member = authenticateMember(identifier, pin);
     if (member) {
       // Refresh from DB to get latest name/data
