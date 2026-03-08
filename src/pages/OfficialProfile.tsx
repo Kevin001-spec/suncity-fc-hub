@@ -1061,6 +1061,11 @@ const OfficialProfile = () => {
           );
         })()}
 
+        {/* ===== MANAGER: League Standings Editor ===== */}
+        {isManager && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> League Standings Editor</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
               <div className="flex gap-2">
                 <Input placeholder="Team name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} className="bg-secondary border-border font-body" />
                 <Button onClick={() => handleAddLeagueTeam("league")} disabled={!newTeamName} className="font-body"><Plus className="w-4 h-4 mr-1" /> Add</Button>
