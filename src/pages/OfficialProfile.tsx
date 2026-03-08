@@ -629,8 +629,7 @@ const OfficialProfile = () => {
             </Card>
           </motion.div>
 
-
-
+        <div className="grid md:grid-cols-2 gap-6">
           {/* Game Scores — MANAGER & CAPTAINS ONLY */}
           {canAddScoresEvents && (
             <Card className="bg-card border-border card-glow">
