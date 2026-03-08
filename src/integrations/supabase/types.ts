@@ -278,26 +278,32 @@ export type Database = {
         Row: {
           created_at: string
           date: string
+          game_type: string
           id: string
           opponent: string
           our_score: number
           their_score: number
+          venue: string | null
         }
         Insert: {
           created_at?: string
           date: string
+          game_type?: string
           id?: string
           opponent: string
           our_score?: number
           their_score?: number
+          venue?: string | null
         }
         Update: {
           created_at?: string
           date?: string
+          game_type?: string
           id?: string
           opponent?: string
           our_score?: number
           their_score?: number
+          venue?: string | null
         }
         Relationships: []
       }
@@ -528,6 +534,9 @@ export type Database = {
           excused: boolean
           excused_days: string[] | null
           excused_type: string | null
+          fan_badge: string | null
+          fan_points: number
+          favourite_moment: string | null
           games_played: number
           goals: number
           id: string
@@ -556,6 +565,9 @@ export type Database = {
           excused?: boolean
           excused_days?: string[] | null
           excused_type?: string | null
+          fan_badge?: string | null
+          fan_points?: number
+          favourite_moment?: string | null
           games_played?: number
           goals?: number
           id: string
@@ -584,6 +596,9 @@ export type Database = {
           excused?: boolean
           excused_days?: string[] | null
           excused_type?: string | null
+          fan_badge?: string | null
+          fan_points?: number
+          favourite_moment?: string | null
           games_played?: number
           goals?: number
           id?: string
@@ -708,6 +723,66 @@ export type Database = {
           data?: Json
           id?: string
           type?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
+      weekly_stats_log: {
+        Row: {
+          aerial_duels: number
+          assists: number
+          blocks: number
+          clean_sheets: number
+          clearances: number
+          created_at: string
+          direct_shots: number
+          direct_targets: number
+          games_played: number
+          goals: number
+          id: string
+          interceptions: number
+          player_id: string
+          saves: number
+          successful_tackles: number
+          tackles: number
+          week_start: string
+        }
+        Insert: {
+          aerial_duels?: number
+          assists?: number
+          blocks?: number
+          clean_sheets?: number
+          clearances?: number
+          created_at?: string
+          direct_shots?: number
+          direct_targets?: number
+          games_played?: number
+          goals?: number
+          id?: string
+          interceptions?: number
+          player_id: string
+          saves?: number
+          successful_tackles?: number
+          tackles?: number
+          week_start: string
+        }
+        Update: {
+          aerial_duels?: number
+          assists?: number
+          blocks?: number
+          clean_sheets?: number
+          clearances?: number
+          created_at?: string
+          direct_shots?: number
+          direct_targets?: number
+          games_played?: number
+          goals?: number
+          id?: string
+          interceptions?: number
+          player_id?: string
+          saves?: number
+          successful_tackles?: number
+          tackles?: number
           week_start?: string
         }
         Relationships: []
