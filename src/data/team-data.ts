@@ -129,6 +129,28 @@ export interface WeeklyStatsLog {
   createdAt: string;
 }
 
+export interface GameStats {
+  id: string;
+  gameId: string;
+  half: "first" | "second";
+  shots: number;
+  shotsOnTarget: number;
+  penalties: number;
+  freekicks: number;
+  cornerKicks: number;
+  fouls: number;
+  offsides: number;
+  yellowCards: number;
+  redCards: number;
+}
+
+export interface PlayerGameLog {
+  id: string;
+  playerId: string;
+  gameId: string;
+  createdAt: string;
+}
+
 // New player IDs (SCF-P31 to SCF-P35) — their contributions start from feb-2026
 export const NEW_PLAYER_IDS = new Set(["SCF-P31", "SCF-P32", "SCF-P33", "SCF-P34", "SCF-P35"]);
 
@@ -255,8 +277,6 @@ export function authenticateMember(identifier: string, pin?: string): TeamMember
   }
   // Fan login (SCF-F prefix) — no PIN needed
   if (upperId.includes("F") && upperId.startsWith("SCF-F")) {
-    // Fans are loaded from DB, so we check allMembers but also return a basic structure
-    // The actual auth will be handled by the login flow checking Supabase
     return null; // Will be handled by DB lookup in AuthContext
   }
   if (pin) {
