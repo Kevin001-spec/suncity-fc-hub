@@ -1,109 +1,101 @@
 
 
-# System Update Plan
+# Position-Specific Stats, Auto POTM, Improvement Tracking & Export Fix
 
-## Task 1: Move "Add Recent Results" and "Add Events" to Coach Profile Only
+## Summary
 
-Currently `canManageScores` and `canManageEvents` include coach, manager, and captain. Change:
-- **Add Score** card: Show only for `isCoach` (not manager/captain)
-- **Add Event** card: Show only for `isCoach`
-- **Manager gets a NEW "Edit/Remove Recent Scores"** card instead — shows list of `gameScores` with Edit/Delete buttons per entry
-
-**Files:** `src/pages/OfficialProfile.tsx`
-- Change line 399 condition from `canManageScores` to `isCoach`
-- Change line 427 condition from `canManageEvents` to `isCoach`
-- Add new Manager card: "Manage Recent Results" with list of games, each having Edit (inline fields) and Delete (with confirm) buttons
-
-## Task 2: Update Team Stats Editor with Position-Specific Stats
-
-The stats editor (lines 484-516) only has Goals/Assists/Games fields. Update to show position-appropriate fields:
-- **All players**: Goals, Assists, Games Played, Successful Tackles, Direct Targets (new fields needed)
-- **Defenders only**: Additional Tackles, Interceptions, Clearances, Direct Shots
-- **GK**: Saves, Clean Sheets, Aerial Duels
-
-**Database migration**: Add `successful_tackles` and `direct_targets` columns (and `direct_shots` for DEF) to `members` table.
-
-**Files:**
-- Supabase migration: `ALTER TABLE members ADD COLUMN successful_tackles INT DEFAULT 0, ADD COLUMN direct_targets INT DEFAULT 0, ADD COLUMN direct_shots INT DEFAULT 0;`
-- `src/data/team-data.ts`: Add new fields to `TeamMember` interface
-- `src/pages/OfficialProfile.tsx`: Expand stats editor — add state variables for all new stats, detect selected player's position group, show relevant fields dynamically
-- `src/contexts/TeamDataContext.tsx`: Extend `updatePlayerStats` mapping to include new fields
-- `src/pages/PlayerProfile.tsx`: Update `getStatCards()` to show new stats for each position
-- `src/pages/Stats.tsx`: Update performance table columns
-
-## Task 3: Overview Tracking System (Weekly/Monthly/Season) — 3 Icons
-
-This is the repeating core request. Currently there's a single "Weekly Overview" card that shows Fri-Sun. Need to transform into 3 icons like the gallery:
-
-**Design:**
-- 3 icon buttons on Stats page (and officials dashboard): 📅 Weekly, 📊 Monthly, 🏆 Season
-- **Weekly**: Icon always visible. Clickable only Fri-Sun. Opens dialog with overview data. After Sunday, auto-archive to `weekly_overviews` table.
-- **Monthly**: Icon always visible. Clickable after 3 weekly reports exist. Opens dialog with monthly summary.
-- **Season**: Icon always visible. Clickable only when coach's end date has passed. Opens dialog with all-time stats.
-- Each includes "Most Improved" tracking (compare current vs previous week data for discipline, goals, assists).
-- **Archive Section**: On officials stats/profile — permanent archive of past reports, displayed as clickable date icons (like gallery), separated by type (weekly/monthly/season).
-
-**Files:**
-- `src/pages/Stats.tsx`: Replace the single weekly overview with 3 icon system + archive section
-- `src/pages/OfficialProfile.tsx`: Add archive section for officials
-- Logic: Load `weekly_overviews` and `season_config` from Supabase, compute available reports
-
-## Task 4: Player DOCX Export (Friday-Sunday)
-
-Currently `isFriday = new Date().getDay() === 5`. Change to show Fri-Sun:
-```
-const showExport = [0, 5, 6].includes(new Date().getDay());
-```
-
-The export already calls `generatePlayerProfileDocx` — just need to update the visibility condition.
-
-**Files:** `src/pages/PlayerProfile.tsx` — change line 33
-
-## Task 5: Match Day Performance Tracking on Officials Stats
-
-Need a section on Stats page where officials see match-by-match player performance data. Already have `match_performances` table and `addMatchPerformance` in context.
-
-**Manager's profile**: Add "Record Match Day Stats" section — select a game, add player performances (position-specific stats + rating + POTM checkbox).
-
-**Stats page**: Add "Match Day Reports" section — games listed by date (newest first), expandable to show each player's stats, ranked by rating, POTM highlighted. Exportable as DOCX.
-
-**Files:**
-- `src/pages/OfficialProfile.tsx`: Add match performance recorder for manager
-- `src/pages/Stats.tsx`: Add match reports section
-
-## Task 6: Manager Edit/Remove Recent Scores
-
-Covered in Task 1 — the new "Manage Recent Results" card.
-
-## Task 7: Add Players Section for Coach & Manager
-
-Currently `addPlayer` exists in context but no UI. Add an "Add New Player" card for both `isCoach` and `isManager`:
-- Name, Squad Number, Position selector
-- Inserts via `addPlayer(name, squadNumber, position)`
-
-**Files:** `src/pages/OfficialProfile.tsx` — add card with condition `isCoach || isManager`
-
-## Task 8: Fix New Players Contribution Display in Stats
-
-In `Stats.tsx` contribution grid (line 408-427), new players (SCF-P31 to SCF-P35) still show ❌ for Dec/Jan. Fix by using `getContribMonthsForMember` to determine which months to show, and for months that don't apply, show `—` instead.
-
-**Files:** `src/pages/Stats.tsx` — update contribution grid to check `NEW_PLAYER_IDS` and skip/show dash for inapplicable months
-
-## Task 9: Lovable Badge CSS
-
-Already exists but will re-verify/strengthen in `src/index.css`.
+This plan fixes position-specific stat fields across the entire system, implements automatic Player of the Match determination, adds match-to-match improvement analytics for officials, and restores proper table-based exports.
 
 ---
 
-## Summary of Files
+## 1. Position-Specific Stats — Everywhere
+
+### Current problem
+- Manager's **Team Stats Editor** shows common fields (goals, assists, games, successful tackles, direct targets) for ALL positions, then adds GK/DEF-specific ones. Attackers see irrelevant fields.
+- **Match Day Performance Recorder** shows ALL fields (saves, tackles, blocks, clearances, aerial duels, rating, POTM checkbox) for every player regardless of position.
+- **PlayerProfile.tsx** and **Players.tsx** PlayerCard show some wrong stats for defenders (blocks instead of goals).
+
+### New position-specific stat sets
+
+| Position | Stats shown everywhere |
+|----------|----------------------|
+| **GK** | Saves, Clean Sheets, Aerial Duels |
+| **DEF** | Tackles, Interceptions, Assists, Goals, Shots on Target |
+| **MID/ATT** | Tackles, Goals, Assists, Shots on Target |
+
+### Files changed
+- **`OfficialProfile.tsx`** — Team Stats Editor (lines 872-955): Replace all current fields with position-specific ones only. Match Day Performance Recorder (lines 957-1006): Show only position-relevant fields, remove `rating` input and `POTM` checkbox.
+- **`PlayerProfile.tsx`** — `getStatCards()` (lines 82-105): Update to new stat sets.
+- **`Players.tsx`** — `PlayerCard` (lines 34-55): Update stat display to new sets.
+- **`handleUpdateStats`** in OfficialProfile (lines 329-353): Only send position-relevant fields.
+
+### Column mapping
+- "Shots on Target" maps to existing `direct_shots` column in `members` table (reuse, no migration needed).
+
+---
+
+## 2. Auto Player of the Match (System-Determined)
+
+### How it works
+After all match performances are recorded for a game, the system automatically calculates POTM using a weighted scoring formula:
+
+```text
+Score = goals×10 + assists×7 + saves×5 + tackles×3 + interceptions×3 + cleanSheet×8 + aerialDuels×2
+```
+
+The player with the highest score for that game is auto-flagged as POTM.
+
+### Implementation
+- **`OfficialProfile.tsx`**: Remove `perfRating` and `perfIsPotm` state/inputs. After `handleAddMatchPerf`, recalculate POTM across all performances for that game and update the `is_potm` flag via Supabase update. Remove the rating field from the insert.
+- **`Stats.tsx`**: Add a "Man of the Match" card for the most recent game with fancy decorative UI showing the POTM player's name, photo, and the stats that earned them the award (goals, assists, saves etc. — only non-zero ones).
+
+---
+
+## 3. Match-to-Match Improvement Analytics (Officials Only)
+
+### What it does
+After a new match is recorded, compare each player's performance in the current match vs. the previous match they played. Show:
+- **Most Improved**: Player with biggest positive delta
+- **Performance Drop**: Players whose stats declined
+
+### Implementation
+- **`OfficialProfile.tsx`**: Add a new card "Post-Match Analytics" that appears when `matchPerformances` has data for 2+ games. For each player in the latest game, find their previous game performance and compute deltas. Display with green/red indicators.
+
+---
+
+## 4. Best of Week/Month/Season — Persistent Storage for Officials
+
+### Current state
+Weekly/monthly/season overviews exist but use `weekly_overviews` table with JSON `data` column. The "best player" data is computed on-the-fly and not persisted.
+
+### Fix
+- When the weekly overview is saved/archived, include the computed "best player" data in the JSON `data` field.
+- **`Stats.tsx`**: In the archive view, display the stored best-of data from the JSON. Already partially works — just ensure the archive save includes `bestPlayer`, `top3`, `mostDisciplined` in the data payload.
+- Add a new "Hall of Records" card visible only to officials that lists all archived best-of-week/month/season winners.
+
+---
+
+## 5. Export System — Restore Tables, Make Flexible
+
+### Current problem
+The `docx-export.ts` was redesigned to use paragraph-based layout, removing tables. User wants tables back but flexible (system analyzes data and arranges in neat tables).
+
+### Fix
+- **`docx-export.ts`**: Restore `generateBrandedDocx` to use proper `Table` elements with `TableRow`/`TableCell`. Keep the branded header. The function already accepts `DocxTableData[]` with head/body arrays — ensure it renders actual tables, not paragraphs.
+- `generatePlayerProfileDocx`: Use tables for stats, attendance, contributions, match history. Keep flexible — only include sections that have data.
+
+---
+
+## Files Changed Summary
 
 | File | Changes |
 |------|---------|
-| Supabase migration | Add `successful_tackles`, `direct_targets`, `direct_shots` to `members` |
-| `src/data/team-data.ts` | Add new stat fields to `TeamMember` interface |
-| `src/contexts/TeamDataContext.tsx` | Extend `updatePlayerStats` and `loadMembers` for new fields |
-| `src/pages/OfficialProfile.tsx` | Major: scores→coach only, events→coach only, manager gets edit/delete scores, expanded stats editor, match performance recorder, add player UI, overview archive |
-| `src/pages/Stats.tsx` | Overview 3-icon system + archive, match reports section, fix new player contribution display, updated performance table |
-| `src/pages/PlayerProfile.tsx` | Export visible Fri-Sun, new stat cards |
-| `src/index.css` | Strengthen Lovable badge hiding |
+| `src/pages/OfficialProfile.tsx` | Position-specific stats editor fields, position-specific match perf fields, remove rating/POTM manual inputs, auto-POTM calculation, post-match improvement analytics card |
+| `src/pages/PlayerProfile.tsx` | Update `getStatCards()` to new position sets |
+| `src/pages/Players.tsx` | Update `PlayerCard` stats to new position sets |
+| `src/pages/Stats.tsx` | Auto POTM display card with fancy UI, Hall of Records for officials |
+| `src/lib/docx-export.ts` | Restore table-based rendering in `generateBrandedDocx`, flexible table layout in `generatePlayerProfileDocx` |
+| `src/data/team-data.ts` | No changes needed (columns already exist) |
+
+No database migrations needed — all columns exist, we just change which ones are displayed/edited per position.
 
