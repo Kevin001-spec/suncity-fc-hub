@@ -6,7 +6,7 @@ import { Navigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trophy } from "lucide-react";
+import { Trophy, MapPin } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface LeagueTeam {
@@ -38,6 +38,12 @@ const Results = () => {
 
   if (!user) return <Navigate to="/" replace />;
 
+  const gameTypeBadgeColor = (type?: string) => {
+    if (type === "league") return "bg-primary text-primary-foreground";
+    if (type === "amateur") return "bg-green-600 text-white";
+    return "bg-muted text-muted-foreground";
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -47,13 +53,13 @@ const Results = () => {
           <p className="text-muted-foreground text-sm font-body mt-1">All game history & league standings</p>
         </motion.div>
 
-        {/* League Standings — Read-only, multi-team */}
+        {/* League Standings */}
         {mainTeams.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
             <Card className="bg-card border-border card-glow">
               <CardHeader>
                 <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-primary" /> League Standings
+                  <Trophy className="w-5 h-5 text-primary" /> Kanjuri League Standings
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -160,6 +166,16 @@ const Results = () => {
                     <div key={game.id} className="border border-border rounded-lg p-3 navy-accent">
                       <div className="flex items-center justify-between">
                         <div className="font-body">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge className={`text-[10px] py-0 px-1.5 font-heading uppercase ${gameTypeBadgeColor(game.gameType)}`}>
+                              {game.gameType || "friendly"}
+                            </Badge>
+                            {game.venue && (
+                              <span className="text-[10px] text-muted-foreground font-body flex items-center gap-0.5">
+                                <MapPin className="w-3 h-3" /> {game.venue}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-foreground font-medium">vs {game.opponent}</p>
                           <p className="text-xs text-muted-foreground">{new Date(game.date).toLocaleDateString()}</p>
                         </div>
