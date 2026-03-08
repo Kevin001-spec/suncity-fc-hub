@@ -1,0 +1,1 @@
+ALTER TABLE game_stats ADD CONSTRAINT game_stats_game_id_half_key UNIQUE (game_id, half);

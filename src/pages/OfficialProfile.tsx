@@ -252,19 +252,27 @@ const OfficialProfile = () => {
 
   const handleSaveGameStats = async () => {
     if (!lastAddedGameId) return;
-    const { saveGameStats } = { saveGameStats: async (gameId: string, half: string, stats: any) => {
-      await supabase.from("game_stats").upsert({
-        game_id: gameId, half,
-        shots: stats.shots, shots_on_target: stats.shotsOnTarget, penalties: stats.penalties,
-        freekicks: stats.freekicks, corner_kicks: stats.cornerKicks, fouls: stats.fouls,
-        offsides: stats.offsides, yellow_cards: stats.yellowCards, red_cards: stats.redCards,
+    const saveHalf = async (half: string, stats: any) => {
+      const { error } = await supabase.from("game_stats").upsert({
+        game_id: lastAddedGameId, half,
+        shots: stats.shots ?? 0, shots_on_target: stats.shotsOnTarget ?? 0, penalties: stats.penalties ?? 0,
+        freekicks: stats.freekicks ?? 0, corner_kicks: stats.cornerKicks ?? 0, fouls: stats.fouls ?? 0,
+        offsides: stats.offsides ?? 0, yellow_cards: stats.yellowCards ?? 0, red_cards: stats.redCards ?? 0,
       } as any, { onConflict: "game_id,half" });
-    }};
-    await saveGameStats(lastAddedGameId, "first", firstHalfStats);
-    await saveGameStats(lastAddedGameId, "second", secondHalfStats);
-    toast({ title: "Game Stats Saved", description: `Stats for vs ${lastAddedOpponent} recorded.` });
-    setLastAddedGameId(null);
-    setLastAddedOpponent("");
+      if (error) {
+        console.error("Failed to save game stats:", error);
+        toast({ title: "Error saving stats", description: error.message, variant: "destructive" });
+        return false;
+      }
+      return true;
+    };
+    const r1 = await saveHalf("first", firstHalfStats);
+    const r2 = await saveHalf("second", secondHalfStats);
+    if (r1 && r2) {
+      toast({ title: "Game Stats Saved", description: `Stats for vs ${lastAddedOpponent} recorded.` });
+      setLastAddedGameId(null);
+      setLastAddedOpponent("");
+    }
   };
 
   const addEvent = () => {
