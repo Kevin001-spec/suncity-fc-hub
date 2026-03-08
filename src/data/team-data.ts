@@ -188,16 +188,16 @@ export function getPositionGroup(pos?: string): string {
 
 // Officials
 export const officials: TeamMember[] = [
-  { id: "SCF-001", name: "Fabian", role: "coach", username: "COACH-FAB", pin: "8246", phone: "0717455265", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-002", name: "Fadhir", role: "finance", username: "FIN-FAD", pin: "5931", phone: "0748431548", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-003", name: "Kevin", role: "manager", username: "MGR-KEV", pin: "7719", phone: "0112563036", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-004", name: "Ethan", role: "captain", username: "CPT-ETH", pin: "4628", phone: "0718258821", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-005", name: "Denoh", role: "captain", username: "CPT-DEN", pin: "9183", phone: "0769188787", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-006", name: "Victor", role: "captain", username: "CPT-VIC", pin: "3507", phone: "0786520209", position: "DEF (LB)", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-007", name: "Lucario", role: "captain", username: "CPT-LUC", pin: "6842", phone: "0722725900", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-008", name: "Austin", role: "captain", username: "CPT-AUS", pin: "2059", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-009", name: "Brian (K)", role: "captain", username: "CPT-BK", pin: "1374", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
-  { id: "SCF-010", name: "Clyn", role: "assistant_coach", username: "AST-CLY", pin: "4291", goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
+  { id: "SCF-001", name: "Fabian", role: "coach", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-002", name: "Fadhir", role: "finance", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-003", name: "Kevin", role: "manager", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-004", name: "Ethan", role: "captain", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-005", name: "Denoh", role: "captain", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-006", name: "Victor", role: "captain", position: "DEF (LB)", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-007", name: "Lucario", role: "captain", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-008", name: "Austin", role: "captain", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-009", name: "Brian (K)", role: "captain", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
+  { id: "SCF-010", name: "Clyn", role: "assistant_coach", goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
 ];
 
 // Players
@@ -268,24 +268,13 @@ export const teamBackground = {
   values: "As a coach, I want to make it very clear that Sun City FC is not a place for indiscipline, laziness, or division. Any player who is not ready to work with the team, the officials, and the leadership should reconsider their position. If any form of disrespect, disunity, or refusal to cooperate is noted, the player will face suspension for a period of not less than ten days. We are competing seriously in the Kanjuri League, and discipline, commitment, and unity are non-negotiable values.",
 };
 
-export function authenticateMember(identifier: string, pin?: string): TeamMember | null {
+// authenticateMember is now handled server-side via the authenticate edge function.
+// This stub exists only for backward compatibility with player lookups from local data.
+export function authenticateMember(identifier: string): TeamMember | null {
   const upperId = identifier.toUpperCase();
-  // Player login (SCF-P prefix) — no PIN needed
   if (upperId.includes("P")) {
     const player = players.find((p) => p.id.toUpperCase() === upperId);
     if (player) return player;
-  }
-  // Fan login (SCF-F prefix) — no PIN needed
-  if (upperId.includes("F") && upperId.startsWith("SCF-F")) {
-    return null; // Will be handled by DB lookup in AuthContext
-  }
-  if (pin) {
-    const official = officials.find((o) => o.id.toUpperCase() === upperId && o.pin === pin);
-    if (official) return official;
-  }
-  if (pin) {
-    const official = officials.find((o) => o.username?.toUpperCase() === upperId && o.pin === pin);
-    if (official) return official;
   }
   return null;
 }
