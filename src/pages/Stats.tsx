@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { BarChart3, Download, CheckCircle, Clock, DollarSign, Trophy, Calendar, Image, Star, Award, Users } from "lucide-react";
 import { contributionMonths, officials } from "@/data/team-data";
 import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
-import { getContribMonthsForMember, getFullPositionName, getPositionGroup, NEW_PLAYER_IDS } from "@/data/team-data";
+import { getContribMonthsForMember, NEW_PLAYER_IDS } from "@/data/team-data";
 import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
 
