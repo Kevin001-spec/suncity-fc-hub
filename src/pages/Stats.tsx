@@ -517,16 +517,19 @@ const Stats = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {performanceMembers.map((m) => (
+                    {performanceMembers.map((m) => {
+                      const cs = cumulativeStats[m.id] || { goals: 0, assists: 0, gamesPlayed: 0 };
+                      return (
                       <tr key={m.id} className="border-b border-border hover:bg-secondary/30">
                         <td className="py-2 px-2 text-primary text-xs">{m.squadNumber || "—"}</td>
                         <td className="py-2 text-foreground font-medium">{m.name}</td>
                         <td className="py-2 text-muted-foreground text-xs">{getFullPositionName(m.position)}</td>
-                        <td className="py-2 px-2 text-right font-heading text-primary">{m.goals || 0}</td>
-                        <td className="py-2 px-2 text-right">{m.assists || 0}</td>
-                        <td className="py-2 px-2 text-right">{m.gamesPlayed || 0}</td>
+                        <td className="py-2 px-2 text-right font-heading text-primary">{cs.goals}</td>
+                        <td className="py-2 px-2 text-right">{cs.assists}</td>
+                        <td className="py-2 px-2 text-right">{cs.gamesPlayed}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
