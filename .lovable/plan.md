@@ -1,76 +1,109 @@
 
 
-# Fix Lost Stats, Permanent Performance Data, Match Perf Fields Alignment
+# System Update Plan
 
-## Issues Identified
+## Task 1: Move "Add Recent Results" and "Add Events" to Coach Profile Only
 
-### 1. Lost Stats — Root Cause
-The weekly reset system (`checkAndResetWeeklyStats` in TeamDataContext.tsx) runs on Fri/Sat/Sun and **zeros all player stats** in the `members` table after archiving to `weekly_stats_log`. Today is Sunday, so it ran and wiped everything. The Player Performance table in Stats.tsx reads from `members` (which is now all zeros).
+Currently `canManageScores` and `canManageEvents` include coach, manager, and captain. Change:
+- **Add Score** card: Show only for `isCoach` (not manager/captain)
+- **Add Event** card: Show only for `isCoach`
+- **Manager gets a NEW "Edit/Remove Recent Scores"** card instead — shows list of `gameScores` with Edit/Delete buttons per entry
 
-**Fix**: The Player Performance table must show **cumulative totals** by summing ALL `weekly_stats_log` entries + current `members` values. This makes performance data permanent regardless of weekly resets.
+**Files:** `src/pages/OfficialProfile.tsx`
+- Change line 399 condition from `canManageScores` to `isCoach`
+- Change line 427 condition from `canManageEvents` to `isCoach`
+- Add new Manager card: "Manage Recent Results" with list of games, each having Edit (inline fields) and Delete (with confirm) buttons
 
-### 2. Match Perf Recorder — Missing Fields
-Current match day perf fields don't match profile stats:
-- DEF_PERF has: tackles, interceptions, goals, assists — **missing shots on target, uses generic "tackles" instead of "successful tackles"**
-- MID_ATT_PERF has: goals, assists, tackles — **missing shots on target, uses generic "tackles" instead of "successful tackles"**
+## Task 2: Update Team Stats Editor with Position-Specific Stats
 
-**Fix**: Align perf fields exactly to profile stats (minus gamesPlayed which is auto-tracked):
+The stats editor (lines 484-516) only has Goals/Assists/Games fields. Update to show position-appropriate fields:
+- **All players**: Goals, Assists, Games Played, Successful Tackles, Direct Targets (new fields needed)
+- **Defenders only**: Additional Tackles, Interceptions, Clearances, Direct Shots
+- **GK**: Saves, Clean Sheets, Aerial Duels
 
-| Position | Match Perf Fields |
-|----------|------------------|
-| GK | Saves, Aerial Duels, Clean Sheet |
-| DEF | Successful Tackles, Interceptions, Assists, Goals, Shots on Target |
-| MID/ATT | Successful Tackles, Goals, Assists, Shots on Target |
+**Database migration**: Add `successful_tackles` and `direct_targets` columns (and `direct_shots` for DEF) to `members` table.
 
-### 3. `handleUpdateStats` — Missing `successfulTackles` in stateMap
-Line 370: the `stateMap` doesn't include `successfulTackles`, so saving stats for MID/ATT/DEF silently drops that field.
+**Files:**
+- Supabase migration: `ALTER TABLE members ADD COLUMN successful_tackles INT DEFAULT 0, ADD COLUMN direct_targets INT DEFAULT 0, ADD COLUMN direct_shots INT DEFAULT 0;`
+- `src/data/team-data.ts`: Add new fields to `TeamMember` interface
+- `src/pages/OfficialProfile.tsx`: Expand stats editor — add state variables for all new stats, detect selected player's position group, show relevant fields dynamically
+- `src/contexts/TeamDataContext.tsx`: Extend `updatePlayerStats` mapping to include new fields
+- `src/pages/PlayerProfile.tsx`: Update `getStatCards()` to show new stats for each position
+- `src/pages/Stats.tsx`: Update performance table columns
 
-### 4. Match perf `tackles` column reuse
-The `match_performances` table has a `tackles` column. We'll use it for "Successful Tackles" data (same meaning in match context). The `direct_shots` column doesn't exist in `match_performances` — but we can store shots on target in a workaround: use the existing `blocks` column (unused) to store shots on target for match perfs, OR add a migration. Better approach: add `direct_shots` column to `match_performances`.
+## Task 3: Overview Tracking System (Weekly/Monthly/Season) — 3 Icons
 
----
+This is the repeating core request. Currently there's a single "Weekly Overview" card that shows Fri-Sun. Need to transform into 3 icons like the gallery:
 
-## Changes
+**Design:**
+- 3 icon buttons on Stats page (and officials dashboard): 📅 Weekly, 📊 Monthly, 🏆 Season
+- **Weekly**: Icon always visible. Clickable only Fri-Sun. Opens dialog with overview data. After Sunday, auto-archive to `weekly_overviews` table.
+- **Monthly**: Icon always visible. Clickable after 3 weekly reports exist. Opens dialog with monthly summary.
+- **Season**: Icon always visible. Clickable only when coach's end date has passed. Opens dialog with all-time stats.
+- Each includes "Most Improved" tracking (compare current vs previous week data for discipline, goals, assists).
+- **Archive Section**: On officials stats/profile — permanent archive of past reports, displayed as clickable date icons (like gallery), separated by type (weekly/monthly/season).
 
-### Migration: Add `direct_shots` to `match_performances`
-```sql
-ALTER TABLE match_performances ADD COLUMN IF NOT EXISTS direct_shots integer NOT NULL DEFAULT 0;
+**Files:**
+- `src/pages/Stats.tsx`: Replace the single weekly overview with 3 icon system + archive section
+- `src/pages/OfficialProfile.tsx`: Add archive section for officials
+- Logic: Load `weekly_overviews` and `season_config` from Supabase, compute available reports
+
+## Task 4: Player DOCX Export (Friday-Sunday)
+
+Currently `isFriday = new Date().getDay() === 5`. Change to show Fri-Sun:
+```
+const showExport = [0, 5, 6].includes(new Date().getDay());
 ```
 
-### `src/lib/position-stats.ts`
-- Update DEF_PERF: `successfulTackles` (maps to `tackles` db column), `interceptions`, `goals`, `assists`, `directShots` (maps to new `direct_shots` column)
-- Update MID_ATT_PERF: `successfulTackles` (maps to `tackles`), `goals`, `assists`, `directShots`
-- GK_PERF stays the same
+The export already calls `generatePlayerProfileDocx` — just need to update the visibility condition.
 
-### `src/pages/OfficialProfile.tsx`
-- **`handleUpdateStats` stateMap** (line 370): Add `successfulTackles: statsSuccessfulTackles`
-- **Match perf recorder**: Add `perfDirectShots` state. Update `perfStateMap` to include `directShots` and rename `tackles` key to `successfulTackles`. Update `handleAddMatchPerf` to send `direct_shots` for all positions and use `tackles` column for successful tackles data.
-- Reset `perfDirectShots` after recording
+**Files:** `src/pages/PlayerProfile.tsx` — change line 33
 
-### `src/pages/Stats.tsx`
-- Load `weekly_stats_log` data in the component
-- Compute **cumulative stats** for each player: sum all `weekly_stats_log` entries for that player + current `members` table values
-- Display cumulative totals in the Player Performance table instead of just current `members` values
-- This makes stats permanent and visible even after weekly resets
+## Task 5: Match Day Performance Tracking on Officials Stats
 
-### `src/contexts/TeamDataContext.tsx`
-- In `loadMatchPerformances`: map new `direct_shots` field
-- In `addMatchPerformance`: include `direct_shots` in insert
-- Update `MatchPerformance` type in `team-data.ts` to include `directShots`
+Need a section on Stats page where officials see match-by-match player performance data. Already have `match_performances` table and `addMatchPerformance` in context.
 
-### `src/data/team-data.ts`
-- Add `directShots?: number` to `MatchPerformance` interface
+**Manager's profile**: Add "Record Match Day Stats" section — select a game, add player performances (position-specific stats + rating + POTM checkbox).
+
+**Stats page**: Add "Match Day Reports" section — games listed by date (newest first), expandable to show each player's stats, ranked by rating, POTM highlighted. Exportable as DOCX.
+
+**Files:**
+- `src/pages/OfficialProfile.tsx`: Add match performance recorder for manager
+- `src/pages/Stats.tsx`: Add match reports section
+
+## Task 6: Manager Edit/Remove Recent Scores
+
+Covered in Task 1 — the new "Manage Recent Results" card.
+
+## Task 7: Add Players Section for Coach & Manager
+
+Currently `addPlayer` exists in context but no UI. Add an "Add New Player" card for both `isCoach` and `isManager`:
+- Name, Squad Number, Position selector
+- Inserts via `addPlayer(name, squadNumber, position)`
+
+**Files:** `src/pages/OfficialProfile.tsx` — add card with condition `isCoach || isManager`
+
+## Task 8: Fix New Players Contribution Display in Stats
+
+In `Stats.tsx` contribution grid (line 408-427), new players (SCF-P31 to SCF-P35) still show ❌ for Dec/Jan. Fix by using `getContribMonthsForMember` to determine which months to show, and for months that don't apply, show `—` instead.
+
+**Files:** `src/pages/Stats.tsx` — update contribution grid to check `NEW_PLAYER_IDS` and skip/show dash for inapplicable months
+
+## Task 9: Lovable Badge CSS
+
+Already exists but will re-verify/strengthen in `src/index.css`.
 
 ---
 
-## Files Changed
+## Summary of Files
 
 | File | Changes |
 |------|---------|
-| Migration | Add `direct_shots` column to `match_performances` |
-| `src/lib/position-stats.ts` | Align DEF_PERF and MID_ATT_PERF to profile stats |
-| `src/pages/OfficialProfile.tsx` | Fix stateMap, add directShots to match perf, align all perf fields |
-| `src/pages/Stats.tsx` | Cumulative stats from weekly_stats_log + members for permanent display |
-| `src/contexts/TeamDataContext.tsx` | Map new direct_shots in match perf load/save |
-| `src/data/team-data.ts` | Add directShots to MatchPerformance interface |
+| Supabase migration | Add `successful_tackles`, `direct_targets`, `direct_shots` to `members` |
+| `src/data/team-data.ts` | Add new stat fields to `TeamMember` interface |
+| `src/contexts/TeamDataContext.tsx` | Extend `updatePlayerStats` and `loadMembers` for new fields |
+| `src/pages/OfficialProfile.tsx` | Major: scores→coach only, events→coach only, manager gets edit/delete scores, expanded stats editor, match performance recorder, add player UI, overview archive |
+| `src/pages/Stats.tsx` | Overview 3-icon system + archive, match reports section, fix new player contribution display, updated performance table |
+| `src/pages/PlayerProfile.tsx` | Export visible Fri-Sun, new stat cards |
+| `src/index.css` | Strengthen Lovable badge hiding |
 

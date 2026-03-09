@@ -33,6 +33,47 @@ const Stats = () => {
   const { members, financialRecords, gameScores, attendance, mediaItems, profilePics, matchPerformances } = useTeamData();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
+  // Cumulative stats from weekly_stats_log + current members
+  const [weeklyLogsAll, setWeeklyLogsAll] = useState<any[]>([]);
+  useEffect(() => {
+    supabase.from("weekly_stats_log").select("*").then(({ data }) => {
+      if (data) setWeeklyLogsAll(data);
+    });
+  }, []);
+
+  // Build cumulative stats map: player_id -> cumulative totals
+  const cumulativeStats = useMemo(() => {
+    const map: Record<string, { goals: number; assists: number; gamesPlayed: number; saves: number; cleanSheets: number; aerialDuels: number; successfulTackles: number; interceptions: number; directShots: number }> = {};
+    // Sum all weekly_stats_log entries per player
+    for (const log of weeklyLogsAll) {
+      const pid = log.player_id;
+      if (!map[pid]) map[pid] = { goals: 0, assists: 0, gamesPlayed: 0, saves: 0, cleanSheets: 0, aerialDuels: 0, successfulTackles: 0, interceptions: 0, directShots: 0 };
+      map[pid].goals += log.goals || 0;
+      map[pid].assists += log.assists || 0;
+      map[pid].gamesPlayed += log.games_played || 0;
+      map[pid].saves += log.saves || 0;
+      map[pid].cleanSheets += log.clean_sheets || 0;
+      map[pid].aerialDuels += log.aerial_duels || 0;
+      map[pid].successfulTackles += log.successful_tackles || 0;
+      map[pid].interceptions += log.interceptions || 0;
+      map[pid].directShots += log.direct_shots || 0;
+    }
+    // Add current members values (which may have been reset to 0, or have new data)
+    for (const m of members) {
+      if (!map[m.id]) map[m.id] = { goals: 0, assists: 0, gamesPlayed: 0, saves: 0, cleanSheets: 0, aerialDuels: 0, successfulTackles: 0, interceptions: 0, directShots: 0 };
+      map[m.id].goals += m.goals || 0;
+      map[m.id].assists += m.assists || 0;
+      map[m.id].gamesPlayed += m.gamesPlayed || 0;
+      map[m.id].saves += m.saves || 0;
+      map[m.id].cleanSheets += m.cleanSheets || 0;
+      map[m.id].aerialDuels += m.aerialDuels || 0;
+      map[m.id].successfulTackles += m.successfulTackles || 0;
+      map[m.id].interceptions += m.interceptions || 0;
+      map[m.id].directShots += m.directShots || 0;
+    }
+    return map;
+  }, [weeklyLogsAll, members]);
+
   // Overview system state
   const [weeklyOverviews, setWeeklyOverviews] = useState<any[]>([]);
   const [seasonConfig, setSeasonConfig] = useState<any[]>([]);
@@ -476,16 +517,19 @@ const Stats = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {performanceMembers.map((m) => (
+                    {performanceMembers.map((m) => {
+                      const cs = cumulativeStats[m.id] || { goals: 0, assists: 0, gamesPlayed: 0 };
+                      return (
                       <tr key={m.id} className="border-b border-border hover:bg-secondary/30">
                         <td className="py-2 px-2 text-primary text-xs">{m.squadNumber || "—"}</td>
                         <td className="py-2 text-foreground font-medium">{m.name}</td>
                         <td className="py-2 text-muted-foreground text-xs">{getFullPositionName(m.position)}</td>
-                        <td className="py-2 px-2 text-right font-heading text-primary">{m.goals || 0}</td>
-                        <td className="py-2 px-2 text-right">{m.assists || 0}</td>
-                        <td className="py-2 px-2 text-right">{m.gamesPlayed || 0}</td>
+                        <td className="py-2 px-2 text-right font-heading text-primary">{cs.goals}</td>
+                        <td className="py-2 px-2 text-right">{cs.assists}</td>
+                        <td className="py-2 px-2 text-right">{cs.gamesPlayed}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

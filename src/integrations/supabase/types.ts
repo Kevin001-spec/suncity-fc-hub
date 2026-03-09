@@ -524,6 +524,7 @@ export type Database = {
           clean_sheet: boolean
           clearances: number
           created_at: string
+          direct_shots: number
           game_id: string
           goals: number
           id: string
@@ -541,6 +542,7 @@ export type Database = {
           clean_sheet?: boolean
           clearances?: number
           created_at?: string
+          direct_shots?: number
           game_id: string
           goals?: number
           id?: string
@@ -558,6 +560,7 @@ export type Database = {
           clean_sheet?: boolean
           clearances?: number
           created_at?: string
+          direct_shots?: number
           game_id?: string
           goals?: number
           id?: string

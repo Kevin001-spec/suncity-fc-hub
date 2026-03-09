@@ -296,6 +296,7 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
       tackles: p.tackles, interceptions: p.interceptions, blocks: p.blocks,
       clearances: p.clearances, cleanSheet: p.clean_sheet, aerialDuels: p.aerial_duels,
       rating: Number(p.rating), isPotm: p.is_potm,
+      directShots: p.direct_shots || 0,
     })));
   }, []);
 
@@ -746,6 +747,7 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
       tackles: perf.tackles, interceptions: perf.interceptions, blocks: perf.blocks,
       clearances: perf.clearances, clean_sheet: perf.cleanSheet, aerial_duels: perf.aerialDuels,
       rating: perf.rating, is_potm: perf.isPotm,
+      direct_shots: perf.directShots || 0,
     } as any);
     loadMatchPerformances();
   }, [loadMatchPerformances]);

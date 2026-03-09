@@ -98,6 +98,7 @@ export interface MatchPerformance {
   aerialDuels: number;
   rating: number;
   isPotm: boolean;
+  directShots?: number;
 }
 
 export interface Message {

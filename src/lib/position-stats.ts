@@ -55,16 +55,18 @@ const GK_PERF: PerfField[] = [
 ];
 
 const DEF_PERF: PerfField[] = [
-  { key: "tackles", label: "Tackles", dbColumn: "tackles" },
+  { key: "successfulTackles", label: "Successful Tackles", dbColumn: "tackles" },
   { key: "interceptions", label: "Interceptions", dbColumn: "interceptions" },
   { key: "goals", label: "Goals", dbColumn: "goals" },
   { key: "assists", label: "Assists", dbColumn: "assists" },
+  { key: "directShots", label: "Shots on Target", dbColumn: "direct_shots" },
 ];
 
 const MID_ATT_PERF: PerfField[] = [
+  { key: "successfulTackles", label: "Successful Tackles", dbColumn: "tackles" },
   { key: "goals", label: "Goals", dbColumn: "goals" },
   { key: "assists", label: "Assists", dbColumn: "assists" },
-  { key: "tackles", label: "Tackles", dbColumn: "tackles" },
+  { key: "directShots", label: "Shots on Target", dbColumn: "direct_shots" },
 ];
 
 export function getPerfFieldsForPosition(position?: string): PerfField[] {

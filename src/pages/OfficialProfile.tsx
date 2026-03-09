@@ -208,6 +208,7 @@ const OfficialProfile = () => {
   const [perfAerialDuels, setPerfAerialDuels] = useState("0");
   const [perfRating, setPerfRating] = useState("5");
   const [perfIsPotm, setPerfIsPotm] = useState(false);
+  const [perfDirectShots, setPerfDirectShots] = useState("0");
 
   // Message reply + send
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -369,8 +370,8 @@ const OfficialProfile = () => {
     const statsObj: Record<string, number> = {};
     const stateMap: Record<string, string> = {
       saves: statsSaves, cleanSheets: statsCleanSheets, aerialDuels: statsAerialDuels,
-      tackles: statsTackles, interceptions: statsInterceptions, assists: statsAssists,
-      goals: statsGoals, directShots: statsDirectShots,
+      interceptions: statsInterceptions, assists: statsAssists,
+      goals: statsGoals, directShots: statsDirectShots, successfulTackles: statsSuccessfulTackles,
     };
     for (const f of fields) {
       statsObj[f.key] = parseInt(stateMap[f.key] || "0") || 0;
@@ -567,6 +568,7 @@ const OfficialProfile = () => {
       goals: 0, assists: 0, saves: 0, tackles: 0,
       interceptions: 0, blocks: 0, clearances: 0,
       cleanSheet: false, aerialDuels: 0, rating: 0, isPotm: false,
+      directShots: 0,
     };
     
     if (perfPosGroup === "GK") {
@@ -578,10 +580,12 @@ const OfficialProfile = () => {
       perfData.interceptions = parseInt(perfInterceptions) || 0;
       perfData.goals = parseInt(perfGoals) || 0;
       perfData.assists = parseInt(perfAssists) || 0;
+      perfData.directShots = parseInt(perfDirectShots) || 0;
     } else {
       perfData.goals = parseInt(perfGoals) || 0;
       perfData.assists = parseInt(perfAssists) || 0;
       perfData.tackles = parseInt(perfTackles) || 0;
+      perfData.directShots = parseInt(perfDirectShots) || 0;
     }
     
     await addMatchPerformance(perfData);
@@ -610,7 +614,7 @@ const OfficialProfile = () => {
     toast({ title: "Performance Recorded", description: "POTM auto-calculated." });
     setPerfPlayerId(""); setPerfGoals("0"); setPerfAssists("0"); setPerfSaves("0");
     setPerfTackles("0"); setPerfInterceptions("0"); setPerfBlocks("0"); setPerfClearances("0");
-    setPerfCleanSheet(false); setPerfAerialDuels("0");
+    setPerfCleanSheet(false); setPerfAerialDuels("0"); setPerfDirectShots("0");
   };
 
   // Handle reply
@@ -996,9 +1000,10 @@ const OfficialProfile = () => {
                       goals: [perfGoals, setPerfGoals],
                       assists: [perfAssists, setPerfAssists],
                       saves: [perfSaves, setPerfSaves],
-                      tackles: [perfTackles, setPerfTackles],
+                      successfulTackles: [perfTackles, setPerfTackles],
                       interceptions: [perfInterceptions, setPerfInterceptions],
                       aerialDuels: [perfAerialDuels, setPerfAerialDuels],
+                      directShots: [perfDirectShots, setPerfDirectShots],
                     };
                     return (
                       <>
