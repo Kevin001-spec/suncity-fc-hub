@@ -33,23 +33,46 @@ const Stats = () => {
   const { members, financialRecords, gameScores, attendance, mediaItems, profilePics, matchPerformances } = useTeamData();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  // Overview system state
-  const [weeklyOverviews, setWeeklyOverviews] = useState<any[]>([]);
-  const [seasonConfig, setSeasonConfig] = useState<any[]>([]);
-  const [overviewDialog, setOverviewDialog] = useState<string | null>(null);
-  const [selectedArchive, setSelectedArchive] = useState<any | null>(null);
-  const [matchReportGameId, setMatchReportGameId] = useState<string | null>(null);
-  const [selectedMemberCard, setSelectedMemberCard] = useState<TeamMember | null>(null);
-
-  // Load overviews and season config
+  // Cumulative stats from weekly_stats_log + current members
+  const [weeklyLogsAll, setWeeklyLogsAll] = useState<any[]>([]);
   useEffect(() => {
-    supabase.from("weekly_overviews").select("*").order("created_at", { ascending: false }).then(({ data }) => {
-      if (data) setWeeklyOverviews(data);
-    });
-    supabase.from("season_config").select("*").order("created_at", { ascending: false }).then(({ data }) => {
-      if (data) setSeasonConfig(data);
+    supabase.from("weekly_stats_log").select("*").then(({ data }) => {
+      if (data) setWeeklyLogsAll(data);
     });
   }, []);
+
+  // Build cumulative stats map: player_id -> cumulative totals
+  const cumulativeStats = useMemo(() => {
+    const map: Record<string, { goals: number; assists: number; gamesPlayed: number; saves: number; cleanSheets: number; aerialDuels: number; successfulTackles: number; interceptions: number; directShots: number }> = {};
+    // Sum all weekly_stats_log entries per player
+    for (const log of weeklyLogsAll) {
+      const pid = log.player_id;
+      if (!map[pid]) map[pid] = { goals: 0, assists: 0, gamesPlayed: 0, saves: 0, cleanSheets: 0, aerialDuels: 0, successfulTackles: 0, interceptions: 0, directShots: 0 };
+      map[pid].goals += log.goals || 0;
+      map[pid].assists += log.assists || 0;
+      map[pid].gamesPlayed += log.games_played || 0;
+      map[pid].saves += log.saves || 0;
+      map[pid].cleanSheets += log.clean_sheets || 0;
+      map[pid].aerialDuels += log.aerial_duels || 0;
+      map[pid].successfulTackles += log.successful_tackles || 0;
+      map[pid].interceptions += log.interceptions || 0;
+      map[pid].directShots += log.direct_shots || 0;
+    }
+    // Add current members values (which may have been reset to 0, or have new data)
+    for (const m of members) {
+      if (!map[m.id]) map[m.id] = { goals: 0, assists: 0, gamesPlayed: 0, saves: 0, cleanSheets: 0, aerialDuels: 0, successfulTackles: 0, interceptions: 0, directShots: 0 };
+      map[m.id].goals += m.goals || 0;
+      map[m.id].assists += m.assists || 0;
+      map[m.id].gamesPlayed += m.gamesPlayed || 0;
+      map[m.id].saves += m.saves || 0;
+      map[m.id].cleanSheets += m.cleanSheets || 0;
+      map[m.id].aerialDuels += m.aerialDuels || 0;
+      map[m.id].successfulTackles += m.successfulTackles || 0;
+      map[m.id].interceptions += m.interceptions || 0;
+      map[m.id].directShots += m.directShots || 0;
+    }
+    return map;
+  }, [weeklyLogsAll, members]);
 
   const performanceMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001" && m.id !== "SCF-003"), [members]);
   const contributionMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001"), [members]);
