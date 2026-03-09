@@ -1,0 +1,1 @@
+ALTER TABLE match_performances ADD COLUMN IF NOT EXISTS direct_shots integer NOT NULL DEFAULT 0;
