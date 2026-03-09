@@ -942,12 +942,12 @@ const OfficialProfile = () => {
                   saves: [statsSaves, setStatsSaves],
                   cleanSheets: [statsCleanSheets, setStatsCleanSheets],
                   aerialDuels: [statsAerialDuels, setStatsAerialDuels],
-                  tackles: [statsTackles, setStatsTackles],
                   interceptions: [statsInterceptions, setStatsInterceptions],
                   assists: [statsAssists, setStatsAssists],
                   goals: [statsGoals, setStatsGoals],
                   directShots: [statsDirectShots, setStatsDirectShots],
                   successfulTackles: [statsSuccessfulTackles, setStatsSuccessfulTackles],
+                  // gamesPlayed excluded - auto-tracked from match recordings
                 };
                 return (
                   <>

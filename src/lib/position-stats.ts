@@ -7,29 +7,31 @@ export interface StatField {
   dbColumn: string;
 }
 
-// GK: Saves, Clean Sheets, Aerial Duels
+// GK: Saves, Clean Sheets, Aerial Duels, Games Played
 const GK_STATS: StatField[] = [
   { key: "saves", label: "Saves", dbColumn: "saves" },
   { key: "cleanSheets", label: "Clean Sheets", dbColumn: "clean_sheets" },
   { key: "aerialDuels", label: "Aerial Duels", dbColumn: "aerial_duels" },
+  { key: "gamesPlayed", label: "Games Played", dbColumn: "games_played" },
 ];
 
-// DEF: Tackles, Interceptions, Assists, Goals, Shots on Target
+// DEF: Successful Tackles, Interceptions, Assists, Goals, Shots on Target, Games Played
 const DEF_STATS: StatField[] = [
-  { key: "tackles", label: "Tackles", dbColumn: "tackles" },
+  { key: "successfulTackles", label: "Successful Tackles", dbColumn: "successful_tackles" },
   { key: "interceptions", label: "Interceptions", dbColumn: "interceptions" },
   { key: "assists", label: "Assists", dbColumn: "assists" },
   { key: "goals", label: "Goals", dbColumn: "goals" },
   { key: "directShots", label: "Shots on Target", dbColumn: "direct_shots" },
+  { key: "gamesPlayed", label: "Games Played", dbColumn: "games_played" },
 ];
 
-// MID/ATT: Tackles, Goals, Assists, Shots on Target
+// MID/ATT: Successful Tackles, Goals, Assists, Shots on Target, Games Played
 const MID_ATT_STATS: StatField[] = [
-  { key: "tackles", label: "Tackles", dbColumn: "tackles" },
+  { key: "successfulTackles", label: "Successful Tackles", dbColumn: "successful_tackles" },
   { key: "goals", label: "Goals", dbColumn: "goals" },
   { key: "assists", label: "Assists", dbColumn: "assists" },
   { key: "directShots", label: "Shots on Target", dbColumn: "direct_shots" },
-  { key: "successfulTackles", label: "Successful Tackles", dbColumn: "successful_tackles" },
+  { key: "gamesPlayed", label: "Games Played", dbColumn: "games_played" },
 ];
 
 export function getStatsForPosition(position?: string): StatField[] {
