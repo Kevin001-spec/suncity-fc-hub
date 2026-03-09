@@ -20,8 +20,9 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 const iconMap: Record<string, any> = {
   saves: Hand, cleanSheets: Shield, aerialDuels: Crosshair,
-  tackles: Shield, interceptions: Crosshair, assists: Footprints,
+  interceptions: Crosshair, assists: Footprints,
   goals: Target, directShots: Target, successfulTackles: Shield,
+  gamesPlayed: Gamepad2,
 };
 
 const PlayerProfile = () => {
