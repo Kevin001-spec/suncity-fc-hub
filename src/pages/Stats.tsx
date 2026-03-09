@@ -74,6 +74,24 @@ const Stats = () => {
     return map;
   }, [weeklyLogsAll, members]);
 
+  // Overview system state
+  const [weeklyOverviews, setWeeklyOverviews] = useState<any[]>([]);
+  const [seasonConfig, setSeasonConfig] = useState<any[]>([]);
+  const [overviewDialog, setOverviewDialog] = useState<string | null>(null);
+  const [selectedArchive, setSelectedArchive] = useState<any | null>(null);
+  const [matchReportGameId, setMatchReportGameId] = useState<string | null>(null);
+  const [selectedMemberCard, setSelectedMemberCard] = useState<TeamMember | null>(null);
+
+  // Load overviews and season config
+  useEffect(() => {
+    supabase.from("weekly_overviews").select("*").order("created_at", { ascending: false }).then(({ data }) => {
+      if (data) setWeeklyOverviews(data);
+    });
+    supabase.from("season_config").select("*").order("created_at", { ascending: false }).then(({ data }) => {
+      if (data) setSeasonConfig(data);
+    });
+  }, []);
+
   const performanceMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001" && m.id !== "SCF-003"), [members]);
   const contributionMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001"), [members]);
 
