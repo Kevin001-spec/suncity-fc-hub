@@ -590,31 +590,34 @@ const OfficialProfile = () => {
     
     await addMatchPerformance(perfData);
     
-    // Auto-calculate POTM for this game
-    const { data: allPerfs } = await supabase.from("match_performances")
-      .select("*").eq("game_id", perfGameId);
-    if (allPerfs && allPerfs.length > 0) {
-      let bestId = "";
-      let bestScore = -1;
-      for (const p of allPerfs) {
-        const score = calculatePotmScore({
-          goals: p.goals, assists: p.assists, saves: p.saves,
-          tackles: p.tackles, interceptions: p.interceptions,
-          cleanSheet: p.clean_sheet, aerialDuels: p.aerial_duels,
-        });
-        if (score > bestScore) { bestScore = score; bestId = p.id; }
-      }
-      // Reset all POTM flags, then set the best one
-      await supabase.from("match_performances").update({ is_potm: false } as any).eq("game_id", perfGameId);
-      if (bestId) {
-        await supabase.from("match_performances").update({ is_potm: true } as any).eq("id", bestId);
-      }
-    }
-    
-    toast({ title: "Performance Recorded", description: "POTM auto-calculated." });
+    // Show success immediately — POTM calc runs in background
+    toast({ title: "Performance Recorded", description: "Stats synced to profile. POTM calculating..." });
     setPerfPlayerId(""); setPerfGoals("0"); setPerfAssists("0"); setPerfSaves("0");
     setPerfTackles("0"); setPerfInterceptions("0"); setPerfBlocks("0"); setPerfClearances("0");
     setPerfCleanSheet(false); setPerfAerialDuels("0"); setPerfDirectShots("0");
+    
+    // Background POTM calculation (non-blocking)
+    const gameId = perfGameId;
+    (async () => {
+      const { data: allPerfs } = await supabase.from("match_performances")
+        .select("*").eq("game_id", gameId);
+      if (allPerfs && allPerfs.length > 0) {
+        let bestId = "";
+        let bestScore = -1;
+        for (const p of allPerfs) {
+          const score = calculatePotmScore({
+            goals: p.goals, assists: p.assists, saves: p.saves,
+            tackles: p.tackles, interceptions: p.interceptions,
+            cleanSheet: p.clean_sheet, aerialDuels: p.aerial_duels,
+          });
+          if (score > bestScore) { bestScore = score; bestId = p.id; }
+        }
+        await supabase.from("match_performances").update({ is_potm: false } as any).eq("game_id", gameId);
+        if (bestId) {
+          await supabase.from("match_performances").update({ is_potm: true } as any).eq("id", bestId);
+        }
+      }
+    })();
   };
 
   // Handle reply
