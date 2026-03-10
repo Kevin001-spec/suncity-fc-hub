@@ -1,80 +1,109 @@
 
 
-# Fix Match Stats Integration, Data Recovery, Messaging, Login Badges
+# System Update Plan
 
-## Root Cause Confirmed
+## Task 1: Move "Add Recent Results" and "Add Events" to Coach Profile Only
 
-**`addMatchPerformance`** (TeamDataContext.tsx line 743) inserts into `match_performances` but **never updates the `members` table**. That is why all player profiles show zeros despite stats being recorded. The data exists in `match_performances` — it just never flows to `members`.
+Currently `canManageScores` and `canManageEvents` include coach, manager, and captain. Change:
+- **Add Score** card: Show only for `isCoach` (not manager/captain)
+- **Add Event** card: Show only for `isCoach`
+- **Manager gets a NEW "Edit/Remove Recent Scores"** card instead — shows list of `gameScores` with Edit/Delete buttons per entry
 
-## Verified Data from Supabase
+**Files:** `src/pages/OfficialProfile.tsx`
+- Change line 399 condition from `canManageScores` to `isCoach`
+- Change line 427 condition from `canManageEvents` to `isCoach`
+- Add new Manager card: "Manage Recent Results" with list of games, each having Edit (inline fields) and Delete (with confirm) buttons
 
-Second batch recordings (2026-03-09 10:40-10:48, the correct data):
+## Task 2: Update Team Stats Editor with Position-Specific Stats
 
-| Player | Position | Successful Tackles | Interceptions | Goals | Assists | Saves | Aerial Duels | Shots on Target | Games Played |
-|--------|----------|-------------------|---------------|-------|---------|-------|-------------|----------------|-------------|
-| SCF-P12 (Mugi Jr) | ATT | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
-| SCF-005 (Denoh) | MID | 7 | 0 | 0 | 0 | 0 | 0 | 1 | 1 |
-| SCF-P25 (Morgan) | — | 6 | 0 | 0 | 0 | 0 | 0 | 1 | 1 |
-| SCF-P01 (Blaise) | MID | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
-| SCF-P17 (Bivon) | ATT | 7 | 0 | 0 | 0 | 0 | 0 | 2 | 1 |
-| SCF-P04 (Darren) | MID | 12 | 0 | 0 | 0 | 0 | 0 | 3 | 1 |
-| SCF-007 (Lucario) | MID | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
-| SCF-006 (Victor) | DEF | 12 | 0 | 0 | 0 | 0 | 0 | 2 | 1 |
-| SCF-P24 (Mannasseh) | DEF | 5 | 10 | 0 | 0 | 0 | 0 | 0 | 1 |
-| SCF-P19 (Foden) | — | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
-| SCF-P40 (Beavon) | GK | 0 | 0 | 0 | 0 | 8 | 2 | 0 | 1 |
-| SCF-004 (Ethan) | MID | 7 | 0 | 0 | 0 | 0 | 0 | 3 | 1 |
-| SCF-P18 (Mungai) | DEF | 6 | 8 | 0 | 0 | 0 | 0 | 1 | 1 |
-| SCF-P02 (Bronze) | MID | 6 | 0 | 0 | 0 | 0 | 0 | 2 | 1 |
+The stats editor (lines 484-516) only has Goals/Assists/Games fields. Update to show position-appropriate fields:
+- **All players**: Goals, Assists, Games Played, Successful Tackles, Direct Targets (new fields needed)
+- **Defenders only**: Additional Tackles, Interceptions, Clearances, Direct Shots
+- **GK**: Saves, Clean Sheets, Aerial Duels
 
-Note: SCF-005 has two entries in this batch — using the latest (10:41:31, tackles=7, direct_shots=1).
+**Database migration**: Add `successful_tackles` and `direct_targets` columns (and `direct_shots` for DEF) to `members` table.
 
-## Plan — 6 Changes
+**Files:**
+- Supabase migration: `ALTER TABLE members ADD COLUMN successful_tackles INT DEFAULT 0, ADD COLUMN direct_targets INT DEFAULT 0, ADD COLUMN direct_shots INT DEFAULT 0;`
+- `src/data/team-data.ts`: Add new fields to `TeamMember` interface
+- `src/pages/OfficialProfile.tsx`: Expand stats editor — add state variables for all new stats, detect selected player's position group, show relevant fields dynamically
+- `src/contexts/TeamDataContext.tsx`: Extend `updatePlayerStats` mapping to include new fields
+- `src/pages/PlayerProfile.tsx`: Update `getStatCards()` to show new stats for each position
+- `src/pages/Stats.tsx`: Update performance table columns
 
-### 1. Data Recovery — Apply Thesapians match stats to `members` table (insert tool)
+## Task 3: Overview Tracking System (Weekly/Monthly/Season) — 3 Icons
 
-Run UPDATE statements to SET each player's `successful_tackles`, `interceptions`, `goals`, `assists`, `saves`, `aerial_duels`, `direct_shots`, `games_played` to the correct values from the second batch. Since this is the only match, we SET rather than increment.
+This is the repeating core request. Currently there's a single "Weekly Overview" card that shows Fri-Sun. Need to transform into 3 icons like the gallery:
 
-Also INSERT `player_game_log` entries for all 14 players linking to game `347366a4-d72b-4c94-8cf1-6fb3a7e519eb`.
+**Design:**
+- 3 icon buttons on Stats page (and officials dashboard): 📅 Weekly, 📊 Monthly, 🏆 Season
+- **Weekly**: Icon always visible. Clickable only Fri-Sun. Opens dialog with overview data. After Sunday, auto-archive to `weekly_overviews` table.
+- **Monthly**: Icon always visible. Clickable after 3 weekly reports exist. Opens dialog with monthly summary.
+- **Season**: Icon always visible. Clickable only when coach's end date has passed. Opens dialog with all-time stats.
+- Each includes "Most Improved" tracking (compare current vs previous week data for discipline, goals, assists).
+- **Archive Section**: On officials stats/profile — permanent archive of past reports, displayed as clickable date icons (like gallery), separated by type (weekly/monthly/season).
 
-Also DELETE duplicate match_performances (first batch entries before 10:40).
+**Files:**
+- `src/pages/Stats.tsx`: Replace the single weekly overview with 3 icon system + archive section
+- `src/pages/OfficialProfile.tsx`: Add archive section for officials
+- Logic: Load `weekly_overviews` and `season_config` from Supabase, compute available reports
 
-### 2. Fix `addMatchPerformance` — Auto-sync to `members` table (TeamDataContext.tsx)
+## Task 4: Player DOCX Export (Friday-Sunday)
 
-After the `match_performances` insert, add logic to:
-- Read the player's current stats from `members`
-- Increment the relevant cumulative fields: `successful_tackles += tackles`, `direct_shots += direct_shots`, `interceptions += interceptions`, `goals += goals`, `assists += assists`, `saves += saves`, `aerial_duels += aerial_duels`
-- Increment `games_played` by 1
-- If `clean_sheet` is true, increment `clean_sheets` by 1
-- Insert a `player_game_log` entry
+Currently `isFriday = new Date().getDay() === 5`. Change to show Fri-Sun:
+```
+const showExport = [0, 5, 6].includes(new Date().getDay());
+```
 
-This ensures every future match recording immediately reflects on profiles.
+The export already calls `generatePlayerProfileDocx` — just need to update the visibility condition.
 
-### 3. Optimize button delay (OfficialProfile.tsx)
+**Files:** `src/pages/PlayerProfile.tsx` — change line 33
 
-Move the success toast to fire immediately after `addMatchPerformance` returns, BEFORE the POTM recalculation queries. The POTM calc runs in background without blocking UI.
+## Task 5: Match Day Performance Tracking on Officials Stats
 
-### 4. Universal messaging (PlayerProfile.tsx)
+Need a section on Stats page where officials see match-by-match player performance data. Already have `match_performances` table and `addMatchPerformance` in context.
 
-Line 343: Change `members.filter(m => ["coach","manager",...].includes(m.role))` to `members.filter(m => m.id !== user.id)`. Change card title to "Send Message".
+**Manager's profile**: Add "Record Match Day Stats" section — select a game, add player performances (position-specific stats + rating + POTM checkbox).
 
-### 5. POTM Login Badge (Profile.tsx)
+**Stats page**: Add "Match Day Reports" section — games listed by date (newest first), expandable to show each player's stats, ranked by rating, POTM highlighted. Exportable as DOCX.
 
-On mount, query `match_performances` for the latest record with `is_potm = true`. If the current user's ID matches, show a trophy toast notification. Also check for "Most Improved" by comparing the two most recent `weekly_stats_log` entries.
+**Files:**
+- `src/pages/OfficialProfile.tsx`: Add match performance recorder for manager
+- `src/pages/Stats.tsx`: Add match reports section
 
-### 6. Duplicate cleanup
+## Task 6: Manager Edit/Remove Recent Scores
 
-Delete the older batch match_performances for the Thesapians game (entries created before 10:40 on March 9) and the duplicate SCF-005 entry (10:41:13, keeping only the 10:41:31 one).
+Covered in Task 1 — the new "Manage Recent Results" card.
+
+## Task 7: Add Players Section for Coach & Manager
+
+Currently `addPlayer` exists in context but no UI. Add an "Add New Player" card for both `isCoach` and `isManager`:
+- Name, Squad Number, Position selector
+- Inserts via `addPlayer(name, squadNumber, position)`
+
+**Files:** `src/pages/OfficialProfile.tsx` — add card with condition `isCoach || isManager`
+
+## Task 8: Fix New Players Contribution Display in Stats
+
+In `Stats.tsx` contribution grid (line 408-427), new players (SCF-P31 to SCF-P35) still show ❌ for Dec/Jan. Fix by using `getContribMonthsForMember` to determine which months to show, and for months that don't apply, show `—` instead.
+
+**Files:** `src/pages/Stats.tsx` — update contribution grid to check `NEW_PLAYER_IDS` and skip/show dash for inapplicable months
+
+## Task 9: Lovable Badge CSS
+
+Already exists but will re-verify/strengthen in `src/index.css`.
 
 ---
 
-## Files Changed
+## Summary of Files
 
 | File | Changes |
 |------|---------|
-| Data (insert tool) | UPDATE 14 members rows with correct stats; INSERT 14 player_game_log entries; DELETE duplicate match_performances |
-| `src/contexts/TeamDataContext.tsx` | `addMatchPerformance`: after insert, increment members stats + games_played, insert player_game_log |
-| `src/pages/OfficialProfile.tsx` | Move toast before POTM calc to eliminate delay |
-| `src/pages/PlayerProfile.tsx` | Universal messaging — remove officials-only filter, update title |
-| `src/pages/Profile.tsx` | Add POTM badge toast notification on login |
+| Supabase migration | Add `successful_tackles`, `direct_targets`, `direct_shots` to `members` |
+| `src/data/team-data.ts` | Add new stat fields to `TeamMember` interface |
+| `src/contexts/TeamDataContext.tsx` | Extend `updatePlayerStats` and `loadMembers` for new fields |
+| `src/pages/OfficialProfile.tsx` | Major: scores→coach only, events→coach only, manager gets edit/delete scores, expanded stats editor, match performance recorder, add player UI, overview archive |
+| `src/pages/Stats.tsx` | Overview 3-icon system + archive, match reports section, fix new player contribution display, updated performance table |
+| `src/pages/PlayerProfile.tsx` | Export visible Fri-Sun, new stat cards |
+| `src/index.css` | Strengthen Lovable badge hiding |
 
