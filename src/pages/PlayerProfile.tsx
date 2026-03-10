@@ -340,7 +340,7 @@ const PlayerProfile = () => {
               <select value={msgRecipient} onChange={(e) => setMsgRecipient(e.target.value)}
                 className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
                 <option value="">Select recipient</option>
-                {members.filter(m => ["coach", "manager", "finance", "captain", "assistant_coach"].includes(m.role) && m.id !== user.id).map(m => (
+                {members.filter(m => m.id !== user.id).map(m => (
                   <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
                 ))}
               </select>
