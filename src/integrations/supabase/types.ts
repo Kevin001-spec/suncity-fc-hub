@@ -516,6 +516,36 @@ export type Database = {
           },
         ]
       }
+      match_awards: {
+        Row: {
+          award_label: string
+          award_type: string
+          created_at: string
+          game_id: string
+          id: string
+          player_id: string
+          reason: string
+        }
+        Insert: {
+          award_label: string
+          award_type: string
+          created_at?: string
+          game_id: string
+          id?: string
+          player_id: string
+          reason: string
+        }
+        Update: {
+          award_label?: string
+          award_type?: string
+          created_at?: string
+          game_id?: string
+          id?: string
+          player_id?: string
+          reason?: string
+        }
+        Relationships: []
+      }
       match_performances: {
         Row: {
           aerial_duels: number
@@ -810,18 +840,21 @@ export type Database = {
           created_at: string
           created_by: string
           end_date: string
+          export_enabled: boolean
           id: string
         }
         Insert: {
           created_at?: string
           created_by: string
           end_date: string
+          export_enabled?: boolean
           id?: string
         }
         Update: {
           created_at?: string
           created_by?: string
           end_date?: string
+          export_enabled?: boolean
           id?: string
         }
         Relationships: []

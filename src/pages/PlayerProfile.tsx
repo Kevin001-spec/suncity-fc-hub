@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getContribMonthsForMember, getFullPositionName, getPositionGroup, type WeeklyStatsLog, type PlayerGameLog } from "@/data/team-data";
 import { generatePlayerProfileDocx } from "@/lib/docx-export";
 import { getStatsForPosition } from "@/lib/position-stats";
+import { supabase } from "@/integrations/supabase/client";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -43,13 +44,28 @@ const PlayerProfile = () => {
   const posGroup = getPositionGroup(liveMember?.position);
   const dayOfWeek = new Date().getDay();
   const showExport = dayOfWeek >= 5 || dayOfWeek === 0;
-  const showDetailedExport = showExport;
+  const [detailedExportEnabled, setDetailedExportEnabled] = useState(false);
+  const [matchPerfsForExport, setMatchPerfsForExport] = useState<any[]>([]);
+  const [matchAwardsForExport, setMatchAwardsForExport] = useState<any[]>([]);
+  const showDetailedExport = showExport || detailedExportEnabled;
 
-  // Load weekly stats logs
+  // Load weekly stats logs, export_enabled, match perfs & awards
   useEffect(() => {
     if (user?.id && !isFan) {
       loadWeeklyStatsLogs(user.id).then(setWeeklyLogs);
       loadPlayerGameLogs(user.id).then(setPlayerGameLogs);
+      // Check if manager enabled export
+      supabase.from("season_config").select("*").order("created_at", { ascending: false }).limit(1).then(({ data }) => {
+        if (data && data.length > 0 && (data[0] as any).export_enabled) setDetailedExportEnabled(true);
+      });
+      // Load match performances for this player
+      supabase.from("match_performances").select("*").eq("player_id", user.id).order("created_at", { ascending: false }).then(({ data }) => {
+        if (data) setMatchPerfsForExport(data);
+      });
+      // Load match awards for this player
+      supabase.from("match_awards" as any).select("*").eq("player_id", user.id).order("created_at", { ascending: false }).then(({ data }: any) => {
+        if (data) setMatchAwardsForExport(data);
+      });
     }
   }, [user?.id, isFan]);
 
@@ -118,12 +134,27 @@ const PlayerProfile = () => {
       }));
     }
 
+    // Build match history with detailed performance data
+    const detailedMatchHistory = matchHistory.map(m => {
+      const game = gameScores.find(g => g.opponent === m.opponent && new Date(g.date).toLocaleDateString() === m.date);
+      const perf = game ? matchPerfsForExport.find((p: any) => p.game_id === game.id) : null;
+      return { ...m, performance: perf };
+    });
+
+    // Build awards list
+    const awardsForDoc = matchAwardsForExport.map((a: any) => ({
+      label: a.award_label,
+      reason: a.reason,
+    }));
+
     await generatePlayerProfileDocx(
       liveMember.name, user.id, getFullPositionName(liveMember.position),
       stats, attDays, opponentsPlayed.map(o => ({ ...o, date: new Date(o.date).toLocaleDateString() })),
-      contribs, profilePics[user.id], logsForExport
+      contribs, profilePics[user.id], logsForExport,
+      detailedMatchHistory.length > 0 ? detailedMatchHistory as any : undefined,
+      awardsForDoc.length > 0 ? awardsForDoc : undefined,
     );
-    toast({ title: detailed ? "Detailed Profile Exported" : "Weekly Profile Exported" });
+    toast({ title: detailed ? "📄 Detailed Profile Exported" : "📄 Weekly Profile Exported" });
   };
 
   const handleSendMessage = async () => {

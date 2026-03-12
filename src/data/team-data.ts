@@ -101,6 +101,16 @@ export interface MatchPerformance {
   directShots?: number;
 }
 
+export interface MatchAward {
+  id: string;
+  gameId: string;
+  playerId: string;
+  awardType: string;
+  awardLabel: string;
+  reason: string;
+  createdAt: string;
+}
+
 export interface Message {
   id: string;
   fromId: string;
@@ -190,7 +200,7 @@ export function getPositionGroup(pos?: string): string {
 // Officials
 export const officials: TeamMember[] = [
   { id: "SCF-001", name: "Fabian", role: "coach", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
-  { id: "SCF-002", name: "Fadhir", role: "finance", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
+  { id: "SCF-002", name: "Fadhir", role: "finance", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-003", name: "Kevin", role: "manager", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-004", name: "Ethan", role: "captain", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
   { id: "SCF-005", name: "Denoh", role: "captain", position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: { "dec-2025": "paid", "jan-2026": "paid", "feb-2026": "paid" } },
@@ -241,7 +251,7 @@ export const players: TeamMember[] = [
   { id: "SCF-P36", name: "Oscar", role: "player", squadNumber: 36, goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
   { id: "SCF-P37", name: "Joe", role: "player", squadNumber: 37, position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
   { id: "SCF-P38", name: "Masai", role: "player", squadNumber: 38, position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
-  { id: "SCF-P39", name: "Fadhir (P)", role: "player", squadNumber: 39, position: "MID", goals: 0, assists: 0, gamesPlayed: 0, contributions: {} },
+  
 ];
 
 export const allMembers: TeamMember[] = [...officials, ...players];

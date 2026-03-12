@@ -199,17 +199,18 @@ export async function generatePlayerProfileDocx(
   contributions: { month: string; status: string }[],
   profilePicUrl?: string,
   weeklyLogs?: { weekStart: string; stats: { label: string; value: number }[] }[],
-  matchHistory?: { opponent: string; date: string; result: string; gameType: string; venue: string }[]
+  matchHistory?: { opponent: string; date: string; result: string; gameType: string; venue: string; performance?: any }[],
+  awards?: { label: string; reason: string }[],
 ) {
   const headerChildren = await createBrandedHeader(`Player Profile — ${playerName}`);
   const profileBuffer = profilePicUrl ? await fetchImageAsBuffer(profilePicUrl) : null;
   const children: (Paragraph | Table)[] = [...headerChildren];
 
-  // Profile picture
+  // Profile picture — sized for mobile doc viewers
   if (profileBuffer) {
     children.push(new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new ImageRun({ data: profileBuffer, transformation: { width: 90, height: 90 }, type: "png" })],
+      children: [new ImageRun({ data: profileBuffer, transformation: { width: 120, height: 120 }, type: "png" })],
       spacing: { after: 80 },
     }));
   }
@@ -228,18 +229,33 @@ export async function generatePlayerProfileDocx(
     })
   );
 
-  // Stats as table
+  // 🏅 Achievements & Awards
+  if (awards && awards.length > 0) {
+    children.push(sectionHeading("🏅 Achievements & Awards"));
+    for (const award of awards) {
+      children.push(new Paragraph({
+        children: [
+          new TextRun({ text: `${award.label}`, bold: true, size: 16, font: "Calibri", color: "193769" }),
+          new TextRun({ text: ` — ${award.reason}`, size: 15, font: "Calibri", color: "666666" }),
+        ],
+        spacing: { after: 40 },
+      }));
+    }
+    children.push(new Paragraph({ spacing: { after: 80 } }));
+  }
+
+  // ⚽ Stats as table
   if (stats.length > 0) {
-    children.push(sectionHeading("Performance Statistics"));
+    children.push(sectionHeading("⚽ Performance Statistics"));
     const statsHead = [stats.map(s => s.label)];
     const statsBody = [stats.map(s => String(s.value))];
     children.push(smartTable(statsHead, statsBody));
     children.push(new Paragraph({ spacing: { after: 80 } }));
   }
 
-  // Attendance as table
+  // 📅 Attendance as table
   if (attendanceDays.length > 0) {
-    children.push(sectionHeading("Training Attendance"));
+    children.push(sectionHeading("📅 Training Attendance"));
     const attHead = [attendanceDays.map(a => a.day)];
     const attBody = [attendanceDays.map(a => {
       return a.status === "present" ? "✅" : a.status === "excused" ? "🔵" : a.status === "no_activity" ? "➖" : "⬜";
@@ -248,36 +264,89 @@ export async function generatePlayerProfileDocx(
     children.push(new Paragraph({ spacing: { after: 80 } }));
   }
 
-  // Contributions as table
+  // 💰 Contributions as table
   if (contributions.length > 0) {
-    children.push(sectionHeading("Monthly Contributions"));
+    children.push(sectionHeading("💰 Monthly Contributions"));
     const contribHead = [contributions.map(c => c.month)];
     const contribBody = [contributions.map(c => c.status === "paid" ? "✅" : "⬜")];
     children.push(smartTable(contribHead, contribBody));
     children.push(new Paragraph({ spacing: { after: 80 } }));
   }
 
-  // Match History table
+  // 🏟️ Match History with performance details
   if (matchHistory && matchHistory.length > 0) {
-    children.push(sectionHeading("Match History"));
+    children.push(sectionHeading("🏟️ Match History"));
     const head = [["Opponent", "Date", "Result", "Type", "Venue"]];
     const body = matchHistory.map(m => [m.opponent, m.date, m.result, m.gameType, m.venue]);
     children.push(smartTable(head, body));
+    children.push(new Paragraph({ spacing: { after: 60 } }));
+
+    // Match-by-match performance comparison
+    const matchesWithPerf = matchHistory.filter(m => m.performance);
+    if (matchesWithPerf.length > 0) {
+      children.push(sectionHeading("📊 Match Performance Breakdown"));
+      for (const match of matchesWithPerf) {
+        const p = match.performance;
+        const perfStats = [
+          p.goals > 0 && `⚽ ${p.goals} Goals`,
+          p.assists > 0 && `🅰️ ${p.assists} Assists`,
+          p.tackles > 0 && `🛡️ ${p.tackles} Tackles`,
+          p.saves > 0 && `🧤 ${p.saves} Saves`,
+          p.interceptions > 0 && `🔄 ${p.interceptions} Interceptions`,
+          p.aerial_duels > 0 && `✈️ ${p.aerial_duels} Aerial Duels`,
+          p.direct_shots > 0 && `🎯 ${p.direct_shots} Shots on Target`,
+          p.clean_sheet && `🧹 Clean Sheet`,
+          p.is_potm && `🏆 PLAYER OF THE MATCH`,
+        ].filter(Boolean);
+        
+        children.push(new Paragraph({
+          children: [
+            new TextRun({ text: `vs ${match.opponent} (${match.date})`, bold: true, size: 16, font: "Calibri", color: "193769" }),
+            new TextRun({ text: ` — ${match.result}`, size: 15, font: "Calibri", color: "666666" }),
+          ],
+          spacing: { before: 40, after: 20 },
+        }));
+        children.push(new Paragraph({
+          children: [new TextRun({ text: perfStats.join("  •  ") || "No stats recorded", size: 15, font: "Calibri", color: perfStats.length > 0 ? "333333" : "999999" })],
+          spacing: { after: 40 },
+        }));
+      }
+      
+      // Best/Lowest match comparison
+      if (matchesWithPerf.length >= 2) {
+        const scored = matchesWithPerf.map(m => ({
+          opponent: m.opponent,
+          total: (m.performance.goals || 0) + (m.performance.assists || 0) + (m.performance.tackles || 0) + (m.performance.saves || 0),
+        }));
+        const best = scored.reduce((a, b) => a.total > b.total ? a : b);
+        const lowest = scored.reduce((a, b) => a.total < b.total ? a : b);
+        children.push(new Paragraph({
+          children: [
+            new TextRun({ text: `🔥 Best Performance: `, bold: true, size: 16, font: "Calibri", color: "193769" }),
+            new TextRun({ text: `vs ${best.opponent} (${best.total} pts)`, size: 15, font: "Calibri" }),
+            new TextRun({ text: `  •  `, size: 15, font: "Calibri", color: "CCCCCC" }),
+            new TextRun({ text: `📉 Lowest: `, bold: true, size: 16, font: "Calibri", color: "CC3333" }),
+            new TextRun({ text: `vs ${lowest.opponent} (${lowest.total} pts)`, size: 15, font: "Calibri" }),
+          ],
+          spacing: { before: 40, after: 80 },
+        }));
+      }
+    }
     children.push(new Paragraph({ spacing: { after: 80 } }));
   } else if (opponents.length > 0) {
-    children.push(sectionHeading("Opponents Played Against"));
+    children.push(sectionHeading("🏟️ Opponents Played Against"));
     const head = [["Opponent", "Date", "Result"]];
     const body = opponents.map(o => [o.opponent, o.date, o.result]);
     children.push(smartTable(head, body));
     children.push(new Paragraph({ spacing: { after: 80 } }));
   }
 
-  // Weekly logs as tables
+  // 📋 Weekly logs as tables
   if (weeklyLogs && weeklyLogs.length > 0) {
-    children.push(sectionHeading("Weekly Activity Log"));
+    children.push(sectionHeading("📋 Weekly Activity Log"));
     for (const log of weeklyLogs) {
       children.push(new Paragraph({
-        children: [new TextRun({ text: `Week of ${log.weekStart}`, bold: true, size: 17, font: "Calibri", color: "193769" })],
+        children: [new TextRun({ text: `📅 Week of ${log.weekStart}`, bold: true, size: 17, font: "Calibri", color: "193769" })],
         spacing: { before: 60, after: 40 },
       }));
       const nonZero = log.stats.filter(s => s.value > 0);
@@ -287,7 +356,7 @@ export async function generatePlayerProfileDocx(
         children.push(smartTable(head, body));
       } else {
         children.push(new Paragraph({
-          children: [new TextRun({ text: "No activity recorded", size: 15, font: "Calibri", color: "999999", italics: true })],
+          children: [new TextRun({ text: "➖ No activity recorded", size: 15, font: "Calibri", color: "999999", italics: true })],
           spacing: { after: 40 },
         }));
       }

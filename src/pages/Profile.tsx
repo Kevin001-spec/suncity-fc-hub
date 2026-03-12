@@ -23,7 +23,7 @@ const Profile = () => {
     return () => window.removeEventListener("suncity-unread", handler);
   }, [toast]);
 
-  // POTM / Most Improved login badge notification
+  // POTM / Most Improved / Match Awards login badge notification
   useEffect(() => {
     if (!user || badgeChecked.current) return;
     badgeChecked.current = true;
@@ -38,7 +38,6 @@ const Profile = () => {
         .limit(1);
 
       if (potmData && potmData.length > 0 && potmData[0].player_id === user.id) {
-        // Get game details for context
         const { data: game } = await supabase
           .from("game_scores")
           .select("opponent")
@@ -51,8 +50,27 @@ const Profile = () => {
         });
       }
 
+      // Check match awards for this player
+      const { data: awards } = await supabase
+        .from("match_awards" as any)
+        .select("*")
+        .eq("player_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(3);
+      
+      if (awards && awards.length > 0) {
+        // Show the latest award (if not POTM which was already shown)
+        const nonPotmAward = (awards as any[]).find((a: any) => a.award_type !== "potm");
+        if (nonPotmAward) {
+          toast({
+            title: `${nonPotmAward.award_label}`,
+            description: `${nonPotmAward.reason}`,
+          });
+        }
+      }
+
       // Check Most Improved — compare last 2 weekly stat logs
-      if (user.role === "player") {
+      if (user.role === "player" || user.role === "captain" || user.role === "finance") {
         const { data: logs } = await supabase
           .from("weekly_stats_log")
           .select("*")
