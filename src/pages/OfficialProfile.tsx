@@ -236,12 +236,17 @@ const OfficialProfile = () => {
     }
   }, [ceLoaded]);
 
-  // Load league teams
+  // Load league teams + export_enabled
   useEffect(() => {
     if (!leagueLoaded) {
       supabase.from("league_teams").select("*").then(({ data }) => {
         if (data) setLeagueTeams((data as LeagueTeam[]).sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference));
         setLeagueLoaded(true);
+      });
+      supabase.from("season_config").select("*").order("created_at", { ascending: false }).limit(1).then(({ data }) => {
+        if (data && data.length > 0 && (data[0] as any).export_enabled) {
+          setExportEnabled(true);
+        }
       });
     }
   }, [leagueLoaded]);

@@ -43,7 +43,10 @@ const PlayerProfile = () => {
   const posGroup = getPositionGroup(liveMember?.position);
   const dayOfWeek = new Date().getDay();
   const showExport = dayOfWeek >= 5 || dayOfWeek === 0;
-  const showDetailedExport = showExport;
+  const [detailedExportEnabled, setDetailedExportEnabled] = useState(false);
+  const [matchPerfsForExport, setMatchPerfsForExport] = useState<any[]>([]);
+  const [matchAwardsForExport, setMatchAwardsForExport] = useState<any[]>([]);
+  const showDetailedExport = showExport || detailedExportEnabled;
 
   // Load weekly stats logs
   useEffect(() => {
