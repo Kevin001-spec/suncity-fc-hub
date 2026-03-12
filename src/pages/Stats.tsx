@@ -83,13 +83,16 @@ const Stats = () => {
   const [matchReportGameId, setMatchReportGameId] = useState<string | null>(null);
   const [selectedMemberCard, setSelectedMemberCard] = useState<TeamMember | null>(null);
 
-  // Load overviews and season config
+  // Load overviews, season config, and match awards
   useEffect(() => {
     supabase.from("weekly_overviews").select("*").order("created_at", { ascending: false }).then(({ data }) => {
       if (data) setWeeklyOverviews(data);
     });
     supabase.from("season_config").select("*").order("created_at", { ascending: false }).then(({ data }) => {
       if (data) setSeasonConfig(data);
+    });
+    supabase.from("match_awards" as any).select("*").order("created_at", { ascending: false }).then(({ data }: any) => {
+      if (data) setMatchAwards(data);
     });
   }, []);
 
