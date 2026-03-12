@@ -48,11 +48,23 @@ const PlayerProfile = () => {
   const [matchAwardsForExport, setMatchAwardsForExport] = useState<any[]>([]);
   const showDetailedExport = showExport || detailedExportEnabled;
 
-  // Load weekly stats logs
+  // Load weekly stats logs, export_enabled, match perfs & awards
   useEffect(() => {
     if (user?.id && !isFan) {
       loadWeeklyStatsLogs(user.id).then(setWeeklyLogs);
       loadPlayerGameLogs(user.id).then(setPlayerGameLogs);
+      // Check if manager enabled export
+      supabase.from("season_config").select("*").order("created_at", { ascending: false }).limit(1).then(({ data }) => {
+        if (data && data.length > 0 && (data[0] as any).export_enabled) setDetailedExportEnabled(true);
+      });
+      // Load match performances for this player
+      supabase.from("match_performances").select("*").eq("player_id", user.id).order("created_at", { ascending: false }).then(({ data }) => {
+        if (data) setMatchPerfsForExport(data);
+      });
+      // Load match awards for this player
+      supabase.from("match_awards" as any).select("*").eq("player_id", user.id).order("created_at", { ascending: false }).then(({ data }: any) => {
+        if (data) setMatchAwardsForExport(data);
+      });
     }
   }, [user?.id, isFan]);
 
