@@ -188,6 +188,7 @@ const OfficialProfile = () => {
   const [newVenue, setNewVenue] = useState("");
   const [newScoreDate, setNewScoreDate] = useState("");
   const [addedFanId, setAddedFanId] = useState<string | null>(null);
+  const [exportEnabled, setExportEnabled] = useState(false);
 
   // Game Stats form state
   const [lastAddedGameId, setLastAddedGameId] = useState<string | null>(null);
