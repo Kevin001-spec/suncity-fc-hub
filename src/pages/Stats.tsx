@@ -137,7 +137,7 @@ const Stats = () => {
   const isWeekendWindow = dayOfWeek >= 5 || dayOfWeek === 0;
 
   const weeklyData = useMemo(() => {
-    const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
+    const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain" || m.role === "finance");
     const mostDisciplined = playerMembers.filter((m) => {
       const playerAtt = attendance.filter((a) => a.playerId === m.id && a.status !== "no_activity");
       return playerAtt.length > 0 && playerAtt.every((a) => a.status === "present");

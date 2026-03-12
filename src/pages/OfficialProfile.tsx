@@ -590,32 +590,106 @@ const OfficialProfile = () => {
     
     await addMatchPerformance(perfData);
     
-    // Show success immediately — POTM calc runs in background
-    toast({ title: "Performance Recorded", description: "Stats synced to profile. POTM calculating..." });
+    // Show success immediately — POTM calc + awards run in background
+    toast({ title: "✅ Performance Recorded", description: `${perfPlayer?.name} stats synced. Awards calculating...` });
     setPerfPlayerId(""); setPerfGoals("0"); setPerfAssists("0"); setPerfSaves("0");
     setPerfTackles("0"); setPerfInterceptions("0"); setPerfBlocks("0"); setPerfClearances("0");
     setPerfCleanSheet(false); setPerfAerialDuels("0"); setPerfDirectShots("0");
     
-    // Background POTM calculation (non-blocking)
+    // Background POTM calculation + post-match awards (non-blocking)
     const gameId = perfGameId;
     (async () => {
       const { data: allPerfs } = await supabase.from("match_performances")
         .select("*").eq("game_id", gameId);
-      if (allPerfs && allPerfs.length > 0) {
-        let bestId = "";
-        let bestScore = -1;
-        for (const p of allPerfs) {
-          const score = calculatePotmScore({
-            goals: p.goals, assists: p.assists, saves: p.saves,
-            tackles: p.tackles, interceptions: p.interceptions,
-            cleanSheet: p.clean_sheet, aerialDuels: p.aerial_duels,
-          });
-          if (score > bestScore) { bestScore = score; bestId = p.id; }
+      if (!allPerfs || allPerfs.length === 0) return;
+
+      // --- POTM calculation ---
+      let bestId = "";
+      let bestScore = -1;
+      for (const p of allPerfs) {
+        const score = calculatePotmScore({
+          goals: p.goals, assists: p.assists, saves: p.saves,
+          tackles: p.tackles, interceptions: p.interceptions,
+          cleanSheet: p.clean_sheet, aerialDuels: p.aerial_duels,
+        });
+        if (score > bestScore) { bestScore = score; bestId = p.id; }
+      }
+      await supabase.from("match_performances").update({ is_potm: false } as any).eq("game_id", gameId);
+      if (bestId) {
+        await supabase.from("match_performances").update({ is_potm: true } as any).eq("id", bestId);
+      }
+
+      // --- Post-match awards (max 6) ---
+      // Delete old awards for this game first
+      await supabase.from("match_awards" as any).delete().eq("game_id", gameId);
+      
+      const awards: { game_id: string; player_id: string; award_type: string; award_label: string; reason: string }[] = [];
+      
+      // 1. 🏆 Player of the Match
+      const potmPerf = allPerfs.find(p => p.id === bestId);
+      if (potmPerf) {
+        const potmPlayer = members.find(m => m.id === potmPerf.player_id);
+        awards.push({ game_id: gameId, player_id: potmPerf.player_id, award_type: "potm", award_label: "🏆 Player of the Match", reason: `Top performer with ${bestScore} points` });
+      }
+      
+      // 2. 🛡️ Defensive Wall — most tackles (min 5)
+      const sortedByTackles = [...allPerfs].sort((a, b) => b.tackles - a.tackles);
+      if (sortedByTackles[0]?.tackles >= 5 && sortedByTackles[0].id !== bestId) {
+        const p = sortedByTackles[0];
+        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "defensive_wall", award_label: "🛡️ Defensive Wall", reason: `${p.tackles} tackles — rock solid defense` });
+      }
+      
+      // 3. 🎯 Sharpshooter — most goals (min 1)
+      const sortedByGoals = [...allPerfs].sort((a, b) => b.goals - a.goals);
+      if (sortedByGoals[0]?.goals >= 1 && sortedByGoals[0].id !== bestId) {
+        const p = sortedByGoals[0];
+        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "sharpshooter", award_label: "🎯 Sharpshooter", reason: `${p.goals} goal${p.goals > 1 ? "s" : ""} — clinical finishing` });
+      }
+      
+      // 4. 🅰️ Playmaker — most assists (min 1)
+      const sortedByAssists = [...allPerfs].sort((a, b) => b.assists - a.assists);
+      if (sortedByAssists[0]?.assists >= 1 && sortedByAssists[0].id !== bestId) {
+        const p = sortedByAssists[0];
+        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "playmaker", award_label: "🅰️ Playmaker", reason: `${p.assists} assist${p.assists > 1 ? "s" : ""} — vision and creativity` });
+      }
+      
+      // 5. 🧤 Iron Wall — most saves (GK, min 3)
+      const sortedBySaves = [...allPerfs].sort((a, b) => b.saves - a.saves);
+      if (sortedBySaves[0]?.saves >= 3 && sortedBySaves[0].id !== bestId) {
+        const p = sortedBySaves[0];
+        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "iron_wall", award_label: "🧤 Iron Wall", reason: `${p.saves} saves — unbeatable in goal` });
+      }
+      
+      // 6. 📈 Rising Star — biggest improvement vs previous match
+      const { data: prevGamePerfs } = await supabase.from("match_performances")
+        .select("*").neq("game_id", gameId).order("created_at", { ascending: false }).limit(50);
+      if (prevGamePerfs && prevGamePerfs.length > 0) {
+        // Get the previous game's perfs
+        const prevGameId = prevGamePerfs[0]?.game_id;
+        const prevPerfs = prevGamePerfs.filter(p => p.game_id === prevGameId);
+        let bestImprovement = 0;
+        let risingStarId = "";
+        let risingStarDelta = "";
+        for (const curr of allPerfs) {
+          const prev = prevPerfs.find(pp => pp.player_id === curr.player_id);
+          if (!prev) continue;
+          const currTotal = curr.goals + curr.assists + curr.saves + curr.tackles + curr.interceptions;
+          const prevTotal = prev.goals + prev.assists + prev.saves + prev.tackles + prev.interceptions;
+          const delta = currTotal - prevTotal;
+          if (delta > bestImprovement && curr.id !== bestId) {
+            bestImprovement = delta;
+            risingStarId = curr.player_id;
+            risingStarDelta = `${prevTotal} → ${currTotal} (+${delta})`;
+          }
         }
-        await supabase.from("match_performances").update({ is_potm: false } as any).eq("game_id", gameId);
-        if (bestId) {
-          await supabase.from("match_performances").update({ is_potm: true } as any).eq("id", bestId);
+        if (risingStarId && bestImprovement > 0) {
+          awards.push({ game_id: gameId, player_id: risingStarId, award_type: "rising_star", award_label: "📈 Rising Star", reason: `Stats improved: ${risingStarDelta}` });
         }
+      }
+      
+      // Insert all awards (max 6)
+      if (awards.length > 0) {
+        await supabase.from("match_awards" as any).insert(awards.slice(0, 6));
       }
     })();
   };
