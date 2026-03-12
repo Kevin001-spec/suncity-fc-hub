@@ -1,109 +1,119 @@
 
 
-# System Update Plan
+# Fadhir Player Stats, Fan Cleanup, Enhanced DOCX, Post-Match Achievements
 
-## Task 1: Move "Add Recent Results" and "Add Events" to Coach Profile Only
+## Issues Found
 
-Currently `canManageScores` and `canManageEvents` include coach, manager, and captain. Change:
-- **Add Score** card: Show only for `isCoach` (not manager/captain)
-- **Add Event** card: Show only for `isCoach`
-- **Manager gets a NEW "Edit/Remove Recent Scores"** card instead — shows list of `gameScores` with Edit/Delete buttons per entry
+### 1. Fadhir (SCF-002) not in match perf recorder
+- `playerMembers` on line 263 filters `m.role === "player" || m.role === "captain"` — excludes "finance" role
+- Fadhir has no position set in DB (`position: null`)
+- His profile shows "My Stats" section via `(isCaptain || isFadhir)` check but he can't be selected in the match recorder
+- There's also a duplicate `SCF-P39 "Fadhir (P)"` in fallback data — this is confusing. Fadhir should use `SCF-002` with position set
 
-**Files:** `src/pages/OfficialProfile.tsx`
-- Change line 399 condition from `canManageScores` to `isCoach`
-- Change line 427 condition from `canManageEvents` to `isCoach`
-- Add new Manager card: "Manage Recent Results" with list of games, each having Edit (inline fields) and Delete (with confirm) buttons
+### 2. Fans in attendance & contributions
+- Attendance table (line 1424): uses `playerMembers` which already filters `player|captain` — fans excluded. But need to verify
+- Contribution grid in Stats.tsx (line 748): `sortedContributionMembers` uses `contributionMembers` which only excludes SCF-001, so fans ARE included — needs fixing
+- Fadhir's contribution grid (line 1279): filters `m.id !== "SCF-001"` — fans still included there too
 
-## Task 2: Update Team Stats Editor with Position-Specific Stats
+### 3. Detailed DOCX needs improvements
+- Profile pic needs JPEG format for mobile compatibility
+- Missing POTM/achievement badges in export
+- Missing match-by-match performance comparison
+- Manager should control export availability via a toggle
 
-The stats editor (lines 484-516) only has Goals/Assists/Games fields. Update to show position-appropriate fields:
-- **All players**: Goals, Assists, Games Played, Successful Tackles, Direct Targets (new fields needed)
-- **Defenders only**: Additional Tackles, Interceptions, Clearances, Direct Shots
-- **GK**: Saves, Clean Sheets, Aerial Duels
+### 4. Post-match achievements (max 6)
+- Currently only POTM exists
+- Need to add: Defensive Wall (most tackles), Playmaker (most assists), Sharpshooter (most goals), Iron Wall (GK — most saves), Rising Star (biggest improvement vs last match)
+- These are auto-calculated from `match_performances` when manager records stats
 
-**Database migration**: Add `successful_tackles` and `direct_targets` columns (and `direct_shots` for DEF) to `members` table.
-
-**Files:**
-- Supabase migration: `ALTER TABLE members ADD COLUMN successful_tackles INT DEFAULT 0, ADD COLUMN direct_targets INT DEFAULT 0, ADD COLUMN direct_shots INT DEFAULT 0;`
-- `src/data/team-data.ts`: Add new fields to `TeamMember` interface
-- `src/pages/OfficialProfile.tsx`: Expand stats editor — add state variables for all new stats, detect selected player's position group, show relevant fields dynamically
-- `src/contexts/TeamDataContext.tsx`: Extend `updatePlayerStats` mapping to include new fields
-- `src/pages/PlayerProfile.tsx`: Update `getStatCards()` to show new stats for each position
-- `src/pages/Stats.tsx`: Update performance table columns
-
-## Task 3: Overview Tracking System (Weekly/Monthly/Season) — 3 Icons
-
-This is the repeating core request. Currently there's a single "Weekly Overview" card that shows Fri-Sun. Need to transform into 3 icons like the gallery:
-
-**Design:**
-- 3 icon buttons on Stats page (and officials dashboard): 📅 Weekly, 📊 Monthly, 🏆 Season
-- **Weekly**: Icon always visible. Clickable only Fri-Sun. Opens dialog with overview data. After Sunday, auto-archive to `weekly_overviews` table.
-- **Monthly**: Icon always visible. Clickable after 3 weekly reports exist. Opens dialog with monthly summary.
-- **Season**: Icon always visible. Clickable only when coach's end date has passed. Opens dialog with all-time stats.
-- Each includes "Most Improved" tracking (compare current vs previous week data for discipline, goals, assists).
-- **Archive Section**: On officials stats/profile — permanent archive of past reports, displayed as clickable date icons (like gallery), separated by type (weekly/monthly/season).
-
-**Files:**
-- `src/pages/Stats.tsx`: Replace the single weekly overview with 3 icon system + archive section
-- `src/pages/OfficialProfile.tsx`: Add archive section for officials
-- Logic: Load `weekly_overviews` and `season_config` from Supabase, compute available reports
-
-## Task 4: Player DOCX Export (Friday-Sunday)
-
-Currently `isFriday = new Date().getDay() === 5`. Change to show Fri-Sun:
-```
-const showExport = [0, 5, 6].includes(new Date().getDay());
-```
-
-The export already calls `generatePlayerProfileDocx` — just need to update the visibility condition.
-
-**Files:** `src/pages/PlayerProfile.tsx` — change line 33
-
-## Task 5: Match Day Performance Tracking on Officials Stats
-
-Need a section on Stats page where officials see match-by-match player performance data. Already have `match_performances` table and `addMatchPerformance` in context.
-
-**Manager's profile**: Add "Record Match Day Stats" section — select a game, add player performances (position-specific stats + rating + POTM checkbox).
-
-**Stats page**: Add "Match Day Reports" section — games listed by date (newest first), expandable to show each player's stats, ranked by rating, POTM highlighted. Exportable as DOCX.
-
-**Files:**
-- `src/pages/OfficialProfile.tsx`: Add match performance recorder for manager
-- `src/pages/Stats.tsx`: Add match reports section
-
-## Task 6: Manager Edit/Remove Recent Scores
-
-Covered in Task 1 — the new "Manage Recent Results" card.
-
-## Task 7: Add Players Section for Coach & Manager
-
-Currently `addPlayer` exists in context but no UI. Add an "Add New Player" card for both `isCoach` and `isManager`:
-- Name, Squad Number, Position selector
-- Inserts via `addPlayer(name, squadNumber, position)`
-
-**Files:** `src/pages/OfficialProfile.tsx` — add card with condition `isCoach || isManager`
-
-## Task 8: Fix New Players Contribution Display in Stats
-
-In `Stats.tsx` contribution grid (line 408-427), new players (SCF-P31 to SCF-P35) still show ❌ for Dec/Jan. Fix by using `getContribMonthsForMember` to determine which months to show, and for months that don't apply, show `—` instead.
-
-**Files:** `src/pages/Stats.tsx` — update contribution grid to check `NEW_PLAYER_IDS` and skip/show dash for inapplicable months
-
-## Task 9: Lovable Badge CSS
-
-Already exists but will re-verify/strengthen in `src/index.css`.
+### 5. Trigger exists and works
+- `trg_sync_match_perf_to_member` is active — stats DO sync now
 
 ---
 
-## Summary of Files
+## Changes
+
+### Migration: Set Fadhir's position, create match_awards table
+
+```sql
+-- Set Fadhir's position
+UPDATE members SET position = 'MID' WHERE id = 'SCF-002';
+
+-- Table for post-match awards
+CREATE TABLE IF NOT EXISTS match_awards (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_id uuid NOT NULL,
+  player_id text NOT NULL,
+  award_type text NOT NULL,
+  award_label text NOT NULL,
+  reason text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE match_awards ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone can read match_awards" ON match_awards FOR SELECT TO public USING (true);
+CREATE POLICY "Anyone can insert match_awards" ON match_awards FOR INSERT TO public WITH CHECK (true);
+CREATE POLICY "Anyone can delete match_awards" ON match_awards FOR DELETE TO public USING (true);
+
+-- Add export_enabled flag for manager control
+ALTER TABLE season_config ADD COLUMN IF NOT EXISTS export_enabled boolean NOT NULL DEFAULT false;
+```
+
+### `src/data/team-data.ts`
+- Add `MatchAward` interface: `{ id, gameId, playerId, awardType, awardLabel, reason }`
+- Set Fadhir's position to "MID" in fallback officials array
+- Remove `SCF-P39 "Fadhir (P)"` from players array (duplicate)
+
+### `src/pages/OfficialProfile.tsx`
+- **playerMembers** (line 263): Change filter to include `m.role === "finance"` (so Fadhir appears in recorder, stats editor, attendance)
+- **Contribution grid** (line 1279): Add `&& m.role !== "fan"` filter
+- **Attendance table** (line 1424): Already uses `playerMembers` — will auto-include Fadhir with updated filter
+- **Post-match achievement system**: After POTM calculation in `handleAddMatchPerf`, compute up to 6 awards:
+  1. **🏆 Player of the Match** — highest POTM score
+  2. **🛡️ Defensive Wall** — most tackles (min 5)
+  3. **🎯 Sharpshooter** — most goals (min 1)
+  4. **🅰️ Playmaker** — most assists (min 1)
+  5. **🧤 Iron Wall** — most saves (GK, min 3)
+  6. **📈 Rising Star** — biggest improvement vs previous match
+- Insert awards into `match_awards` table
+- **Manager export toggle**: Add a card with toggle to enable/disable detailed export for players
+
+### `src/pages/Stats.tsx`
+- **Contribution grid** (line 748): Filter out fans from `sortedContributionMembers`
+- **Attendance ranking** (line 111): Already filters `player|captain` — add `finance` role
+- **Match Awards section**: After MOTM card, display all awards for latest match with badges, player names, and reasons
+- **performanceMembers** (line 95): Include `finance` role
+
+### `src/pages/PlayerProfile.tsx`
+- **Detailed export**: Check `season_config.export_enabled` from Supabase; if false and not weekend, disable detailed export
+- **Enhanced DOCX**: Pass match performances, POTM info, awards to `generatePlayerProfileDocx`
+- Add match-by-match performance data in export
+
+### `src/lib/docx-export.ts`
+- **Profile pic**: Convert to JPEG/PNG with proper dimensions for mobile doc viewers (use `type: "png"` which is already done)
+- **Add achievements section**: Show POTM badges, awards with emojis
+- **Match performance comparison**: Show each match's stats side-by-side with best/lowest indicators
+- **More emojis**: Add achievement emojis throughout (🏆, ⭐, 🔥, 📈, 🛡️, 🎯, etc.)
+
+### `src/contexts/TeamDataContext.tsx`
+- Add `matchAwards` state and load function
+- Add `loadMatchAwards` and expose in context
+- Update `playerMembers`-like filters throughout to include finance role
+
+### `src/pages/Profile.tsx`
+- Add match award badge notification on login (check `match_awards` for current user from latest game)
+
+---
+
+## Files Changed
 
 | File | Changes |
 |------|---------|
-| Supabase migration | Add `successful_tackles`, `direct_targets`, `direct_shots` to `members` |
-| `src/data/team-data.ts` | Add new stat fields to `TeamMember` interface |
-| `src/contexts/TeamDataContext.tsx` | Extend `updatePlayerStats` and `loadMembers` for new fields |
-| `src/pages/OfficialProfile.tsx` | Major: scores→coach only, events→coach only, manager gets edit/delete scores, expanded stats editor, match performance recorder, add player UI, overview archive |
-| `src/pages/Stats.tsx` | Overview 3-icon system + archive, match reports section, fix new player contribution display, updated performance table |
-| `src/pages/PlayerProfile.tsx` | Export visible Fri-Sun, new stat cards |
-| `src/index.css` | Strengthen Lovable badge hiding |
+| Migration | Set Fadhir position, create `match_awards` table, add `export_enabled` to `season_config` |
+| `src/data/team-data.ts` | Add `MatchAward` interface, fix Fadhir position, remove SCF-P39 duplicate |
+| `src/pages/OfficialProfile.tsx` | Include finance in playerMembers, exclude fans from contrib grid, post-match awards engine, export toggle |
+| `src/pages/Stats.tsx` | Exclude fans from contributions, include finance in perf/attendance, display match awards |
+| `src/pages/PlayerProfile.tsx` | Respect export toggle, enhanced detailed export |
+| `src/lib/docx-export.ts` | Add achievements, match comparisons, more emojis, mobile-friendly pic |
+| `src/contexts/TeamDataContext.tsx` | Add matchAwards state/loader |
+| `src/pages/Profile.tsx` | Award badge notifications on login |
 
