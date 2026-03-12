@@ -1276,7 +1276,7 @@ const OfficialProfile = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {members.filter((m) => m.id !== "SCF-001").map((m) => {
+                    {members.filter((m) => m.id !== "SCF-001" && m.role !== "fan").map((m) => {
                       const memberMonths = getContribMonthsForMember(m.id);
                       return (
                         <tr key={m.id} className="border-b border-border">
