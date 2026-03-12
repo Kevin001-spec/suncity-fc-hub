@@ -22,6 +22,7 @@ import {
   TrendingUp, TrendingDown, Upload, Target, Save, Trash2, Download, UserMinus, Star, BarChart3, Edit,
   UserPlus, MessageCircle, Send, Mail, Footprints, Gamepad2, Shield, Hand, Crosshair,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { contributionMonths, getContribMonthsForMember } from "@/data/team-data";
 import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
