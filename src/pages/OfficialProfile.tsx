@@ -1183,6 +1183,30 @@ const OfficialProfile = () => {
           );
         })()}
 
+        {/* ===== MANAGER: Export Toggle for Player Detailed Profiles ===== */}
+        {isManager && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Download className="w-5 h-5 text-primary" /> Player Export Access</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground font-body">Toggle detailed profile export availability for all players. When enabled, players can download their detailed profile document any day.</p>
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={exportEnabled}
+                  onCheckedChange={async (checked) => {
+                    setExportEnabled(checked);
+                    const { data: existing } = await supabase.from("season_config").select("id").limit(1);
+                    if (existing && existing.length > 0) {
+                      await supabase.from("season_config").update({ export_enabled: checked } as any).eq("id", existing[0].id);
+                    }
+                    toast({ title: checked ? "Export Enabled ✅" : "Export Disabled", description: checked ? "Players can now download detailed profiles" : "Detailed export locked to weekends only" });
+                  }}
+                />
+                <span className="font-body text-sm text-foreground">{exportEnabled ? "✅ Export Enabled" : "🔒 Weekend Only"}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* ===== MANAGER: League Standings Editor ===== */}
         {isManager && (
           <Card className="bg-card border-border card-glow">
