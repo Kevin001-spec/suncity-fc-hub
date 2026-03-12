@@ -32,6 +32,7 @@ const Stats = () => {
   const { user, isOfficial } = useAuth();
   const { members, financialRecords, gameScores, attendance, mediaItems, profilePics, matchPerformances } = useTeamData();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [matchAwards, setMatchAwards] = useState<any[]>([]);
 
   // Cumulative stats from weekly_stats_log + current members
   const [weeklyLogsAll, setWeeklyLogsAll] = useState<any[]>([]);
