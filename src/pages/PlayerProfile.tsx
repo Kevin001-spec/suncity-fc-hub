@@ -134,12 +134,27 @@ const PlayerProfile = () => {
       }));
     }
 
+    // Build match history with detailed performance data
+    const detailedMatchHistory = matchHistory.map(m => {
+      const game = gameScores.find(g => g.opponent === m.opponent && new Date(g.date).toLocaleDateString() === m.date);
+      const perf = game ? matchPerfsForExport.find((p: any) => p.game_id === game.id) : null;
+      return { ...m, performance: perf };
+    });
+
+    // Build awards list
+    const awardsForDoc = matchAwardsForExport.map((a: any) => ({
+      label: a.award_label,
+      reason: a.reason,
+    }));
+
     await generatePlayerProfileDocx(
       liveMember.name, user.id, getFullPositionName(liveMember.position),
       stats, attDays, opponentsPlayed.map(o => ({ ...o, date: new Date(o.date).toLocaleDateString() })),
-      contribs, profilePics[user.id], logsForExport
+      contribs, profilePics[user.id], logsForExport,
+      detailedMatchHistory.length > 0 ? detailedMatchHistory as any : undefined,
+      awardsForDoc.length > 0 ? awardsForDoc : undefined,
     );
-    toast({ title: detailed ? "Detailed Profile Exported" : "Weekly Profile Exported" });
+    toast({ title: detailed ? "📄 Detailed Profile Exported" : "📄 Weekly Profile Exported" });
   };
 
   const handleSendMessage = async () => {
