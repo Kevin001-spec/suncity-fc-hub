@@ -101,6 +101,16 @@ export interface MatchPerformance {
   directShots?: number;
 }
 
+export interface MatchAward {
+  id: string;
+  gameId: string;
+  playerId: string;
+  awardType: string;
+  awardLabel: string;
+  reason: string;
+  createdAt: string;
+}
+
 export interface Message {
   id: string;
   fromId: string;
