@@ -108,7 +108,7 @@ const Stats = () => {
   }, [contributionMembers]);
 
   const attendanceRanking = useMemo(() => {
-    const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
+    const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain" || m.role === "finance");
     return playerMembers.map((m) => {
       const playerAtt = attendance.filter((a) => a.playerId === m.id);
       const pct = calcAttendancePct(playerAtt);
