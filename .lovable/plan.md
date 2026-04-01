@@ -1,109 +1,205 @@
 
 
-# System Update Plan
+# Massive System Update — Phased Implementation Plan
 
-## Task 1: Move "Add Recent Results" and "Add Events" to Coach Profile Only
-
-Currently `canManageScores` and `canManageEvents` include coach, manager, and captain. Change:
-- **Add Score** card: Show only for `isCoach` (not manager/captain)
-- **Add Event** card: Show only for `isCoach`
-- **Manager gets a NEW "Edit/Remove Recent Scores"** card instead — shows list of `gameScores` with Edit/Delete buttons per entry
-
-**Files:** `src/pages/OfficialProfile.tsx`
-- Change line 399 condition from `canManageScores` to `isCoach`
-- Change line 427 condition from `canManageEvents` to `isCoach`
-- Add new Manager card: "Manage Recent Results" with list of games, each having Edit (inline fields) and Delete (with confirm) buttons
-
-## Task 2: Update Team Stats Editor with Position-Specific Stats
-
-The stats editor (lines 484-516) only has Goals/Assists/Games fields. Update to show position-appropriate fields:
-- **All players**: Goals, Assists, Games Played, Successful Tackles, Direct Targets (new fields needed)
-- **Defenders only**: Additional Tackles, Interceptions, Clearances, Direct Shots
-- **GK**: Saves, Clean Sheets, Aerial Duels
-
-**Database migration**: Add `successful_tackles` and `direct_targets` columns (and `direct_shots` for DEF) to `members` table.
-
-**Files:**
-- Supabase migration: `ALTER TABLE members ADD COLUMN successful_tackles INT DEFAULT 0, ADD COLUMN direct_targets INT DEFAULT 0, ADD COLUMN direct_shots INT DEFAULT 0;`
-- `src/data/team-data.ts`: Add new fields to `TeamMember` interface
-- `src/pages/OfficialProfile.tsx`: Expand stats editor — add state variables for all new stats, detect selected player's position group, show relevant fields dynamically
-- `src/contexts/TeamDataContext.tsx`: Extend `updatePlayerStats` mapping to include new fields
-- `src/pages/PlayerProfile.tsx`: Update `getStatCards()` to show new stats for each position
-- `src/pages/Stats.tsx`: Update performance table columns
-
-## Task 3: Overview Tracking System (Weekly/Monthly/Season) — 3 Icons
-
-This is the repeating core request. Currently there's a single "Weekly Overview" card that shows Fri-Sun. Need to transform into 3 icons like the gallery:
-
-**Design:**
-- 3 icon buttons on Stats page (and officials dashboard): 📅 Weekly, 📊 Monthly, 🏆 Season
-- **Weekly**: Icon always visible. Clickable only Fri-Sun. Opens dialog with overview data. After Sunday, auto-archive to `weekly_overviews` table.
-- **Monthly**: Icon always visible. Clickable after 3 weekly reports exist. Opens dialog with monthly summary.
-- **Season**: Icon always visible. Clickable only when coach's end date has passed. Opens dialog with all-time stats.
-- Each includes "Most Improved" tracking (compare current vs previous week data for discipline, goals, assists).
-- **Archive Section**: On officials stats/profile — permanent archive of past reports, displayed as clickable date icons (like gallery), separated by type (weekly/monthly/season).
-
-**Files:**
-- `src/pages/Stats.tsx`: Replace the single weekly overview with 3 icon system + archive section
-- `src/pages/OfficialProfile.tsx`: Add archive section for officials
-- Logic: Load `weekly_overviews` and `season_config` from Supabase, compute available reports
-
-## Task 4: Player DOCX Export (Friday-Sunday)
-
-Currently `isFriday = new Date().getDay() === 5`. Change to show Fri-Sun:
-```
-const showExport = [0, 5, 6].includes(new Date().getDay());
-```
-
-The export already calls `generatePlayerProfileDocx` — just need to update the visibility condition.
-
-**Files:** `src/pages/PlayerProfile.tsx` — change line 33
-
-## Task 5: Match Day Performance Tracking on Officials Stats
-
-Need a section on Stats page where officials see match-by-match player performance data. Already have `match_performances` table and `addMatchPerformance` in context.
-
-**Manager's profile**: Add "Record Match Day Stats" section — select a game, add player performances (position-specific stats + rating + POTM checkbox).
-
-**Stats page**: Add "Match Day Reports" section — games listed by date (newest first), expandable to show each player's stats, ranked by rating, POTM highlighted. Exportable as DOCX.
-
-**Files:**
-- `src/pages/OfficialProfile.tsx`: Add match performance recorder for manager
-- `src/pages/Stats.tsx`: Add match reports section
-
-## Task 6: Manager Edit/Remove Recent Scores
-
-Covered in Task 1 — the new "Manage Recent Results" card.
-
-## Task 7: Add Players Section for Coach & Manager
-
-Currently `addPlayer` exists in context but no UI. Add an "Add New Player" card for both `isCoach` and `isManager`:
-- Name, Squad Number, Position selector
-- Inserts via `addPlayer(name, squadNumber, position)`
-
-**Files:** `src/pages/OfficialProfile.tsx` — add card with condition `isCoach || isManager`
-
-## Task 8: Fix New Players Contribution Display in Stats
-
-In `Stats.tsx` contribution grid (line 408-427), new players (SCF-P31 to SCF-P35) still show ❌ for Dec/Jan. Fix by using `getContribMonthsForMember` to determine which months to show, and for months that don't apply, show `—` instead.
-
-**Files:** `src/pages/Stats.tsx` — update contribution grid to check `NEW_PLAYER_IDS` and skip/show dash for inapplicable months
-
-## Task 9: Lovable Badge CSS
-
-Already exists but will re-verify/strengthen in `src/index.css`.
+This covers all requested updates across 5 implementation phases. Each phase is self-contained and must complete before the next begins.
 
 ---
 
-## Summary of Files
+## PHASE 1: Data Fixes, Beavon Exclusion, Attendance Glitch, Remove Brian (d), Add Manager to Attendance
 
-| File | Changes |
-|------|---------|
-| Supabase migration | Add `successful_tackles`, `direct_targets`, `direct_shots` to `members` |
-| `src/data/team-data.ts` | Add new stat fields to `TeamMember` interface |
-| `src/contexts/TeamDataContext.tsx` | Extend `updatePlayerStats` and `loadMembers` for new fields |
-| `src/pages/OfficialProfile.tsx` | Major: scores→coach only, events→coach only, manager gets edit/delete scores, expanded stats editor, match performance recorder, add player UI, overview archive |
-| `src/pages/Stats.tsx` | Overview 3-icon system + archive, match reports section, fix new player contribution display, updated performance table |
-| `src/pages/PlayerProfile.tsx` | Export visible Fri-Sun, new stat cards |
-| `src/index.css` | Strengthen Lovable badge hiding |
+### 1A. Exclude Beavon (SCF-P40) from contributions, attendance, performance tables
+- In `OfficialProfile.tsx`: Add `m.id !== "SCF-P40"` to `playerMembers` filter (line 270) for attendance and contributions sections, but keep him in match perf recorder
+- In `Stats.tsx`: Add same filter to `contributionMembers`, `attendanceRanking`, `performanceMembers`
+- His stats remain recordable and downloadable — only excluded from contribution/attendance/performance grids
+
+### 1B. Fix attendance toggle glitch
+- Root cause: The `updateAttendance` function in `TeamDataContext.tsx` likely has a race condition — multiple rapid upserts conflict. Fix by adding optimistic local state update and debouncing the Supabase call, or by using a queue to serialize updates
+
+### 1C. Remove "Brian (d)" from system
+- Delete from `members` table via insert tool: `DELETE FROM members WHERE name = 'Brian (d)'` or matching ID
+- Remove from fallback data in `team-data.ts` if present
+
+### 1D. Add fans to removable list in coach section
+- In the "Remove Player" section of `OfficialProfile.tsx`, change the dropdown to include fans: add `|| m.role === "fan"` to the filter
+
+### 1E. Add Manager (SCF-003) to weekly attendance system
+- In `OfficialProfile.tsx` attendance table (line 1529): Change `playerMembers` to also include manager role
+- In `Stats.tsx` `attendanceRanking`: Include manager in the filter
+
+### 1F. Coach notification for inactive players
+- On coach profile mount, query `match_performances` for players with 0 games and check attendance > 70% and contributions > 2 paid months
+- Display a card: "🔔 Active but unplayed: [names]"
+
+**Files: `OfficialProfile.tsx`, `Stats.tsx`, `TeamDataContext.tsx`, `team-data.ts`, DB insert tool**
+
+---
+
+## PHASE 2: Tracking System Overhaul (Weekly/Monthly/Season Awards)
+
+### 2A. Fix weekly overview "top rated" logic
+Current bug: `weeklyData.top3` sorts by `(goals + assists)` only — players with 0 stats can appear. Fix:
+- New scoring formula: `(gamesPlayed * 15) + (goals * 30) + (assists * 20) + (successfulTackles * 5) + (saves * 10) + (attendancePct * 0.5) + (paidContribs * 10)`
+- Filter: Only include players with `gamesPlayed > 0 OR attendancePct >= 80`
+- Expand to 6 players with unique achievement names and star ratings (6 to 1 stars):
+  1. ⭐⭐⭐⭐⭐⭐ "The Commander" — highest overall score (reason why)
+  2. ⭐⭐⭐⭐⭐ "The Warrior" — second highest
+  3. ⭐⭐⭐⭐ "The Engine" — third
+  4. ⭐⭐⭐ "The Rock" — fourth
+  5. ⭐⭐ "The Spark" — fifth
+  6. ⭐ "The Rising Force" — sixth
+
+### 2B. Monthly overview — fix and enable
+- Aggregate data from 3+ weekly archives
+- Calculate: best average attendance, most consistent performer, most improved across weeks
+- Awards: "Monthly MVP", "Iron Man" (best attendance), "Most Consistent", "Growth Machine", "Silent Hero", "The Backbone"
+- Auto-generate when 3 weekly reports exist; use fair calculations from actual data
+
+### 2C. Season overview — fix and enable
+- Aggregate all monthly data for the season period
+- Calculate: season-long best performers, most reliable, biggest transformation
+- Awards: "Season MVP", "Golden Boot", "Unbreakable" (best attendance), "Rising Legend", "Heart of the Team", "Mr. Reliable"
+- Trigger when season end date passes
+
+### 2D. Invent additional post-match awards (expand from 6)
+Beyond existing POTM, Defensive Wall, Sharpshooter, Playmaker, Iron Wall, Rising Star — add:
+- "🎩 Hat-trick Hero" (3+ goals)
+- "🔒 Lockdown" (defender with 0 goals conceded + tackles > 8)
+- "👟 Engine Room" (highest combined tackles + assists for midfielders)
+
+### 2E. Duplicate detection in data entry
+- In `handleAddMatchPerf`: Before inserting, check if `match_performances` already has an entry for this `player_id + game_id`. If yes, show warning toast and skip insert.
+- Same for `handleUpdateStats`: Compare old vs new values and warn if identical
+
+**Files: `Stats.tsx`, `OfficialProfile.tsx`, `TeamDataContext.tsx`**
+
+---
+
+## PHASE 3: Animations, Lottie Integration, App Icon
+
+### 3A. Install lottie-react and copy animation files
+- Copy all 7 uploaded JSON files to `src/assets/animations/`
+- Install `lottie-react` dependency
+
+### 3B. Animation placement:
+- **allmembers_profile.json** → All member profiles (officials, fans, players) — horizontally next to profile pic, reduce pic size to make room. Stays permanently.
+- **universalloadingscreen.json** → Create a `<LottieLoader>` component, use it for all loading states across all pages
+- **manofthematch.json** → Toast on login for POTM player, then persistent on their profile pic area until next match
+- **dashboardanimation.json** → Dashboard page, below team motto, with decorative borders
+- **resultsanimation.json** → Top of Results page permanently, resized to fit, animation plays then data loads below
+- **statsanimation.json** → Top of Stats page permanently
+- **playersanimation.json** → Top of Players page permanently + between each position group section (GK/DEF/MID/ATT separators)
+- **other_match_rewards.json** → Toast on login for non-POTM award winners, persistent section next to profile pic with border and reason text
+
+### 3C. Change app icon
+- Use the team badge (`suncity-badge.png`) as the favicon in `index.html`
+- Generate appropriate icon sizes or reference the badge directly
+
+**Files: New `src/components/LottieAnimation.tsx`, all page files, `index.html`, new asset copies**
+
+---
+
+## PHASE 4: Export System Fixes, DOCX Improvements, Captain/Fadhir Exports
+
+### 4A. Fix profile pic not visible in DOCX
+- Debug `fetchImageAsBuffer` — the Supabase storage URL may need auth token or proper CORS handling
+- Try fetching with the full URL including query params
+
+### 4B. Detailed export enhancements
+- Include ALL past weekly attendance data (query all `attendance` records, group by week)
+- Show weekly attendance compactly (week start + emoji grid per week)
+- Include all match history with opponent, date, venue, stats, result
+- Include monthly/season achievements if applicable
+- Add emojis throughout for achievements and recognitions
+
+### 4C. DOCX mobile optimization
+- Increase column widths, reduce font sizes slightly
+- Use `WidthType.DXA` throughout (never percentage)
+- Add cell margins/padding for readability
+- Ensure table fits within A4 portrait with 0.5" margins
+
+### 4D. Match day reports fix — show actual player stats
+- In Stats.tsx match report table: Show position-specific stats (tackles for DEF, saves for GK, goals/assists for ATT/MID) instead of just goals/assists
+
+### 4E. Captain and Fadhir export features
+- Add detailed export button to captain profiles and Fadhir's profile
+- Include all their match history from `player_game_log` + `match_performances`
+- Include all games played, their stats per game, and their role
+
+### 4F. Manager export toggle for detailed exports
+- Already has `export_enabled` in `season_config` — ensure the toggle card works in manager profile
+- Detailed export available on weekends OR when manager enables it
+
+**Files: `docx-export.ts`, `PlayerProfile.tsx`, `OfficialProfile.tsx`, `Stats.tsx`**
+
+---
+
+## PHASE 5: Google Login, SEO, Guest Role, Homepage Restructure
+
+### 5A. Google OAuth integration
+- Add `@supabase/auth-helpers-react` if needed
+- Add "Sign in with Google" button on login page
+- On first Google login: check if email exists in `members` table
+  - If not found: show one-time setup screen to enter SunCity FC ID and link
+  - If found: log in directly
+- Save Google user ID to `members` table (new column `google_id`)
+- For unregistered users: assign "guest" role with read-only access to public pages
+
+### 5B. Homepage restructure
+- Move login section to the very bottom
+- Move homepage carousel photos to Dashboard
+- Remove "Team Media" from Dashboard (it's in Stats gallery)
+- Allow full homepage browsing without login
+- On reaching profile section: prompt Google login or ID entry
+
+### 5C. Guest role restrictions
+- Guests can only view: Home, Story, Gallery (public pages)
+- Hide: Edit buttons, Manager tabs, Financial data, Profile editing
+- Show message: "Welcome to the Suncity FC Portal. If you are a registered player, please enter your Player ID to access your profile."
+
+### 5D. SEO architecture
+- Install `react-helmet-async`
+- Add dynamic `<title>` and `<meta>` tags per page
+- Player profiles: `<title>[Player Name] - SunCity FC Profile</title>`
+- Generate `public/sitemap.xml` with all routes
+- Update `robots.txt` to point to sitemap
+- Ensure "Our Story" and public stats render without auth
+
+### 5E. Dynamic meta tags per route
+- Home: "SunCity FC | Official Team Site"
+- Dashboard: "SunCity FC Dashboard"
+- Stats: "SunCity FC Statistics & Performance"
+- Results: "SunCity FC Match Results"
+- Players: "SunCity FC Squad & Player Profiles"
+- Profile: "[Player Name] - SunCity FC Profile"
+
+**Files: `App.tsx`, `Login.tsx`, `Dashboard.tsx`, `AuthContext.tsx`, `index.html`, new `public/sitemap.xml`, all page files**
+
+---
+
+## Database Changes Required
+
+### Migration 1: Google auth support
+```sql
+ALTER TABLE members ADD COLUMN IF NOT EXISTS google_id text;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_members_google_id ON members(google_id) WHERE google_id IS NOT NULL;
+```
+
+### Data operations (insert tool):
+- Delete "Brian (d)" from members
+- Clean up any duplicate data entries
+
+---
+
+## Files Changed Summary
+
+| Phase | Files |
+|-------|-------|
+| 1 | `OfficialProfile.tsx`, `Stats.tsx`, `TeamDataContext.tsx`, `team-data.ts`, DB inserts |
+| 2 | `Stats.tsx`, `OfficialProfile.tsx`, `TeamDataContext.tsx` |
+| 3 | New `LottieAnimation.tsx`, 7 animation assets copied, all page files, `index.html` |
+| 4 | `docx-export.ts`, `PlayerProfile.tsx`, `OfficialProfile.tsx`, `Stats.tsx` |
+| 5 | `App.tsx`, `Login.tsx`, `Dashboard.tsx`, `AuthContext.tsx`, `index.html`, `sitemap.xml`, all pages |
+
+Total: ~15 files modified/created, 1 migration, several data operations
 
