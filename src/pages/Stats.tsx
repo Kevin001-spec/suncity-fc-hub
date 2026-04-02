@@ -359,19 +359,19 @@ const Stats = () => {
                   </div>
                 </div>
               )}
-              {weeklyData.top3.length > 0 && (
+              {weeklyData.top6.length > 0 && (
                 <div>
-                  <h4 className="font-heading text-xs text-primary tracking-wider mb-2">TOP RATED PLAYERS</h4>
-                  {weeklyData.top3.map((m, i) => {
-                    const starCount = 5 - i;
-                    return (
-                      <div key={m.id} className="flex items-center gap-2 py-1">
-                        <span className="text-sm font-body text-foreground">{m.name}</span>
-                        <div className="flex">{Array.from({ length: starCount }).map((_, j) => <Star key={j} className="w-3 h-3 text-primary fill-primary" />)}</div>
-                        <span className="text-xs text-muted-foreground">G:{m.goals || 0} A:{m.assists || 0}</span>
+                  <h4 className="font-heading text-xs text-primary tracking-wider mb-2">🏆 TOP RATED PLAYERS</h4>
+                  {weeklyData.top6.map((m) => (
+                    <div key={m.id} className="flex items-center gap-2 py-2 border-b border-border last:border-0">
+                      <div className="flex">{Array.from({ length: m.stars }).map((_, j) => <Star key={j} className="w-3 h-3 text-primary fill-primary" />)}</div>
+                      <div className="flex-1">
+                        <span className="text-sm font-body text-foreground font-medium">{m.name}</span>
+                        <span className="ml-2 text-xs text-primary font-heading">{m.awardTitle.split(" ").slice(1).join(" ")}</span>
                       </div>
-                    );
-                  })}
+                      <span className="text-[10px] text-muted-foreground font-body">{m.reason}</span>
+                    </div>
+                  ))}
                 </div>
               )}
               {weeklyData.lowContributors.length > 0 && (
