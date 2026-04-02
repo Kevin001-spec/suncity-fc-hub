@@ -16,6 +16,8 @@ import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
 import { getContribMonthsForMember, NEW_PLAYER_IDS } from "@/data/team-data";
 import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
+import LottieAnimation from "@/components/LottieAnimation";
+import statsAnimation from "@/assets/animations/statsanimation.json";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -96,8 +98,8 @@ const Stats = () => {
     });
   }, []);
 
-  const performanceMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001" && m.id !== "SCF-003" && m.role !== "fan"), [members]);
-  const contributionMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001" && m.role !== "fan"), [members]);
+  const performanceMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001" && m.id !== "SCF-003" && m.role !== "fan" && m.id !== "SCF-P40"), [members]);
+  const contributionMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001" && m.role !== "fan" && m.id !== "SCF-P40"), [members]);
 
   const sortedContributionMembers = useMemo(() => {
     return [...contributionMembers].sort((a, b) => {
@@ -112,7 +114,7 @@ const Stats = () => {
   }, [contributionMembers]);
 
   const attendanceRanking = useMemo(() => {
-    const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain" || m.role === "finance");
+    const playerMembers = members.filter((m) => (m.role === "player" || m.role === "captain" || m.role === "finance" || m.role === "manager") && m.id !== "SCF-P40");
     return playerMembers.map((m) => {
       const playerAtt = attendance.filter((a) => a.playerId === m.id);
       const pct = calcAttendancePct(playerAtt);
@@ -141,21 +143,49 @@ const Stats = () => {
   const isWeekendWindow = dayOfWeek >= 5 || dayOfWeek === 0;
 
   const weeklyData = useMemo(() => {
-    const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain" || m.role === "finance");
+    const playerMembers = members.filter((m) => (m.role === "player" || m.role === "captain" || m.role === "finance") && m.id !== "SCF-P40");
     const mostDisciplined = playerMembers.filter((m) => {
       const playerAtt = attendance.filter((a) => a.playerId === m.id && a.status !== "no_activity");
       return playerAtt.length > 0 && playerAtt.every((a) => a.status === "present");
     });
-    const sortedByPerf = [...playerMembers].sort((a, b) => ((b.goals || 0) + (b.assists || 0)) - ((a.goals || 0) + (a.assists || 0)));
-    const top3 = sortedByPerf.slice(0, 3);
+    
+    // Fair scoring: weighted formula using multiple data points
+    const scoredPlayers = playerMembers.map(m => {
+      const playerAtt = attendance.filter(a => a.playerId === m.id);
+      const attPct = calcAttendancePct(playerAtt);
+      const paidContribs = Object.values(m.contributions).filter(s => s === "paid").length;
+      const cs = cumulativeStats[m.id] || { goals: 0, assists: 0, gamesPlayed: 0, saves: 0, successfulTackles: 0 };
+      const score = (cs.gamesPlayed * 15) + (cs.goals * 30) + (cs.assists * 20) + (cs.successfulTackles * 5) + (cs.saves * 10) + (attPct * 0.5) + (paidContribs * 10);
+      return { ...m, score, attPct, paidContribs, cs };
+    }).filter(m => m.cs.gamesPlayed > 0 || m.attPct >= 80)
+      .sort((a, b) => b.score - a.score);
+    
+    const AWARD_NAMES = [
+      { title: "⭐⭐⭐⭐⭐⭐ The Commander", stars: 6 },
+      { title: "⭐⭐⭐⭐⭐ The Warrior", stars: 5 },
+      { title: "⭐⭐⭐⭐ The Engine", stars: 4 },
+      { title: "⭐⭐⭐ The Rock", stars: 3 },
+      { title: "⭐⭐ The Spark", stars: 2 },
+      { title: "⭐ The Rising Force", stars: 1 },
+    ];
+    
+    const top6 = scoredPlayers.slice(0, 6).map((m, i) => ({
+      ...m,
+      awardTitle: AWARD_NAMES[i]?.title || "",
+      stars: AWARD_NAMES[i]?.stars || 0,
+      reason: m.cs.gamesPlayed > 0
+        ? `${m.cs.gamesPlayed} games, ${m.cs.goals} goals, ${m.cs.assists} assists, ${m.attPct}% attendance`
+        : `${m.attPct}% attendance, ${m.paidContribs} months paid`,
+    }));
+    
     const lowContributors = playerMembers.filter((m) => {
       const paidCount = Object.values(m.contributions).filter((s) => s === "paid").length;
       const playerAtt = attendance.filter((a) => a.playerId === m.id);
       const pct = calcAttendancePct(playerAtt);
       return paidCount <= 1 && pct < 60;
     });
-    return { mostDisciplined, bestPlayer: sortedByPerf[0], top3, lowContributors };
-  }, [members, attendance]);
+    return { mostDisciplined, top6, lowContributors };
+  }, [members, attendance, cumulativeStats]);
 
   // Monthly: available when 3+ weekly archives exist
   const weeklyArchives = weeklyOverviews.filter(o => o.type === "weekly");
@@ -247,11 +277,10 @@ const Stats = () => {
     if (weeklyData.mostDisciplined.length > 0) {
       tables.push({ head: [["Most Disciplined (100% Attendance)"]], body: weeklyData.mostDisciplined.map((m) => [m.name]) });
     }
-    if (weeklyData.top3.length > 0) {
-      tables.push({ head: [["Top Rated Players"]], body: weeklyData.top3.map((m, i) => {
-        const stars = i === 0 ? "⭐⭐⭐⭐⭐" : i === 1 ? "⭐⭐⭐⭐" : "⭐⭐⭐";
-        return [`${m.name} — Goals: ${m.goals || 0}, Assists: ${m.assists || 0} ${stars}`];
-      })});
+    if (weeklyData.top6.length > 0) {
+      tables.push({ head: [["Top Rated Players", "Achievement", "Reason"]], body: weeklyData.top6.map((m) => [
+        m.name, m.awardTitle, m.reason,
+      ])});
     }
     if (weeklyData.lowContributors.length > 0) {
       tables.push({ head: [["Low Contribution & Attendance"]], body: weeklyData.lowContributors.map((m) => [m.name]) });
@@ -262,10 +291,10 @@ const Stats = () => {
   const exportMatchReport = (gameId: string) => {
     const report = matchReportsByGame.find(r => r.gameId === gameId);
     if (!report || !report.game) return;
-    const head = [["Player", "Goals", "Assists", "Rating", "POTM"]];
+    const head = [["Player", "Goals", "Assists", "Tackles", "Saves", "POTM"]];
     const body = report.performances.map(p => {
       const player = members.find(m => m.id === p.playerId);
-      return [player?.name || p.playerId, String(p.goals), String(p.assists), String(p.rating), p.isPotm ? "⭐" : ""];
+      return [player?.name || p.playerId, String(p.goals), String(p.assists), String(p.tackles), String(p.saves), p.isPotm ? "⭐" : ""];
     });
     generateBrandedDocx(`Match Report — vs ${report.game.opponent} (${report.game.date})`, [{ head, body }], `suncity_fc_match_${report.game.date}.docx`);
   };
@@ -274,6 +303,7 @@ const Stats = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+        <LottieAnimation animationData={statsAnimation} className="h-28 mb-2" />
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
           <h1 className="font-heading text-2xl gold-text">Team Statistics</h1>
           <p className="text-muted-foreground text-sm font-body mt-1">Performance, contributions, attendance & finance</p>
@@ -332,19 +362,19 @@ const Stats = () => {
                   </div>
                 </div>
               )}
-              {weeklyData.top3.length > 0 && (
+              {weeklyData.top6.length > 0 && (
                 <div>
-                  <h4 className="font-heading text-xs text-primary tracking-wider mb-2">TOP RATED PLAYERS</h4>
-                  {weeklyData.top3.map((m, i) => {
-                    const starCount = 5 - i;
-                    return (
-                      <div key={m.id} className="flex items-center gap-2 py-1">
-                        <span className="text-sm font-body text-foreground">{m.name}</span>
-                        <div className="flex">{Array.from({ length: starCount }).map((_, j) => <Star key={j} className="w-3 h-3 text-primary fill-primary" />)}</div>
-                        <span className="text-xs text-muted-foreground">G:{m.goals || 0} A:{m.assists || 0}</span>
+                  <h4 className="font-heading text-xs text-primary tracking-wider mb-2">🏆 TOP RATED PLAYERS</h4>
+                  {weeklyData.top6.map((m) => (
+                    <div key={m.id} className="flex items-center gap-2 py-2 border-b border-border last:border-0">
+                      <div className="flex">{Array.from({ length: m.stars }).map((_, j) => <Star key={j} className="w-3 h-3 text-primary fill-primary" />)}</div>
+                      <div className="flex-1">
+                        <span className="text-sm font-body text-foreground font-medium">{m.name}</span>
+                        <span className="ml-2 text-xs text-primary font-heading">{m.awardTitle.split(" ").slice(1).join(" ")}</span>
                       </div>
-                    );
-                  })}
+                      <span className="text-[10px] text-muted-foreground font-body">{m.reason}</span>
+                    </div>
+                  ))}
                 </div>
               )}
               {weeklyData.lowContributors.length > 0 && (
@@ -662,6 +692,8 @@ const Stats = () => {
                               <th className="text-left py-1">Player</th>
                               <th className="text-right py-1">Goals</th>
                               <th className="text-right py-1">Assists</th>
+                              <th className="text-right py-1">Tackles</th>
+                              <th className="text-right py-1">Saves</th>
                               <th className="text-center py-1">POTM</th>
                             </tr>
                           </thead>
@@ -672,8 +704,10 @@ const Stats = () => {
                                 <tr key={p.id} className={`border-b border-border ${p.isPotm ? "bg-primary/10" : ""}`}>
                                   <td className="py-1 text-primary font-heading">{i + 1}</td>
                                   <td className="py-1 text-foreground">{player?.name || p.playerId}</td>
-                                  <td className="py-1 text-right">{p.goals}</td>
-                                  <td className="py-1 text-right">{p.assists}</td>
+                                  <td className="py-1 text-right">{p.goals || 0}</td>
+                                  <td className="py-1 text-right">{p.assists || 0}</td>
+                                  <td className="py-1 text-right">{p.tackles || 0}</td>
+                                  <td className="py-1 text-right">{p.saves || 0}</td>
                                   <td className="py-1 text-center">{p.isPotm ? "⭐" : ""}</td>
                                 </tr>
                               );

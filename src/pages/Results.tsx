@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, MapPin, BarChart3 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import LottieAnimation from "@/components/LottieAnimation";
+import resultsAnimation from "@/assets/animations/resultsanimation.json";
 
 interface LeagueTeam {
   id: string;
@@ -93,6 +95,7 @@ const Results = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
+        <LottieAnimation animationData={resultsAnimation} className="h-28 mb-2" />
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
           <h1 className="font-heading text-2xl gold-text">Match Results</h1>
           <p className="text-muted-foreground text-sm font-body mt-1">All game history & league standings</p>

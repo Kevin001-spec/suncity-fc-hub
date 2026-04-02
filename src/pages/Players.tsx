@@ -8,6 +8,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { type TeamMember, getFullPositionName, getPositionGroup } from "@/data/team-data";
 import { getStatsForPosition } from "@/lib/position-stats";
+import LottieAnimation from "@/components/LottieAnimation";
+import playersAnimation from "@/assets/animations/playersanimation.json";
 
 const positionGroupOrder: Record<string, number> = { "GK": 1, "DEF": 2, "MID": 3, "ATT": 4 };
 const positionGroupLabels: Record<string, string> = { "GK": "Goalkeepers", "DEF": "Defenders", "MID": "Midfielders", "ATT": "Attackers" };
@@ -78,6 +80,7 @@ const Players = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+        <LottieAnimation animationData={playersAnimation} className="h-28 mb-2" />
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
           <h1 className="font-heading text-2xl gold-text">Players</h1>
           <p className="text-muted-foreground text-sm font-body mt-1">{playerMembers.length} squad members</p>

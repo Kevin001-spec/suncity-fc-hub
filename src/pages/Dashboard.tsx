@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { type GameScore, type TeamMember, teamBackground } from "@/data/team-data";
 import useEmblaCarousel from "embla-carousel-react";
 import suncityBadge from "@/assets/suncity-badge.png";
+import LottieAnimation from "@/components/LottieAnimation";
+import dashboardAnimation from "@/assets/animations/dashboardanimation.json";
 
 const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5 } };
 
@@ -139,6 +141,9 @@ const Dashboard = () => {
           </div>
           <h1 className="text-4xl md:text-5xl font-heading font-bold gold-text text-shadow-gold">SUNCITY FC</h1>
           <p className="text-muted-foreground mt-2 tracking-[0.3em] uppercase text-sm font-body">Discipline • Unity • Victory</p>
+          <div className="mt-4 mx-auto max-w-xs border-2 border-primary/20 rounded-2xl overflow-hidden">
+            <LottieAnimation animationData={dashboardAnimation} className="h-32" />
+          </div>
         </motion.section>
 
         <div className="grid md:grid-cols-2 gap-6">

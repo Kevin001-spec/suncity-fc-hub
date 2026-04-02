@@ -635,7 +635,7 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
   }, [currentWeekStart, loadAttendance]);
 
   const markDayNoActivity = useCallback(async (day: string) => {
-    const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
+    const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain" || m.role === "finance" || m.role === "manager");
     setAttendance((prev) => {
       const updated = prev.filter((a) => a.day !== day);
       return [...updated, ...playerMembers.map((m) => ({ playerId: m.id, day, status: "no_activity" }))];

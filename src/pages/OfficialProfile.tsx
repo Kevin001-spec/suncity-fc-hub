@@ -267,7 +267,9 @@ const OfficialProfile = () => {
   const canAddScoresEvents = isManager || isCaptain;
   const canReceiveMessages = true; // All officials can receive messages now
 
-  const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain" || m.role === "finance");
+  const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain" || m.role === "finance" || m.role === "manager");
+  // Exclude Beavon from contribution/attendance/performance grids but keep in match recorder
+  const playerMembersForGrids = playerMembers.filter(m => m.id !== "SCF-P40");
   const ourScoreNum = parseInt(newOurScore) || 0;
 
   // League team helpers
@@ -566,6 +568,15 @@ const OfficialProfile = () => {
 
   const handleAddMatchPerf = async () => {
     if (!perfGameId || !perfPlayerId) return;
+    
+    // Duplicate detection
+    const { data: existing } = await supabase.from("match_performances")
+      .select("id").eq("game_id", perfGameId).eq("player_id", perfPlayerId);
+    if (existing && existing.length > 0) {
+      toast({ title: "⚠️ Already Recorded", description: `${members.find(m => m.id === perfPlayerId)?.name} already has stats for this match.`, variant: "destructive" });
+      return;
+    }
+    
     const perfPlayer = members.find(m => m.id === perfPlayerId);
     const perfPosGroup = getPositionGroup(perfPlayer?.position);
     
@@ -694,9 +705,34 @@ const OfficialProfile = () => {
         }
       }
       
-      // Insert all awards (max 6)
+      // 7. 🎩 Hat-trick Hero (3+ goals)
+      const hatTrick = allPerfs.find(p => p.goals >= 3 && p.id !== bestId && !awards.some(a => a.player_id === p.player_id));
+      if (hatTrick) {
+        awards.push({ game_id: gameId, player_id: hatTrick.player_id, award_type: "hat_trick", award_label: "🎩 Hat-trick Hero", reason: `${hatTrick.goals} goals — clinical hat-trick performance` });
+      }
+      
+      // 8. 🔒 Lockdown (defender with tackles > 8)
+      const lockdown = allPerfs.find(p => p.tackles >= 8 && p.id !== bestId && !awards.some(a => a.player_id === p.player_id));
+      if (lockdown) {
+        const lPlayer = members.find(m => m.id === lockdown.player_id);
+        const lPosGroup = getPositionGroup(lPlayer?.position);
+        if (lPosGroup === "DEF") {
+          awards.push({ game_id: gameId, player_id: lockdown.player_id, award_type: "lockdown", award_label: "🔒 Lockdown", reason: `${lockdown.tackles} tackles — defensive fortress` });
+        }
+      }
+      
+      // 9. 👟 Engine Room (highest tackles + assists for MID)
+      const midPerfs = allPerfs.filter(p => {
+        const pl = members.find(m => m.id === p.player_id);
+        return getPositionGroup(pl?.position) === "MID" && p.id !== bestId && !awards.some(a => a.player_id === p.player_id);
+      }).sort((a, b) => (b.tackles + b.assists) - (a.tackles + a.assists));
+      if (midPerfs[0] && (midPerfs[0].tackles + midPerfs[0].assists) >= 3) {
+        awards.push({ game_id: gameId, player_id: midPerfs[0].player_id, award_type: "engine_room", award_label: "👟 Engine Room", reason: `${midPerfs[0].tackles} tackles + ${midPerfs[0].assists} assists — midfield powerhouse` });
+      }
+      
+      // Insert all awards (max 9)
       if (awards.length > 0) {
-        await supabase.from("match_awards" as any).insert(awards.slice(0, 6));
+        await supabase.from("match_awards" as any).insert(awards.slice(0, 9));
       }
     })();
   };
@@ -1381,7 +1417,7 @@ const OfficialProfile = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {members.filter((m) => m.id !== "SCF-001" && m.role !== "fan").map((m) => {
+                    {members.filter((m) => m.id !== "SCF-001" && m.role !== "fan" && m.id !== "SCF-P40").map((m) => {
                       const memberMonths = getContribMonthsForMember(m.id);
                       return (
                         <tr key={m.id} className="border-b border-border">
@@ -1526,7 +1562,7 @@ const OfficialProfile = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {playerMembers.map((m) => {
+                    {playerMembersForGrids.map((m) => {
                       const playerAtt = attendance.filter((a) => a.playerId === m.id);
                       const pct = calcAttendancePct(playerAtt);
 
@@ -1719,7 +1755,7 @@ const OfficialProfile = () => {
               <select value={removePlayerId} onChange={(e) => setRemovePlayerId(e.target.value)}
                 className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
                 <option value="">Select player to remove</option>
-                {playerMembers.filter(m => m.role === "player").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {members.filter(m => m.role === "player" || m.role === "fan").map((m) => <option key={m.id} value={m.id}>{m.name} ({m.role})</option>)}
               </select>
               {removePlayerId && !showRemoveConfirm && (
                 <Button variant="destructive" onClick={() => setShowRemoveConfirm(true)} className="w-full font-body"><Trash2 className="w-4 h-4 mr-1" /> Remove Player</Button>
