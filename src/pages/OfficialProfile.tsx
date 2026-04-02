@@ -1721,7 +1721,7 @@ const OfficialProfile = () => {
               <select value={removePlayerId} onChange={(e) => setRemovePlayerId(e.target.value)}
                 className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
                 <option value="">Select player to remove</option>
-                {playerMembers.filter(m => m.role === "player").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {members.filter(m => m.role === "player" || m.role === "fan").map((m) => <option key={m.id} value={m.id}>{m.name} ({m.role})</option>)}
               </select>
               {removePlayerId && !showRemoveConfirm && (
                 <Button variant="destructive" onClick={() => setShowRemoveConfirm(true)} className="w-full font-body"><Trash2 className="w-4 h-4 mr-1" /> Remove Player</Button>
