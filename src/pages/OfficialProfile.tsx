@@ -568,6 +568,15 @@ const OfficialProfile = () => {
 
   const handleAddMatchPerf = async () => {
     if (!perfGameId || !perfPlayerId) return;
+    
+    // Duplicate detection
+    const { data: existing } = await supabase.from("match_performances")
+      .select("id").eq("game_id", perfGameId).eq("player_id", perfPlayerId);
+    if (existing && existing.length > 0) {
+      toast({ title: "⚠️ Already Recorded", description: `${members.find(m => m.id === perfPlayerId)?.name} already has stats for this match.`, variant: "destructive" });
+      return;
+    }
+    
     const perfPlayer = members.find(m => m.id === perfPlayerId);
     const perfPosGroup = getPositionGroup(perfPlayer?.position);
     
