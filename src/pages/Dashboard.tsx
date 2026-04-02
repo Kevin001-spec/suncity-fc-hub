@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { type GameScore, type TeamMember, teamBackground } from "@/data/team-data";
 import useEmblaCarousel from "embla-carousel-react";
 import suncityBadge from "@/assets/suncity-badge.png";
+import LottieAnimation from "@/components/LottieAnimation";
+import dashboardAnimation from "@/assets/animations/dashboardanimation.json";
 
 const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5 } };
 
