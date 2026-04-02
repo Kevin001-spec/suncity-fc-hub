@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, MapPin, BarChart3 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import LottieAnimation from "@/components/LottieAnimation";
+import resultsAnimation from "@/assets/animations/resultsanimation.json";
 
 interface LeagueTeam {
   id: string;
