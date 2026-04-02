@@ -689,6 +689,8 @@ const Stats = () => {
                               <th className="text-left py-1">Player</th>
                               <th className="text-right py-1">Goals</th>
                               <th className="text-right py-1">Assists</th>
+                              <th className="text-right py-1">Tackles</th>
+                              <th className="text-right py-1">Saves</th>
                               <th className="text-center py-1">POTM</th>
                             </tr>
                           </thead>
@@ -699,8 +701,10 @@ const Stats = () => {
                                 <tr key={p.id} className={`border-b border-border ${p.isPotm ? "bg-primary/10" : ""}`}>
                                   <td className="py-1 text-primary font-heading">{i + 1}</td>
                                   <td className="py-1 text-foreground">{player?.name || p.playerId}</td>
-                                  <td className="py-1 text-right">{p.goals}</td>
-                                  <td className="py-1 text-right">{p.assists}</td>
+                                  <td className="py-1 text-right">{p.goals || 0}</td>
+                                  <td className="py-1 text-right">{p.assists || 0}</td>
+                                  <td className="py-1 text-right">{p.tackles || 0}</td>
+                                  <td className="py-1 text-right">{p.saves || 0}</td>
                                   <td className="py-1 text-center">{p.isPotm ? "⭐" : ""}</td>
                                 </tr>
                               );
