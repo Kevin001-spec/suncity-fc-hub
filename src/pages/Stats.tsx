@@ -289,10 +289,10 @@ const Stats = () => {
   const exportMatchReport = (gameId: string) => {
     const report = matchReportsByGame.find(r => r.gameId === gameId);
     if (!report || !report.game) return;
-    const head = [["Player", "Goals", "Assists", "Rating", "POTM"]];
+    const head = [["Player", "Goals", "Assists", "Tackles", "Saves", "POTM"]];
     const body = report.performances.map(p => {
       const player = members.find(m => m.id === p.playerId);
-      return [player?.name || p.playerId, String(p.goals), String(p.assists), String(p.rating), p.isPotm ? "⭐" : ""];
+      return [player?.name || p.playerId, String(p.goals), String(p.assists), String(p.tackles), String(p.saves), p.isPotm ? "⭐" : ""];
     });
     generateBrandedDocx(`Match Report — vs ${report.game.opponent} (${report.game.date})`, [{ head, body }], `suncity_fc_match_${report.game.date}.docx`);
   };
