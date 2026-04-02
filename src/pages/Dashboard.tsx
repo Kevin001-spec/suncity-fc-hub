@@ -141,6 +141,9 @@ const Dashboard = () => {
           </div>
           <h1 className="text-4xl md:text-5xl font-heading font-bold gold-text text-shadow-gold">SUNCITY FC</h1>
           <p className="text-muted-foreground mt-2 tracking-[0.3em] uppercase text-sm font-body">Discipline • Unity • Victory</p>
+          <div className="mt-4 mx-auto max-w-xs border-2 border-primary/20 rounded-2xl overflow-hidden">
+            <LottieAnimation animationData={dashboardAnimation} className="h-32" />
+          </div>
         </motion.section>
 
         <div className="grid md:grid-cols-2 gap-6">
