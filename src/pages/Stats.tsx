@@ -16,6 +16,8 @@ import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
 import { getContribMonthsForMember, NEW_PLAYER_IDS } from "@/data/team-data";
 import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
+import LottieAnimation from "@/components/LottieAnimation";
+import statsAnimation from "@/assets/animations/statsanimation.json";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
