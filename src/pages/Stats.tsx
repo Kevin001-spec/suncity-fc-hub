@@ -141,21 +141,49 @@ const Stats = () => {
   const isWeekendWindow = dayOfWeek >= 5 || dayOfWeek === 0;
 
   const weeklyData = useMemo(() => {
-    const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain" || m.role === "finance");
+    const playerMembers = members.filter((m) => (m.role === "player" || m.role === "captain" || m.role === "finance") && m.id !== "SCF-P40");
     const mostDisciplined = playerMembers.filter((m) => {
       const playerAtt = attendance.filter((a) => a.playerId === m.id && a.status !== "no_activity");
       return playerAtt.length > 0 && playerAtt.every((a) => a.status === "present");
     });
-    const sortedByPerf = [...playerMembers].sort((a, b) => ((b.goals || 0) + (b.assists || 0)) - ((a.goals || 0) + (a.assists || 0)));
-    const top3 = sortedByPerf.slice(0, 3);
+    
+    // Fair scoring: weighted formula using multiple data points
+    const scoredPlayers = playerMembers.map(m => {
+      const playerAtt = attendance.filter(a => a.playerId === m.id);
+      const attPct = calcAttendancePct(playerAtt);
+      const paidContribs = Object.values(m.contributions).filter(s => s === "paid").length;
+      const cs = cumulativeStats[m.id] || { goals: 0, assists: 0, gamesPlayed: 0, saves: 0, successfulTackles: 0 };
+      const score = (cs.gamesPlayed * 15) + (cs.goals * 30) + (cs.assists * 20) + (cs.successfulTackles * 5) + (cs.saves * 10) + (attPct * 0.5) + (paidContribs * 10);
+      return { ...m, score, attPct, paidContribs, cs };
+    }).filter(m => m.cs.gamesPlayed > 0 || m.attPct >= 80)
+      .sort((a, b) => b.score - a.score);
+    
+    const AWARD_NAMES = [
+      { title: "⭐⭐⭐⭐⭐⭐ The Commander", stars: 6 },
+      { title: "⭐⭐⭐⭐⭐ The Warrior", stars: 5 },
+      { title: "⭐⭐⭐⭐ The Engine", stars: 4 },
+      { title: "⭐⭐⭐ The Rock", stars: 3 },
+      { title: "⭐⭐ The Spark", stars: 2 },
+      { title: "⭐ The Rising Force", stars: 1 },
+    ];
+    
+    const top6 = scoredPlayers.slice(0, 6).map((m, i) => ({
+      ...m,
+      awardTitle: AWARD_NAMES[i]?.title || "",
+      stars: AWARD_NAMES[i]?.stars || 0,
+      reason: m.cs.gamesPlayed > 0
+        ? `${m.cs.gamesPlayed} games, ${m.cs.goals} goals, ${m.cs.assists} assists, ${m.attPct}% attendance`
+        : `${m.attPct}% attendance, ${m.paidContribs} months paid`,
+    }));
+    
     const lowContributors = playerMembers.filter((m) => {
       const paidCount = Object.values(m.contributions).filter((s) => s === "paid").length;
       const playerAtt = attendance.filter((a) => a.playerId === m.id);
       const pct = calcAttendancePct(playerAtt);
       return paidCount <= 1 && pct < 60;
     });
-    return { mostDisciplined, bestPlayer: sortedByPerf[0], top3, lowContributors };
-  }, [members, attendance]);
+    return { mostDisciplined, top6, lowContributors };
+  }, [members, attendance, cumulativeStats]);
 
   // Monthly: available when 3+ weekly archives exist
   const weeklyArchives = weeklyOverviews.filter(o => o.type === "weekly");
