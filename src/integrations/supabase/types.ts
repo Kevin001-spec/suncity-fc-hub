@@ -656,6 +656,7 @@ export type Database = {
           favourite_moment: string | null
           games_played: number
           goals: number
+          google_id: string | null
           id: string
           interceptions: number
           name: string
@@ -687,6 +688,7 @@ export type Database = {
           favourite_moment?: string | null
           games_played?: number
           goals?: number
+          google_id?: string | null
           id: string
           interceptions?: number
           name: string
@@ -718,6 +720,7 @@ export type Database = {
           favourite_moment?: string | null
           games_played?: number
           goals?: number
+          google_id?: string | null
           id?: string
           interceptions?: number
           name?: string
