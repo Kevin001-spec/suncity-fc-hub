@@ -275,11 +275,10 @@ const Stats = () => {
     if (weeklyData.mostDisciplined.length > 0) {
       tables.push({ head: [["Most Disciplined (100% Attendance)"]], body: weeklyData.mostDisciplined.map((m) => [m.name]) });
     }
-    if (weeklyData.top3.length > 0) {
-      tables.push({ head: [["Top Rated Players"]], body: weeklyData.top3.map((m, i) => {
-        const stars = i === 0 ? "⭐⭐⭐⭐⭐" : i === 1 ? "⭐⭐⭐⭐" : "⭐⭐⭐";
-        return [`${m.name} — Goals: ${m.goals || 0}, Assists: ${m.assists || 0} ${stars}`];
-      })});
+    if (weeklyData.top6.length > 0) {
+      tables.push({ head: [["Top Rated Players", "Achievement", "Reason"]], body: weeklyData.top6.map((m) => [
+        m.name, m.awardTitle, m.reason,
+      ])});
     }
     if (weeklyData.lowContributors.length > 0) {
       tables.push({ head: [["Low Contribution & Attendance"]], body: weeklyData.lowContributors.map((m) => [m.name]) });
