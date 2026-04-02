@@ -96,8 +96,8 @@ const Stats = () => {
     });
   }, []);
 
-  const performanceMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001" && m.id !== "SCF-003" && m.role !== "fan"), [members]);
-  const contributionMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001" && m.role !== "fan"), [members]);
+  const performanceMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001" && m.id !== "SCF-003" && m.role !== "fan" && m.id !== "SCF-P40"), [members]);
+  const contributionMembers = useMemo(() => members.filter((m) => m.id !== "SCF-001" && m.role !== "fan" && m.id !== "SCF-P40"), [members]);
 
   const sortedContributionMembers = useMemo(() => {
     return [...contributionMembers].sort((a, b) => {
