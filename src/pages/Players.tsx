@@ -8,6 +8,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { type TeamMember, getFullPositionName, getPositionGroup } from "@/data/team-data";
 import { getStatsForPosition } from "@/lib/position-stats";
+import LottieAnimation from "@/components/LottieAnimation";
+import playersAnimation from "@/assets/animations/playersanimation.json";
 
 const positionGroupOrder: Record<string, number> = { "GK": 1, "DEF": 2, "MID": 3, "ATT": 4 };
 const positionGroupLabels: Record<string, string> = { "GK": "Goalkeepers", "DEF": "Defenders", "MID": "Midfielders", "ATT": "Attackers" };
