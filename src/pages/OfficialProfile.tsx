@@ -1528,7 +1528,7 @@ const OfficialProfile = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {playerMembers.map((m) => {
+                    {playerMembersForGrids.map((m) => {
                       const playerAtt = attendance.filter((a) => a.playerId === m.id);
                       const pct = calcAttendancePct(playerAtt);
 
