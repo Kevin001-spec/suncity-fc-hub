@@ -705,9 +705,34 @@ const OfficialProfile = () => {
         }
       }
       
-      // Insert all awards (max 6)
+      // 7. 🎩 Hat-trick Hero (3+ goals)
+      const hatTrick = allPerfs.find(p => p.goals >= 3 && p.id !== bestId && !awards.some(a => a.player_id === p.player_id));
+      if (hatTrick) {
+        awards.push({ game_id: gameId, player_id: hatTrick.player_id, award_type: "hat_trick", award_label: "🎩 Hat-trick Hero", reason: `${hatTrick.goals} goals — clinical hat-trick performance` });
+      }
+      
+      // 8. 🔒 Lockdown (defender with tackles > 8)
+      const lockdown = allPerfs.find(p => p.tackles >= 8 && p.id !== bestId && !awards.some(a => a.player_id === p.player_id));
+      if (lockdown) {
+        const lPlayer = members.find(m => m.id === lockdown.player_id);
+        const lPosGroup = getPositionGroup(lPlayer?.position);
+        if (lPosGroup === "DEF") {
+          awards.push({ game_id: gameId, player_id: lockdown.player_id, award_type: "lockdown", award_label: "🔒 Lockdown", reason: `${lockdown.tackles} tackles — defensive fortress` });
+        }
+      }
+      
+      // 9. 👟 Engine Room (highest tackles + assists for MID)
+      const midPerfs = allPerfs.filter(p => {
+        const pl = members.find(m => m.id === p.player_id);
+        return getPositionGroup(pl?.position) === "MID" && p.id !== bestId && !awards.some(a => a.player_id === p.player_id);
+      }).sort((a, b) => (b.tackles + b.assists) - (a.tackles + a.assists));
+      if (midPerfs[0] && (midPerfs[0].tackles + midPerfs[0].assists) >= 3) {
+        awards.push({ game_id: gameId, player_id: midPerfs[0].player_id, award_type: "engine_room", award_label: "👟 Engine Room", reason: `${midPerfs[0].tackles} tackles + ${midPerfs[0].assists} assists — midfield powerhouse` });
+      }
+      
+      // Insert all awards (max 9)
       if (awards.length > 0) {
-        await supabase.from("match_awards" as any).insert(awards.slice(0, 6));
+        await supabase.from("match_awards" as any).insert(awards.slice(0, 9));
       }
     })();
   };
