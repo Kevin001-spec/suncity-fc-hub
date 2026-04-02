@@ -267,7 +267,9 @@ const OfficialProfile = () => {
   const canAddScoresEvents = isManager || isCaptain;
   const canReceiveMessages = true; // All officials can receive messages now
 
-  const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain" || m.role === "finance");
+  const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain" || m.role === "finance" || m.role === "manager");
+  // Exclude Beavon from contribution/attendance/performance grids but keep in match recorder
+  const playerMembersForGrids = playerMembers.filter(m => m.id !== "SCF-P40");
   const ourScoreNum = parseInt(newOurScore) || 0;
 
   // League team helpers
