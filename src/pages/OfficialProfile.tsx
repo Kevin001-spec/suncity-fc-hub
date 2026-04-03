@@ -20,7 +20,7 @@ import { format } from "date-fns";
 import {
   Trophy, Calendar as CalendarIcon, Image, DollarSign, Users, CheckCircle, XCircle, Plus,
   TrendingUp, TrendingDown, Upload, Target, Save, Trash2, Download, UserMinus, Star, BarChart3, Edit,
-  UserPlus, MessageCircle, Send, Mail, Footprints, Gamepad2, Shield, Hand, Crosshair,
+  UserPlus, MessageCircle, Send, Mail, Footprints, Gamepad2, Shield, Hand, Crosshair, Award,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -30,6 +30,15 @@ import { getPositionGroup, getFullPositionName } from "@/data/team-data";
 import { supabase } from "@/integrations/supabase/client";
 import { getStatsForPosition, getPerfFieldsForPosition, calculatePotmScore } from "@/lib/position-stats";
 import LineupBuilder from "@/components/LineupBuilder";
+import LottieAnimation from "@/components/LottieAnimation";
+import allmembersProfile from "@/assets/animations/allmembers_profile.json";
+import manofthematch from "@/assets/animations/manofthematch.json";
+import otherMatchRewards from "@/assets/animations/other_match_rewards.json";
+
+function getAwardAnimation(awardType: string) {
+  if (awardType?.toLowerCase().includes("potm") || awardType?.toLowerCase().includes("player of the match")) return manofthematch;
+  return otherMatchRewards;
+}
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
