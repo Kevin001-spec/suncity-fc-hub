@@ -69,17 +69,20 @@ const PlayerProfile = () => {
     if (user?.id && !isFan) {
       loadWeeklyStatsLogs(user.id).then(setWeeklyLogs);
       loadPlayerGameLogs(user.id).then(setPlayerGameLogs);
-      // Check if manager enabled export
       supabase.from("season_config").select("*").order("created_at", { ascending: false }).limit(1).then(({ data }) => {
         if (data && data.length > 0 && (data[0] as any).export_enabled) setDetailedExportEnabled(true);
       });
-      // Load match performances for this player
       supabase.from("match_performances").select("*").eq("player_id", user.id).order("created_at", { ascending: false }).then(({ data }) => {
         if (data) setMatchPerfsForExport(data);
       });
-      // Load match awards for this player
       supabase.from("match_awards" as any).select("*").eq("player_id", user.id).order("created_at", { ascending: false }).then(({ data }: any) => {
-        if (data) setMatchAwardsForExport(data);
+        if (data) {
+          setMatchAwardsForExport(data);
+          if (data.length > 0) {
+            setRecentAward(data[0]);
+            setHistoricalAwards(data.slice(1));
+          }
+        }
       });
     }
   }, [user?.id, isFan]);
