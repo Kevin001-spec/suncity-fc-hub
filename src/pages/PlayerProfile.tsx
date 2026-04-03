@@ -49,6 +49,9 @@ const PlayerProfile = () => {
   const [weeklyLogs, setWeeklyLogs] = useState<WeeklyStatsLog[]>([]);
   const [momentText, setMomentText] = useState("");
   const [playerGameLogs, setPlayerGameLogs] = useState<PlayerGameLog[]>([]);
+  const [recentAward, setRecentAward] = useState<any>(null);
+  const [historicalAwards, setHistoricalAwards] = useState<any[]>([]);
+  const [trophyCabinetOpen, setTrophyCabinetOpen] = useState(false);
 
   const liveMember = members.find((m) => m.id === user?.id) || user;
   const isFan = user?.role === "fan";
