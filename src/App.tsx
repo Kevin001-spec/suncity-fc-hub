@@ -12,6 +12,7 @@ import Stats from "./pages/Stats";
 import Results from "./pages/Results";
 import Players from "./pages/Players";
 import NotFound from "./pages/NotFound";
+import WhatsAppFAB from "./components/WhatsAppFAB";
 
 const queryClient = new QueryClient();
 
