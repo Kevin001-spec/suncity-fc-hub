@@ -28,7 +28,6 @@ const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profi
             <AvatarFallback className="bg-secondary text-primary font-heading text-xl">{member.name.slice(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <h3 className="font-heading text-lg text-foreground">{member.name}</h3>
-          <p className="text-primary font-body text-sm">{member.id}</p>
           {member.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body mt-1">Field Captain</Badge>}
            {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(member.position)}</p>}
           <div className={`grid gap-3 mt-4 pt-4 border-t border-border`} style={{ gridTemplateColumns: `repeat(${Math.min(statFields.length, 5)}, 1fr)` }}>
@@ -80,7 +79,7 @@ const Players = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        <LottieAnimation animationData={playersAnimation} className="h-28 mb-2" />
+        <LottieAnimation animationData={playersAnimation} className="h-36 mb-2" />
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
           <h1 className="font-heading text-2xl gold-text">Players</h1>
           <p className="text-muted-foreground text-sm font-body mt-1">{playerMembers.length} squad members</p>
@@ -114,8 +113,24 @@ const Players = () => {
                 </motion.button>
               ))}
             </div>
+            {/* Category divider animation — between sections */}
+            {si < sections.length - 1 && (
+              <LottieAnimation animationData={playersAnimation} className="h-16 w-[150px] md:w-[250px] mx-auto my-3" />
+            )}
           </div>
         ))}
+
+        {/* Join Team WhatsApp — logged-in only */}
+        <motion.a
+          href="https://chat.whatsapp.com/FF9oZ8H8oXPA1jny5Kacs2"
+          target="_blank" rel="noopener noreferrer"
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="block mt-6 p-4 rounded-xl border-2 text-center transition-all hover:brightness-110"
+          style={{ borderColor: "#25D366", backgroundColor: "rgba(37,211,102,0.08)" }}
+        >
+          <p className="font-heading text-sm" style={{ color: "#25D366" }}>💬 Join Team WhatsApp Group</p>
+          <p className="text-xs text-muted-foreground font-body mt-1">Stay connected with the squad</p>
+        </motion.a>
       </main>
 
       <AnimatePresence>

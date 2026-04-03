@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
@@ -9,13 +9,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Target, Footprints, Gamepad2, Upload, Calendar, Download, Shield, Hand, Crosshair, MessageCircle, Send, Star, Heart, Trophy, MapPin } from "lucide-react";
+import { Target, Footprints, Gamepad2, Upload, Calendar, Download, Shield, Hand, Crosshair, MessageCircle, Send, Star, Heart, Trophy, MapPin, Award } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getContribMonthsForMember, getFullPositionName, getPositionGroup, type WeeklyStatsLog, type PlayerGameLog } from "@/data/team-data";
 import { generatePlayerProfileDocx } from "@/lib/docx-export";
 import { getStatsForPosition } from "@/lib/position-stats";
 import { supabase } from "@/integrations/supabase/client";
+import LottieAnimation from "@/components/LottieAnimation";
+import allmembersProfile from "@/assets/animations/allmembers_profile.json";
+import manofthematch from "@/assets/animations/manofthematch.json";
+import otherMatchRewards from "@/assets/animations/other_match_rewards.json";
+
+function getAwardAnimation(awardType: string) {
+  if (awardType?.toLowerCase().includes("potm") || awardType?.toLowerCase().includes("player of the match") || awardType?.toLowerCase().includes("man of the match")) {
+    return manofthematch;
+  }
+  return otherMatchRewards;
+}
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -37,6 +49,9 @@ const PlayerProfile = () => {
   const [weeklyLogs, setWeeklyLogs] = useState<WeeklyStatsLog[]>([]);
   const [momentText, setMomentText] = useState("");
   const [playerGameLogs, setPlayerGameLogs] = useState<PlayerGameLog[]>([]);
+  const [recentAward, setRecentAward] = useState<any>(null);
+  const [historicalAwards, setHistoricalAwards] = useState<any[]>([]);
+  const [trophyCabinetOpen, setTrophyCabinetOpen] = useState(false);
 
   const liveMember = members.find((m) => m.id === user?.id) || user;
   const isFan = user?.role === "fan";
@@ -54,17 +69,20 @@ const PlayerProfile = () => {
     if (user?.id && !isFan) {
       loadWeeklyStatsLogs(user.id).then(setWeeklyLogs);
       loadPlayerGameLogs(user.id).then(setPlayerGameLogs);
-      // Check if manager enabled export
       supabase.from("season_config").select("*").order("created_at", { ascending: false }).limit(1).then(({ data }) => {
         if (data && data.length > 0 && (data[0] as any).export_enabled) setDetailedExportEnabled(true);
       });
-      // Load match performances for this player
       supabase.from("match_performances").select("*").eq("player_id", user.id).order("created_at", { ascending: false }).then(({ data }) => {
         if (data) setMatchPerfsForExport(data);
       });
-      // Load match awards for this player
       supabase.from("match_awards" as any).select("*").eq("player_id", user.id).order("created_at", { ascending: false }).then(({ data }: any) => {
-        if (data) setMatchAwardsForExport(data);
+        if (data) {
+          setMatchAwardsForExport(data);
+          if (data.length > 0) {
+            setRecentAward(data[0]);
+            setHistoricalAwards(data.slice(1));
+          }
+        }
       });
     }
   }, [user?.id, isFan]);
@@ -183,24 +201,25 @@ const PlayerProfile = () => {
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         {/* Profile Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-          <div className="relative inline-block">
-            <Avatar className="w-24 h-24 border-2 border-primary mx-auto">
-              {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
-              <AvatarFallback className="bg-secondary text-primary font-heading text-2xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <button onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-colors">
-              <Upload className="w-4 h-4" />
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
+          <div className="flex flex-row items-center justify-center gap-3">
+            <div className="relative">
+              <Avatar className="w-20 h-20 border-2 border-primary">
+                {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
+                <AvatarFallback className="bg-secondary text-primary font-heading text-2xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <button onClick={() => fileInputRef.current?.click()}
+                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-colors">
+                <Upload className="w-4 h-4" />
+              </button>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
+            </div>
+            <LottieAnimation animationData={allmembersProfile} className="w-10 h-10 md:w-16 md:h-16" />
           </div>
           <h2 className="font-heading text-2xl text-foreground mt-4">{liveMember.name}</h2>
           <div className="flex items-center justify-center gap-2 mt-1">
             <Badge className="bg-primary text-primary-foreground font-body capitalize">{user.role}</Badge>
-            <Badge variant="outline" className="border-primary/30 text-primary font-body">{user.id}</Badge>
           </div>
           {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
-          
         </motion.div>
 
         {/* Stats */}
@@ -223,7 +242,42 @@ const PlayerProfile = () => {
           </motion.div>
         )}
 
-        {/* Fan Profile */}
+        {/* Recent Honour */}
+        {!isFan && recentAward && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }}>
+            <div className="border-2 border-yellow-500 rounded-lg p-4 bg-card">
+              <div className="flex items-center gap-3">
+                <LottieAnimation animationData={getAwardAnimation(recentAward.award_type)} className="w-16 h-16" />
+                <div>
+                  <p className="font-heading text-sm text-foreground">{recentAward.award_label}</p>
+                  <p className="text-xs text-muted-foreground font-body italic">{recentAward.reason}</p>
+                </div>
+              </div>
+              {historicalAwards.length > 0 && (
+                <Button size="sm" variant="outline" onClick={() => setTrophyCabinetOpen(true)} className="mt-3 font-body text-xs w-full border-primary/30 text-primary">
+                  <Award className="w-3 h-3 mr-1" /> View Award History ({historicalAwards.length})
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Trophy Cabinet Modal */}
+        <Dialog open={trophyCabinetOpen} onOpenChange={setTrophyCabinetOpen}>
+          <DialogContent className="max-w-md bg-card border-border">
+            <DialogHeader><DialogTitle className="font-heading text-primary">🏆 Trophy Cabinet</DialogTitle></DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto">
+              {historicalAwards.map((award: any, i: number) => (
+                <div key={i} className="border border-border rounded-lg p-3 text-center">
+                  <LottieAnimation animationData={getAwardAnimation(award.award_type)} className="h-20 w-20 mx-auto" />
+                  <p className="font-heading text-xs text-foreground mt-2">{award.award_label}</p>
+                  <p className="text-[10px] text-muted-foreground font-body italic">{award.reason}</p>
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {isFan && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
             <Card className="bg-card border-border card-glow">

@@ -12,6 +12,7 @@ import Stats from "./pages/Stats";
 import Results from "./pages/Results";
 import Players from "./pages/Players";
 import NotFound from "./pages/NotFound";
+import WhatsAppFAB from "./components/WhatsAppFAB";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/players" element={<ProtectedRoute><Players /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <WhatsAppFAB />
           </TeamDataProvider>
         </AuthProvider>
       </BrowserRouter>
