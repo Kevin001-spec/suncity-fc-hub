@@ -12,3 +12,5 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+Sitemap: https://suncity-fc-hub.lovable.app/sitemap.xml

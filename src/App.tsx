@@ -39,6 +39,7 @@ const App = () => (
               <Route path="/players" element={<ProtectedRoute><Players /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <WhatsAppFAB />
           </TeamDataProvider>
         </AuthProvider>
       </BrowserRouter>

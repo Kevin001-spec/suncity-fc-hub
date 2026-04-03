@@ -1,4 +1,5 @@
 import Lottie from "lottie-react";
+import universalLoading from "@/assets/animations/universalloadingscreen.json";
 
 interface LottieAnimationProps {
   animationData: any;
@@ -18,16 +19,12 @@ const LottieAnimation = ({ animationData, className = "", loop = true, autoplay 
 
 export default LottieAnimation;
 
-// Loading screen component
+// Full-screen loading screen component
 export const LottieLoader = () => {
   return (
-    <div className="flex items-center justify-center min-h-[200px]">
-      <div className="w-24 h-24">
-        <Lottie 
-          animationData={require("@/assets/animations/universalloadingscreen.json")} 
-          loop={true} 
-          autoplay={true} 
-        />
+    <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="w-32 h-32">
+        <Lottie animationData={universalLoading} loop={true} autoplay={true} />
       </div>
     </div>
   );
