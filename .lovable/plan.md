@@ -1,205 +1,190 @@
 
 
-# Massive System Update — Phased Implementation Plan
+# Remaining Phases + All Requested Updates — Implementation Plan
 
-This covers all requested updates across 5 implementation phases. Each phase is self-contained and must complete before the next begins.
-
----
-
-## PHASE 1: Data Fixes, Beavon Exclusion, Attendance Glitch, Remove Brian (d), Add Manager to Attendance
-
-### 1A. Exclude Beavon (SCF-P40) from contributions, attendance, performance tables
-- In `OfficialProfile.tsx`: Add `m.id !== "SCF-P40"` to `playerMembers` filter (line 270) for attendance and contributions sections, but keep him in match perf recorder
-- In `Stats.tsx`: Add same filter to `contributionMembers`, `attendanceRanking`, `performanceMembers`
-- His stats remain recordable and downloadable — only excluded from contribution/attendance/performance grids
-
-### 1B. Fix attendance toggle glitch
-- Root cause: The `updateAttendance` function in `TeamDataContext.tsx` likely has a race condition — multiple rapid upserts conflict. Fix by adding optimistic local state update and debouncing the Supabase call, or by using a queue to serialize updates
-
-### 1C. Remove "Brian (d)" from system
-- Delete from `members` table via insert tool: `DELETE FROM members WHERE name = 'Brian (d)'` or matching ID
-- Remove from fallback data in `team-data.ts` if present
-
-### 1D. Add fans to removable list in coach section
-- In the "Remove Player" section of `OfficialProfile.tsx`, change the dropdown to include fans: add `|| m.role === "fan"` to the filter
-
-### 1E. Add Manager (SCF-003) to weekly attendance system
-- In `OfficialProfile.tsx` attendance table (line 1529): Change `playerMembers` to also include manager role
-- In `Stats.tsx` `attendanceRanking`: Include manager in the filter
-
-### 1F. Coach notification for inactive players
-- On coach profile mount, query `match_performances` for players with 0 games and check attendance > 70% and contributions > 2 paid months
-- Display a card: "🔔 Active but unplayed: [names]"
-
-**Files: `OfficialProfile.tsx`, `Stats.tsx`, `TeamDataContext.tsx`, `team-data.ts`, DB insert tool**
+This plan covers Phase 4, Phase 5, and all additional requests in a single strategic implementation divided into 6 work groups executed sequentially.
 
 ---
 
-## PHASE 2: Tracking System Overhaul (Weekly/Monthly/Season Awards)
+## GROUP A: WhatsApp FABs, Player ID Hiding, Favicon, Weekly Award Names
 
-### 2A. Fix weekly overview "top rated" logic
-Current bug: `weeklyData.top3` sorts by `(goals + assists)` only — players with 0 stats can appear. Fix:
-- New scoring formula: `(gamesPlayed * 15) + (goals * 30) + (assists * 20) + (successfulTackles * 5) + (saves * 10) + (attendancePct * 0.5) + (paidContribs * 10)`
-- Filter: Only include players with `gamesPlayed > 0 OR attendancePct >= 80`
-- Expand to 6 players with unique achievement names and star ratings (6 to 1 stars):
-  1. ⭐⭐⭐⭐⭐⭐ "The Commander" — highest overall score (reason why)
-  2. ⭐⭐⭐⭐⭐ "The Warrior" — second highest
-  3. ⭐⭐⭐⭐ "The Engine" — third
-  4. ⭐⭐⭐ "The Rock" — fourth
-  5. ⭐⭐ "The Spark" — fifth
-  6. ⭐ "The Rising Force" — sixth
+### WhatsApp Floating Action Buttons
+- Create `src/components/WhatsAppFAB.tsx` — a floating button cluster at bottom-right
+- **Two public buttons** (visible without login): Coach WhatsApp (`wa.me/254753310940`) and Manager WhatsApp (`wa.me/254112563036`) with pre-filled message
+- **One private button** (visible only to logged-in members): Team Group invite (`https://chat.whatsapp.com/FF9oZ8H8oXPA1jny5Kacs2`)
+- WhatsApp green `#25D366`, smooth hover animation, mobile-safe positioning (bottom-20 right-4)
+- Render FAB in `App.tsx` outside routes so it appears on all pages
+- On Players page, add a dedicated "Join Team WhatsApp" card with the group link
 
-### 2B. Monthly overview — fix and enable
-- Aggregate data from 3+ weekly archives
-- Calculate: best average attendance, most consistent performer, most improved across weeks
-- Awards: "Monthly MVP", "Iron Man" (best attendance), "Most Consistent", "Growth Machine", "Silent Hero", "The Backbone"
-- Auto-generate when 3 weekly reports exist; use fair calculations from actual data
+### Hide Player IDs in Player Cards
+- `Players.tsx` PlayerCard: Remove the `<p className="text-primary">{member.id}</p>` line
+- Player list cards: Remove ID display from the button text
 
-### 2C. Season overview — fix and enable
-- Aggregate all monthly data for the season period
-- Calculate: season-long best performers, most reliable, biggest transformation
-- Awards: "Season MVP", "Golden Boot", "Unbreakable" (best attendance), "Rising Legend", "Heart of the Team", "Mr. Reliable"
-- Trigger when season end date passes
+### Update Favicon
+- Copy `src/assets/suncity-badge.png` to `public/favicon.png`
+- Update `index.html`: add `<link rel="icon" href="/favicon.png" type="image/png">`
 
-### 2D. Invent additional post-match awards (expand from 6)
-Beyond existing POTM, Defensive Wall, Sharpshooter, Playmaker, Iron Wall, Rising Star — add:
-- "🎩 Hat-trick Hero" (3+ goals)
-- "🔒 Lockdown" (defender with 0 goals conceded + tackles > 8)
-- "👟 Engine Room" (highest combined tackles + assists for midfielders)
-
-### 2E. Duplicate detection in data entry
-- In `handleAddMatchPerf`: Before inserting, check if `match_performances` already has an entry for this `player_id + game_id`. If yes, show warning toast and skip insert.
-- Same for `handleUpdateStats`: Compare old vs new values and warn if identical
-
-**Files: `Stats.tsx`, `OfficialProfile.tsx`, `TeamDataContext.tsx`**
+### Rename Weekly Award Titles
+- In `Stats.tsx` `AWARD_NAMES` array, update to:
+  1. ⭐⭐⭐⭐⭐ Top Week Performer
+  2. ⭐⭐⭐⭐ Consistent Performer
+  3. ⭐⭐⭐ Midfield Driver
+  4. ⭐⭐ Defender of the Week
+  5. ⭐ Positive Influence
+  6. 📈 Most Weekly Improved
 
 ---
 
-## PHASE 3: Animations, Lottie Integration, App Icon
+## GROUP B: Lottie Animation Engine (Complete Implementation)
 
-### 3A. Install lottie-react and copy animation files
-- Copy all 7 uploaded JSON files to `src/assets/animations/`
-- Install `lottie-react` dependency
+### Universal Loader
+- Update `LottieAnimation.tsx` `LottieLoader` to be a full-screen centered loader
+- Replace any loading spinners across pages with `<LottieLoader />`
+- Use in Suspense boundaries and data-loading states
 
-### 3B. Animation placement:
-- **allmembers_profile.json** → All member profiles (officials, fans, players) — horizontally next to profile pic, reduce pic size to make room. Stays permanently.
-- **universalloadingscreen.json** → Create a `<LottieLoader>` component, use it for all loading states across all pages
-- **manofthematch.json** → Toast on login for POTM player, then persistent on their profile pic area until next match
-- **dashboardanimation.json** → Dashboard page, below team motto, with decorative borders
-- **resultsanimation.json** → Top of Results page permanently, resized to fit, animation plays then data loads below
-- **statsanimation.json** → Top of Stats page permanently
-- **playersanimation.json** → Top of Players page permanently + between each position group section (GK/DEF/MID/ATT separators)
-- **other_match_rewards.json** → Toast on login for non-POTM award winners, persistent section next to profile pic with border and reason text
+### Player Category Dividers
+- In `Players.tsx`, after each section's player list (except the last), inject `<LottieAnimation animationData={playersAnimation} className="h-16 w-[150px] md:w-[250px] mx-auto my-3" />`
 
-### 3C. Change app icon
-- Use the team badge (`suncity-badge.png`) as the favicon in `index.html`
-- Generate appropriate icon sizes or reference the badge directly
+### Profile Badge (allmembers_profile)
+- In `PlayerProfile.tsx` and `OfficialProfile.tsx` profile header: Change avatar layout to `flex flex-row items-center gap-3`, shrink avatar to `w-18 h-18`, add `<LottieAnimation animationData={allmembersProfile} className="w-10 h-10 md:w-16 md:h-16" />` next to it
 
-**Files: New `src/components/LottieAnimation.tsx`, all page files, `index.html`, new asset copies**
+### Trophy Engine (POTM + Other Awards on Profile)
+- In `PlayerProfile.tsx` and `OfficialProfile.tsx` (for captain/Fadhir): 
+  - Query `match_awards` for current user, sort by `created_at desc`
+  - Store `recentAward` (latest) and `historicalAwards` (rest)
+  - Helper: `getAwardAnimation(type)` — returns `manofthematch.json` for POTM, `other_match_rewards.json` for everything else
+  - **Recent Honour section**: Below stats card, show animation + award name + reason with `border-2 border-yellow-500 rounded-lg`
+  - **Trophy Cabinet modal**: Button "View Award History (N)" opening Dialog with grid of historical awards
+  - Awards from weekly/monthly/season overviews also included
 
----
+### Login Toast Animations
+- In `Profile.tsx`: When POTM detected, show the `manofthematch.json` animation in a toast-like overlay for 3 seconds
+- For non-POTM awards, show `other_match_rewards.json` overlay
+- Weekly overview recognized players also get `other_match_rewards.json` toast
 
-## PHASE 4: Export System Fixes, DOCX Improvements, Captain/Fadhir Exports
-
-### 4A. Fix profile pic not visible in DOCX
-- Debug `fetchImageAsBuffer` — the Supabase storage URL may need auth token or proper CORS handling
-- Try fetching with the full URL including query params
-
-### 4B. Detailed export enhancements
-- Include ALL past weekly attendance data (query all `attendance` records, group by week)
-- Show weekly attendance compactly (week start + emoji grid per week)
-- Include all match history with opponent, date, venue, stats, result
-- Include monthly/season achievements if applicable
-- Add emojis throughout for achievements and recognitions
-
-### 4C. DOCX mobile optimization
-- Increase column widths, reduce font sizes slightly
-- Use `WidthType.DXA` throughout (never percentage)
-- Add cell margins/padding for readability
-- Ensure table fits within A4 portrait with 0.5" margins
-
-### 4D. Match day reports fix — show actual player stats
-- In Stats.tsx match report table: Show position-specific stats (tackles for DEF, saves for GK, goals/assists for ATT/MID) instead of just goals/assists
-
-### 4E. Captain and Fadhir export features
-- Add detailed export button to captain profiles and Fadhir's profile
-- Include all their match history from `player_game_log` + `match_performances`
-- Include all games played, their stats per game, and their role
-
-### 4F. Manager export toggle for detailed exports
-- Already has `export_enabled` in `season_config` — ensure the toggle card works in manager profile
-- Detailed export available on weekends OR when manager enables it
-
-**Files: `docx-export.ts`, `PlayerProfile.tsx`, `OfficialProfile.tsx`, `Stats.tsx`**
+### Page Animation Sizing
+- Slightly increase all page-top animations from `h-28` to `h-36`
 
 ---
 
-## PHASE 5: Google Login, SEO, Guest Role, Homepage Restructure
+## GROUP C: Financial System Fixes + Export Enhancement
 
-### 5A. Google OAuth integration
-- Add `@supabase/auth-helpers-react` if needed
-- Add "Sign in with Google" button on login page
-- On first Google login: check if email exists in `members` table
-  - If not found: show one-time setup screen to enter SunCity FC ID and link
-  - If found: log in directly
-- Save Google user ID to `members` table (new column `google_id`)
-- For unregistered users: assign "guest" role with read-only access to public pages
+### Financial Month Reactivity
+- In `OfficialProfile.tsx` `handleRecordTransaction`: Use the selected `finMonth` to determine which month's record to update, not the current month
+- When a transaction is entered for a past month (e.g., March data entered in April), insert it under that month's financial_records entry
+- Recalculate closing balances for that month and all subsequent months
 
-### 5B. Homepage restructure
-- Move login section to the very bottom
-- Move homepage carousel photos to Dashboard
-- Remove "Team Media" from Dashboard (it's in Stats gallery)
-- Allow full homepage browsing without login
-- On reaching profile section: prompt Google login or ID entry
+### Financial Summary DOCX Enhancement
+- In `docx-export.ts`: Update `exportFinancialPdf` to add emojis (💰, 📊, 📈, 💵), colored headers, contributor names with ✅/⬜ per month, and summary stats
+- Match the visual richness of the detailed player profile DOCX
 
-### 5C. Guest role restrictions
-- Guests can only view: Home, Story, Gallery (public pages)
-- Hide: Edit buttons, Manager tabs, Financial data, Profile editing
-- Show message: "Welcome to the Suncity FC Portal. If you are a registered player, please enter your Player ID to access your profile."
+### Contribution Events Integration to Financial Summary
+- When a contribution event payment is toggled, calculate the total collected and add it to the relevant month's financial record
+- Show event label in financial overview cards
 
-### 5D. SEO architecture
+### Fadhir Contribution Toggle
+- Change Fadhir's contribution management from table checkboxes to a Switch-style toggle matching the manager's attendance toggle (same shape and layout)
+
+---
+
+## GROUP D: Match Recorder UX + Match Reports Fix
+
+### Smart Player Selector
+- In `OfficialProfile.tsx` match perf recorder: When a game is selected, query `match_performances` for that game to get already-recorded players
+- Sort player dropdown: players from last match who haven't been recorded yet appear first, then rest
+- Players already recorded for THIS game are hidden from the dropdown (not removed, just filtered out)
+
+### Match Day Reports Fix
+- In `Stats.tsx` match report table: Currently shows zeros — ensure it reads actual `match_performances` data
+- Add position-specific stat columns: show tackles for DEF, saves for GK, goals/assists for ATT/MID
+- This already seems to work based on code (lines 700-714) — verify data is being loaded correctly in `matchPerformances` from context
+
+---
+
+## GROUP E: DOCX Export Improvements + Captain/Fadhir Exports
+
+### Profile Pic Fix in DOCX
+- In `fetchImageAsBuffer`: Try fetching the full URL first (with query params), then fallback to cleaned URL
+- Add proper error handling and CORS retry with `mode: 'cors'`
+
+### Detailed Export: All Weekly Attendance
+- Query ALL `attendance` records for the player (not just current week)
+- Group by `week_start` and display compactly in DOCX: each week as a row with emoji grid
+
+### Detailed Export: Full Match History with Stats
+- Include all match performances from `match_performances` table per game
+- Show opponent, date, venue, result, and the player's individual stats for that game
+- Highlight best and lowest performing matches
+
+### DOCX Mobile Optimization
+- Use `WidthType.DXA` for all table widths (never percentage)
+- Set page margins to 0.5" (720 DXA)
+- Add cell padding, reduce font sizes slightly for mobile doc viewers
+- Ensure A4 portrait fit
+
+### Captain & Fadhir Export
+- Add export buttons to captain and Fadhir profiles in `OfficialProfile.tsx`
+- Include all match history from `player_game_log` + `match_performances`
+- Include their role, position, all games played with stats
+
+---
+
+## GROUP F: Google OAuth, SEO, Guest Role, Coach Notifications
+
+### Google Login
+- Add "Sign in with Google" button to Login page using `supabase.auth.signInWithOAuth({ provider: 'google' })`
+- On first Google login: check `members` table for matching `google_id`
+  - If not found: show one-time ID-linking screen
+  - If found: log in directly with that member's data
+- For unregistered users: assign "guest" role with read-only access
+
+### Guest Role Restrictions
+- In `App.tsx`: Create `GuestRoute` that only allows Home, Story, Gallery
+- Hide all edit buttons, manager tabs, financial data from guests
+- Show onboarding message for guest users
+
+### SEO Architecture
 - Install `react-helmet-async`
-- Add dynamic `<title>` and `<meta>` tags per page
-- Player profiles: `<title>[Player Name] - SunCity FC Profile</title>`
-- Generate `public/sitemap.xml` with all routes
-- Update `robots.txt` to point to sitemap
-- Ensure "Our Story" and public stats render without auth
+- Add `<HelmetProvider>` to `App.tsx`
+- Add `<Helmet>` with dynamic `<title>` and `<meta>` tags per page
+- Generate static `public/sitemap.xml` with all routes
+- Update `public/robots.txt` to point to sitemap
 
-### 5E. Dynamic meta tags per route
-- Home: "SunCity FC | Official Team Site"
-- Dashboard: "SunCity FC Dashboard"
-- Stats: "SunCity FC Statistics & Performance"
-- Results: "SunCity FC Match Results"
-- Players: "SunCity FC Squad & Player Profiles"
-- Profile: "[Player Name] - SunCity FC Profile"
+### Coach Notification for Inactive Players
+- On coach profile mount: Query players with 0 games_played but >70% attendance and >2 paid months
+- Display notification card: "🔔 Active but unplayed: [names]"
 
-**Files: `App.tsx`, `Login.tsx`, `Dashboard.tsx`, `AuthContext.tsx`, `index.html`, new `public/sitemap.xml`, all page files**
+### Manager in Attendance
+- Already done in Phase 1 (playerMembers filter includes manager role) — verify
 
 ---
 
-## Database Changes Required
+## GROUP G: Final QA Pass (After all groups complete)
 
-### Migration 1: Google auth support
-```sql
-ALTER TABLE members ADD COLUMN IF NOT EXISTS google_id text;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_members_google_id ON members(google_id) WHERE google_id IS NOT NULL;
-```
-
-### Data operations (insert tool):
-- Delete "Brian (d)" from members
-- Clean up any duplicate data entries
+- Verify all attendance toggle works without glitch (race condition check)
+- Verify financial summary calculations are correct across months
+- Verify POTM calculation fairness
+- Verify weekly/monthly/season overviews open correctly and show accurate data
+- Verify Beavon excluded from grids but stats recordable
+- Verify all exports generate correctly and are mobile-readable
+- Verify animations render at correct sizes without layout shifts
+- Verify WhatsApp links work correctly
+- Verify Google login flow works end-to-end
+- Strengthen any weak logic found during review
 
 ---
 
 ## Files Changed Summary
 
-| Phase | Files |
+| Group | Files |
 |-------|-------|
-| 1 | `OfficialProfile.tsx`, `Stats.tsx`, `TeamDataContext.tsx`, `team-data.ts`, DB inserts |
-| 2 | `Stats.tsx`, `OfficialProfile.tsx`, `TeamDataContext.tsx` |
-| 3 | New `LottieAnimation.tsx`, 7 animation assets copied, all page files, `index.html` |
-| 4 | `docx-export.ts`, `PlayerProfile.tsx`, `OfficialProfile.tsx`, `Stats.tsx` |
-| 5 | `App.tsx`, `Login.tsx`, `Dashboard.tsx`, `AuthContext.tsx`, `index.html`, `sitemap.xml`, all pages |
+| A | `Players.tsx`, `Stats.tsx`, `index.html`, new `WhatsAppFAB.tsx`, `App.tsx` |
+| B | `LottieAnimation.tsx`, `Players.tsx`, `PlayerProfile.tsx`, `OfficialProfile.tsx`, `Profile.tsx`, `Dashboard.tsx`, `Results.tsx`, `Stats.tsx` |
+| C | `OfficialProfile.tsx`, `docx-export.ts`, `TeamDataContext.tsx` |
+| D | `OfficialProfile.tsx`, `Stats.tsx` |
+| E | `docx-export.ts`, `OfficialProfile.tsx`, `PlayerProfile.tsx` |
+| F | `App.tsx`, `Login.tsx`, `AuthContext.tsx`, `index.html`, `robots.txt`, new `sitemap.xml` |
+| G | All files — review and fix pass |
 
-Total: ~15 files modified/created, 1 migration, several data operations
+No new database migrations needed — all required tables and columns already exist.
 
