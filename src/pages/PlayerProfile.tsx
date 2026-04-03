@@ -242,7 +242,42 @@ const PlayerProfile = () => {
           </motion.div>
         )}
 
-        {/* Fan Profile */}
+        {/* Recent Honour */}
+        {!isFan && recentAward && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }}>
+            <div className="border-2 border-yellow-500 rounded-lg p-4 bg-card">
+              <div className="flex items-center gap-3">
+                <LottieAnimation animationData={getAwardAnimation(recentAward.award_type)} className="w-16 h-16" />
+                <div>
+                  <p className="font-heading text-sm text-foreground">{recentAward.award_label}</p>
+                  <p className="text-xs text-muted-foreground font-body italic">{recentAward.reason}</p>
+                </div>
+              </div>
+              {historicalAwards.length > 0 && (
+                <Button size="sm" variant="outline" onClick={() => setTrophyCabinetOpen(true)} className="mt-3 font-body text-xs w-full border-primary/30 text-primary">
+                  <Award className="w-3 h-3 mr-1" /> View Award History ({historicalAwards.length})
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Trophy Cabinet Modal */}
+        <Dialog open={trophyCabinetOpen} onOpenChange={setTrophyCabinetOpen}>
+          <DialogContent className="max-w-md bg-card border-border">
+            <DialogHeader><DialogTitle className="font-heading text-primary">🏆 Trophy Cabinet</DialogTitle></DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto">
+              {historicalAwards.map((award: any, i: number) => (
+                <div key={i} className="border border-border rounded-lg p-3 text-center">
+                  <LottieAnimation animationData={getAwardAnimation(award.award_type)} className="h-20 w-20 mx-auto" />
+                  <p className="font-heading text-xs text-foreground mt-2">{award.award_label}</p>
+                  <p className="text-[10px] text-muted-foreground font-body italic">{award.reason}</p>
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {isFan && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
             <Card className="bg-card border-border card-glow">
