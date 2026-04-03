@@ -786,21 +786,23 @@ const OfficialProfile = () => {
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
         {/* Profile Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-          <div className="relative inline-block">
-            <Avatar className="w-24 h-24 border-2 border-primary mx-auto">
-              {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
-              <AvatarFallback className="bg-secondary text-primary font-heading text-2xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <button onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-colors">
-              <Upload className="w-4 h-4" />
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
+          <div className="flex flex-row items-center justify-center gap-3">
+            <div className="relative">
+              <Avatar className="w-20 h-20 border-2 border-primary">
+                {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
+                <AvatarFallback className="bg-secondary text-primary font-heading text-2xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <button onClick={() => fileInputRef.current?.click()}
+                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-colors">
+                <Upload className="w-4 h-4" />
+              </button>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
+            </div>
+            <LottieAnimation animationData={allmembersProfile} className="w-10 h-10 md:w-16 md:h-16" />
           </div>
           <h2 className="font-heading text-2xl text-foreground mt-4">{liveMember.name}</h2>
           <div className="flex items-center justify-center gap-2 mt-1">
             <Badge className="bg-primary text-primary-foreground font-body capitalize">{user.role.replace("_", " ")}</Badge>
-            <Badge variant="outline" className="border-primary/30 text-primary font-body">{user.id}</Badge>
           </div>
           {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
         </motion.div>
