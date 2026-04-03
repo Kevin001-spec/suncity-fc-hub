@@ -160,14 +160,14 @@ const Stats = () => {
     }).filter(m => m.cs.gamesPlayed > 0 || m.attPct >= 80)
       .sort((a, b) => b.score - a.score);
     
-    const AWARD_NAMES = [
-      { title: "⭐⭐⭐⭐⭐⭐ The Commander", stars: 6 },
-      { title: "⭐⭐⭐⭐⭐ The Warrior", stars: 5 },
-      { title: "⭐⭐⭐⭐ The Engine", stars: 4 },
-      { title: "⭐⭐⭐ The Rock", stars: 3 },
-      { title: "⭐⭐ The Spark", stars: 2 },
-      { title: "⭐ The Rising Force", stars: 1 },
-    ];
+     const AWARD_NAMES = [
+        { title: "⭐⭐⭐⭐⭐ Top Week Performer", stars: 5 },
+        { title: "⭐⭐⭐⭐ Consistent Performer", stars: 4 },
+        { title: "⭐⭐⭐ Midfield Driver", stars: 3 },
+        { title: "⭐⭐ Defender of the Week", stars: 2 },
+        { title: "⭐ Positive Influence", stars: 1 },
+        { title: "📈 Most Weekly Improved", stars: 0 },
+      ];
     
     const top6 = scoredPlayers.slice(0, 6).map((m, i) => ({
       ...m,
