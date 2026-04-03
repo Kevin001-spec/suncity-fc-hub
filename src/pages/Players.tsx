@@ -113,8 +113,24 @@ const Players = () => {
                 </motion.button>
               ))}
             </div>
+            {/* Category divider animation — between sections */}
+            {si < sections.length - 1 && (
+              <LottieAnimation animationData={playersAnimation} className="h-16 w-[150px] md:w-[250px] mx-auto my-3" />
+            )}
           </div>
         ))}
+
+        {/* Join Team WhatsApp — logged-in only */}
+        <motion.a
+          href="https://chat.whatsapp.com/FF9oZ8H8oXPA1jny5Kacs2"
+          target="_blank" rel="noopener noreferrer"
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="block mt-6 p-4 rounded-xl border-2 text-center transition-all hover:brightness-110"
+          style={{ borderColor: "#25D366", backgroundColor: "rgba(37,211,102,0.08)" }}
+        >
+          <p className="font-heading text-sm" style={{ color: "#25D366" }}>💬 Join Team WhatsApp Group</p>
+          <p className="text-xs text-muted-foreground font-body mt-1">Stay connected with the squad</p>
+        </motion.a>
       </main>
 
       <AnimatePresence>
