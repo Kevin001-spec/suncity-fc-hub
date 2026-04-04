@@ -211,7 +211,7 @@ const PlayerProfile = () => {
               </button>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
             </div>
-            <LottieAnimation animationData={allmembersProfile} className="w-10 h-10 md:w-16 md:h-16" />
+            <LottieCarousel animations={[allmembersProfile]} className="w-16 h-16 md:w-24 md:h-24" />
           </div>
           <h2 className="font-heading text-2xl text-foreground mt-4">{liveMember.name}</h2>
           <div className="flex items-center justify-center gap-2 mt-1">
