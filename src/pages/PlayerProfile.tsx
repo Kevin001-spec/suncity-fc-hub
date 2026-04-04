@@ -12,22 +12,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Target, Footprints, Gamepad2, Upload, Calendar, Download, Shield, Hand, Crosshair, MessageCircle, Send, Star, Heart, Trophy, MapPin, Award } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 import { useToast } from "@/hooks/use-toast";
 import { getContribMonthsForMember, getFullPositionName, getPositionGroup, type WeeklyStatsLog, type PlayerGameLog } from "@/data/team-data";
 import { generatePlayerProfileDocx } from "@/lib/docx-export";
 import { getStatsForPosition } from "@/lib/position-stats";
 import { supabase } from "@/integrations/supabase/client";
 import LottieAnimation from "@/components/LottieAnimation";
+import LottieCarousel from "@/components/LottieCarousel";
 import allmembersProfile from "@/assets/animations/allmembers_profile.json";
-import manofthematch from "@/assets/animations/manofthematch.json";
-import otherMatchRewards from "@/assets/animations/other_match_rewards.json";
-
-function getAwardAnimation(awardType: string) {
-  if (awardType?.toLowerCase().includes("potm") || awardType?.toLowerCase().includes("player of the match") || awardType?.toLowerCase().includes("man of the match")) {
-    return manofthematch;
-  }
-  return otherMatchRewards;
-}
+import { getAwardAnimation } from "@/lib/award-animations";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -197,6 +191,10 @@ const PlayerProfile = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>{liveMember.name} — SunCity FC Profile</title>
+        <meta name="description" content={`${liveMember.name}'s player profile on SunCity FC. View stats, match history, and contributions.`} />
+      </Helmet>
       <Navbar />
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         {/* Profile Header */}
@@ -213,7 +211,7 @@ const PlayerProfile = () => {
               </button>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
             </div>
-            <LottieAnimation animationData={allmembersProfile} className="w-10 h-10 md:w-16 md:h-16" />
+            <LottieCarousel animations={[allmembersProfile]} className="w-16 h-16 md:w-24 md:h-24" />
           </div>
           <h2 className="font-heading text-2xl text-foreground mt-4">{liveMember.name}</h2>
           <div className="flex items-center justify-center gap-2 mt-1">

@@ -16,7 +16,7 @@ import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
 import { getContribMonthsForMember, NEW_PLAYER_IDS } from "@/data/team-data";
 import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
-import LottieAnimation from "@/components/LottieAnimation";
+import LottieCarousel from "@/components/LottieCarousel";
 import statsAnimation from "@/assets/animations/statsanimation.json";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -303,7 +303,7 @@ const Stats = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
-        <LottieAnimation animationData={statsAnimation} className="h-36 mb-2" />
+        <LottieCarousel animations={[statsAnimation]} className="h-44 mb-2" />
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
           <h1 className="font-heading text-2xl gold-text">Team Statistics</h1>
           <p className="text-muted-foreground text-sm font-body mt-1">Performance, contributions, attendance & finance</p>

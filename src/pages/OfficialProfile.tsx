@@ -31,14 +31,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { getStatsForPosition, getPerfFieldsForPosition, calculatePotmScore } from "@/lib/position-stats";
 import LineupBuilder from "@/components/LineupBuilder";
 import LottieAnimation from "@/components/LottieAnimation";
+import LottieCarousel from "@/components/LottieCarousel";
 import allmembersProfile from "@/assets/animations/allmembers_profile.json";
-import manofthematch from "@/assets/animations/manofthematch.json";
-import otherMatchRewards from "@/assets/animations/other_match_rewards.json";
-
-function getAwardAnimation(awardType: string) {
-  if (awardType?.toLowerCase().includes("potm") || awardType?.toLowerCase().includes("player of the match")) return manofthematch;
-  return otherMatchRewards;
-}
+import { getAwardAnimation } from "@/lib/award-animations";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -798,7 +793,7 @@ const OfficialProfile = () => {
               </button>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
             </div>
-            <LottieAnimation animationData={allmembersProfile} className="w-10 h-10 md:w-16 md:h-16" />
+            <LottieCarousel animations={[allmembersProfile]} className="w-16 h-16 md:w-24 md:h-24" />
           </div>
           <h2 className="font-heading text-2xl text-foreground mt-4">{liveMember.name}</h2>
           <div className="flex items-center justify-center gap-2 mt-1">

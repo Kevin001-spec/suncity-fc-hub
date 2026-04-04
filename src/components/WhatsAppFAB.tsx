@@ -16,12 +16,11 @@ const WhatsAppFAB = () => {
       <AnimatePresence>
         {open && (
           <>
-            {/* Coach WhatsApp — always visible */}
             <motion.a
               initial={{ opacity: 0, y: 10, scale: 0.8 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.8 }}
-              transition={{ delay: 0.05 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20, delay: 0.05 }}
               href={`https://wa.me/254753310940?text=${PRE_MSG}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -31,12 +30,11 @@ const WhatsAppFAB = () => {
               <Phone className="w-4 h-4" /> Coach
             </motion.a>
 
-            {/* Manager WhatsApp — always visible */}
             <motion.a
               initial={{ opacity: 0, y: 10, scale: 0.8 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.8 }}
-              transition={{ delay: 0.1 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20, delay: 0.1 }}
               href={`https://wa.me/254112563036?text=${PRE_MSG}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -46,13 +44,12 @@ const WhatsAppFAB = () => {
               <Phone className="w-4 h-4" /> Manager
             </motion.a>
 
-            {/* Team Group — only for logged-in members */}
             {isLoggedIn && (
               <motion.a
                 initial={{ opacity: 0, y: 10, scale: 0.8 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.8 }}
-                transition={{ delay: 0.15 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20, delay: 0.15 }}
                 href="https://chat.whatsapp.com/FF9oZ8H8oXPA1jny5Kacs2"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -66,15 +63,24 @@ const WhatsAppFAB = () => {
         )}
       </AnimatePresence>
 
-      {/* Main FAB toggle */}
       <motion.button
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setOpen(!open)}
-        className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center text-white transition-all"
+        className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center text-white"
         style={{ backgroundColor: WA_GREEN }}
       >
-        {open ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
+        <AnimatePresence mode="wait">
+          {open ? (
+            <motion.div key="close" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.2 }}>
+              <X className="w-6 h-6" />
+            </motion.div>
+          ) : (
+            <motion.div key="open" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.2 }}>
+              <MessageCircle className="w-6 h-6" />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.button>
     </div>
   );
