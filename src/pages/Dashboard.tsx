@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
+import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
 import { Navigate } from "react-router-dom";
@@ -13,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { type GameScore, type TeamMember, teamBackground } from "@/data/team-data";
 import useEmblaCarousel from "embla-carousel-react";
 import suncityBadge from "@/assets/suncity-badge.png";
-import LottieAnimation from "@/components/LottieAnimation";
+import LottieCarousel from "@/components/LottieCarousel";
 import dashboardAnimation from "@/assets/animations/dashboardanimation.json";
 
 const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5 } };
