@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const m: TeamMember = {
             id: member.id,
             name: member.name,
-            role: member.role,
+            role: member.role as Role,
             position: member.position || undefined,
             squadNumber: member.squad_number || undefined,
             profilePic: member.profile_pic_url || undefined,
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq("google_id", googleId).single().then(({ data: member }) => {
             if (member) {
               const m: TeamMember = {
-                id: member.id, name: member.name, role: member.role,
+                id: member.id, name: member.name, role: member.role as Role,
                 position: member.position || undefined, squadNumber: member.squad_number || undefined,
                 profilePic: member.profile_pic_url || undefined,
                 fanBadge: member.fan_badge || undefined, fanPoints: member.fan_points || 0,
@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data?.success && data.member) {
         const m = data.member;
         const member: TeamMember = {
-          id: m.id, name: m.name, role: m.role,
+          id: m.id, name: m.name, role: m.role as Role,
           position: m.position || undefined, squadNumber: m.squad_number || undefined,
           profilePic: m.profile_pic_url || undefined,
           fanBadge: m.fan_badge || undefined, fanPoints: m.fan_points || 0,
@@ -158,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.from("members").update({ google_id: googleUserId } as any).eq("id", member.id);
 
     const m: TeamMember = {
-      id: member.id, name: member.name, role: member.role,
+      id: member.id, name: member.name, role: member.role as Role,
       position: member.position || undefined, squadNumber: member.squad_number || undefined,
       profilePic: member.profile_pic_url || undefined,
       fanBadge: member.fan_badge || undefined, fanPoints: member.fan_points || 0,
