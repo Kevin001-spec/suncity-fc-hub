@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
-import { TeamMember } from "@/data/team-data";
+import { TeamMember, type Role } from "@/data/team-data";
 import { supabase } from "@/integrations/supabase/client";
 
 interface AuthContextType {
