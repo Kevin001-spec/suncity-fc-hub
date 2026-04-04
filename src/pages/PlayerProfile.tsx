@@ -12,22 +12,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Target, Footprints, Gamepad2, Upload, Calendar, Download, Shield, Hand, Crosshair, MessageCircle, Send, Star, Heart, Trophy, MapPin, Award } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 import { useToast } from "@/hooks/use-toast";
 import { getContribMonthsForMember, getFullPositionName, getPositionGroup, type WeeklyStatsLog, type PlayerGameLog } from "@/data/team-data";
 import { generatePlayerProfileDocx } from "@/lib/docx-export";
 import { getStatsForPosition } from "@/lib/position-stats";
 import { supabase } from "@/integrations/supabase/client";
 import LottieAnimation from "@/components/LottieAnimation";
+import LottieCarousel from "@/components/LottieCarousel";
 import allmembersProfile from "@/assets/animations/allmembers_profile.json";
-import manofthematch from "@/assets/animations/manofthematch.json";
-import otherMatchRewards from "@/assets/animations/other_match_rewards.json";
-
-function getAwardAnimation(awardType: string) {
-  if (awardType?.toLowerCase().includes("potm") || awardType?.toLowerCase().includes("player of the match") || awardType?.toLowerCase().includes("man of the match")) {
-    return manofthematch;
-  }
-  return otherMatchRewards;
-}
+import { getAwardAnimation } from "@/lib/award-animations";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
