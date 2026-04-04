@@ -191,6 +191,10 @@ const PlayerProfile = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>{liveMember.name} — SunCity FC Profile</title>
+        <meta name="description" content={`${liveMember.name}'s player profile on SunCity FC. View stats, match history, and contributions.`} />
+      </Helmet>
       <Navbar />
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         {/* Profile Header */}
