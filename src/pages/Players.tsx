@@ -11,6 +11,10 @@ import { type TeamMember, getFullPositionName, getPositionGroup } from "@/data/t
 import { getStatsForPosition } from "@/lib/position-stats";
 import LottieCarousel from "@/components/LottieCarousel";
 import playersAnimation from "@/assets/animations/playersanimation.json";
+import statsnplayerspagec1 from "@/assets/animations/statsnplayerspagec1.json";
+import statsnplayerspagec2 from "@/assets/animations/statsnplayerspagec2.json";
+
+const playersCarousel = [playersAnimation, statsnplayerspagec1, statsnplayerspagec2];
 
 const positionGroupOrder: Record<string, number> = { "GK": 1, "DEF": 2, "MID": 3, "ATT": 4 };
 const positionGroupLabels: Record<string, string> = { "GK": "Goalkeepers", "DEF": "Defenders", "MID": "Midfielders", "ATT": "Attackers" };
