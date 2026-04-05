@@ -18,6 +18,10 @@ import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
 import LottieCarousel from "@/components/LottieCarousel";
 import statsAnimation from "@/assets/animations/statsanimation.json";
+import statsnplayerspagec1 from "@/assets/animations/statsnplayerspagec1.json";
+import statsnplayerspagec2 from "@/assets/animations/statsnplayerspagec2.json";
+
+const statsCarousel = [statsAnimation, statsnplayerspagec1, statsnplayerspagec2];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
