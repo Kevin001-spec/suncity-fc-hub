@@ -84,7 +84,7 @@ const Results = () => {
   const mainTeams = leagueTeams.filter(t => !t.division || t.division === "league");
   const amateurTeams = leagueTeams.filter(t => t.division === "amateur");
 
-  if (!user) return <Navigate to="/" replace />;
+  // Page is now public — no auth redirect
 
   const gameTypeBadgeColor = (type?: string) => {
     if (type === "league") return "bg-primary text-primary-foreground";

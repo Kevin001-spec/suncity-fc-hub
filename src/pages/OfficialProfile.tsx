@@ -33,7 +33,13 @@ import LineupBuilder from "@/components/LineupBuilder";
 import LottieAnimation from "@/components/LottieAnimation";
 import LottieCarousel from "@/components/LottieCarousel";
 import allmembersProfile from "@/assets/animations/allmembers_profile.json";
+import everyoneprofilecarrousel1 from "@/assets/animations/everyoneprofilecarrousel1.json";
+import everyoneprofilecarrousel2 from "@/assets/animations/everyoneprofilecarrousel2.json";
+import everyoneprofilecarrousel3 from "@/assets/animations/everyoneprofilecarrousel3.json";
+import everyoneprofilecarrousel5 from "@/assets/animations/everyoneprofilecarrousel5.json";
 import { getAwardAnimation } from "@/lib/award-animations";
+
+const profileCarousel = [allmembersProfile, everyoneprofilecarrousel1, everyoneprofilecarrousel2, everyoneprofilecarrousel3, everyoneprofilecarrousel5];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -793,7 +799,7 @@ const OfficialProfile = () => {
               </button>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
             </div>
-            <LottieCarousel animations={[allmembersProfile]} className="w-16 h-16 md:w-24 md:h-24" />
+            <LottieCarousel animations={profileCarousel} className="w-16 h-16 md:w-24 md:h-24" />
           </div>
           <h2 className="font-heading text-2xl text-foreground mt-4">{liveMember.name}</h2>
           <div className="flex items-center justify-center gap-2 mt-1">

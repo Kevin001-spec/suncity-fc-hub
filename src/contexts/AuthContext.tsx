@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { TeamMember, type Role } from "@/data/team-data";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -9,7 +9,6 @@ interface AuthContextType {
   linkGoogleAccount: (memberId: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isOfficial: boolean;
-  isGuest: boolean;
   isLinking: boolean;
   setIsLinking: (v: boolean) => void;
   googleEmail: string | null;
@@ -25,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLinking, setIsLinking] = useState(false);
   const [googleEmail, setGoogleEmail] = useState<string | null>(null);
   const [googleUserId, setGoogleUserId] = useState<string | null>(null);
+  const initDone = useRef(false);
 
   // Check for unread messages on login
   useEffect(() => {
@@ -42,6 +42,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Listen for Google OAuth callback
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // If user already logged in via localStorage, skip
+      if (user) return;
+
       if (event === "SIGNED_IN" && session?.user) {
         const googleId = session.user.id;
         const email = session.user.email || "";
@@ -56,51 +59,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single();
 
         if (member) {
-          // Auto-login with linked member
           const m: TeamMember = {
-            id: member.id,
-            name: member.name,
-            role: member.role as Role,
-            position: member.position || undefined,
-            squadNumber: member.squad_number || undefined,
+            id: member.id, name: member.name, role: member.role as Role,
+            position: member.position || undefined, squadNumber: member.squad_number || undefined,
             profilePic: member.profile_pic_url || undefined,
-            fanBadge: member.fan_badge || undefined,
-            fanPoints: member.fan_points || 0,
-            favouriteMoment: member.favourite_moment || undefined,
-            contributions: {},
+            fanBadge: member.fan_badge || undefined, fanPoints: member.fan_points || 0,
+            favouriteMoment: member.favourite_moment || undefined, contributions: {},
           };
           setUser(m);
           localStorage.setItem("suncity_user", JSON.stringify(m));
         } else {
-          // Show linking screen
           setIsLinking(true);
         }
       }
     });
 
-    // Check existing session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user && !user) {
-        const googleId = session.user.id;
-        setGoogleUserId(googleId);
-        setGoogleEmail(session.user.email || "");
-        // Check if already linked
-        supabase.from("members").select("id, name, role, position, squad_number, profile_pic_url, fan_badge, fan_points, favourite_moment")
-          .eq("google_id", googleId).single().then(({ data: member }) => {
-            if (member) {
-              const m: TeamMember = {
-                id: member.id, name: member.name, role: member.role as Role,
-                position: member.position || undefined, squadNumber: member.squad_number || undefined,
-                profilePic: member.profile_pic_url || undefined,
-                fanBadge: member.fan_badge || undefined, fanPoints: member.fan_points || 0,
-                favouriteMoment: member.favourite_moment || undefined, contributions: {},
-              };
-              setUser(m);
-              localStorage.setItem("suncity_user", JSON.stringify(m));
-            }
-          });
+    // Check existing session on mount — but only if no localStorage user
+    if (!initDone.current) {
+      initDone.current = true;
+      if (!user) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            const googleId = session.user.id;
+            setGoogleUserId(googleId);
+            setGoogleEmail(session.user.email || "");
+            supabase.from("members").select("id, name, role, position, squad_number, profile_pic_url, fan_badge, fan_points, favourite_moment")
+              .eq("google_id", googleId).single().then(({ data: member }) => {
+                if (member) {
+                  const m: TeamMember = {
+                    id: member.id, name: member.name, role: member.role as Role,
+                    position: member.position || undefined, squadNumber: member.squad_number || undefined,
+                    profilePic: member.profile_pic_url || undefined,
+                    fanBadge: member.fan_badge || undefined, fanPoints: member.fan_points || 0,
+                    favouriteMoment: member.favourite_moment || undefined, contributions: {},
+                  };
+                  setUser(m);
+                  localStorage.setItem("suncity_user", JSON.stringify(m));
+                }
+              });
+          }
+        });
       }
-    });
+    }
 
     return () => subscription.unsubscribe();
   }, []);
@@ -111,9 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: { memberId: identifier, pin: pin || undefined },
       });
 
-      if (error) {
-        return { success: false, error: "Authentication failed. Please try again." };
-      }
+      if (error) return { success: false, error: "Authentication failed. Please try again." };
 
       if (data?.success && data.member) {
         const m = data.member;
@@ -138,14 +136,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithGoogle = useCallback(async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin + "/dashboard" },
+      options: { redirectTo: window.location.origin + "/profile" },
     });
   }, []);
 
   const linkGoogleAccount = useCallback(async (memberId: string): Promise<{ success: boolean; error?: string }> => {
     if (!googleUserId) return { success: false, error: "No Google account detected." };
 
-    // Try to find the member
     const { data: member } = await supabase
       .from("members")
       .select("id, name, role, position, squad_number, profile_pic_url, fan_badge, fan_points, favourite_moment")
@@ -154,7 +151,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!member) return { success: false, error: "Member ID not found." };
 
-    // Link google_id to this member
     await supabase.from("members").update({ google_id: googleUserId } as any).eq("id", member.id);
 
     const m: TeamMember = {
@@ -180,10 +176,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const isOfficial = user?.role === "coach" || user?.role === "finance" || user?.role === "manager" || user?.role === "captain" || user?.role === "assistant_coach";
-  const isGuest = !user && !isLinking;
 
   return (
-    <AuthContext.Provider value={{ user, login, loginWithGoogle, linkGoogleAccount, logout, isOfficial, isGuest, isLinking, setIsLinking, googleEmail }}>
+    <AuthContext.Provider value={{ user, login, loginWithGoogle, linkGoogleAccount, logout, isOfficial, isLinking, setIsLinking, googleEmail }}>
       {children}
     </AuthContext.Provider>
   );

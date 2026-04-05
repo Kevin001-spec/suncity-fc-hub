@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
-import { Navigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import {
   Trophy, Calendar, BookOpen, Download,
@@ -16,6 +15,11 @@ import useEmblaCarousel from "embla-carousel-react";
 import suncityBadge from "@/assets/suncity-badge.png";
 import LottieCarousel from "@/components/LottieCarousel";
 import dashboardAnimation from "@/assets/animations/dashboardanimation.json";
+import dashboardc1 from "@/assets/animations/dashboardc1.json";
+import dashboardc2 from "@/assets/animations/dashboardc2.json";
+import dashboardc3 from "@/assets/animations/dashboardc3.json";
+
+const dashboardCarousel = [dashboardAnimation, dashboardc1, dashboardc2, dashboardc3];
 
 const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5 } };
 
@@ -74,7 +78,6 @@ const StorySection = ({ sectionKey, text }: { sectionKey: string; text: string }
   );
 };
 
-// Individual carousel per date group to fix scroll bug
 const DateGallery = ({ items }: { items: { id: string; url: string; caption?: string }[] }) => {
   const [emblaRef] = useEmblaCarousel({ loop: true, align: "start" });
   return (
@@ -97,9 +100,7 @@ const DateGallery = ({ items }: { items: { id: string; url: string; caption?: st
 
 const MediaGallery = () => {
   const { mediaItems } = useTeamData();
-
   if (mediaItems.length === 0) return null;
-
   const grouped = mediaItems.reduce((acc, item) => {
     const dateKey = item.date.split("T")[0];
     if (!acc[dateKey]) acc[dateKey] = [];
@@ -107,7 +108,6 @@ const MediaGallery = () => {
     return acc;
   }, {} as Record<string, typeof mediaItems>);
   const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a)).slice(0, 2);
-
   return (
     <div className="space-y-4">
       {sortedDates.map((date) => (
@@ -130,8 +130,6 @@ const Dashboard = () => {
     return calendarEvents.filter((e) => { const d = new Date(e.date); d.setHours(23, 59, 59, 999); return d >= now; }).slice(0, 3);
   }, [calendarEvents]);
 
-  if (!user) return <Navigate to="/" replace />;
-
   return (
     <div className="min-h-screen bg-background">
       <Helmet>
@@ -147,7 +145,7 @@ const Dashboard = () => {
           <h1 className="text-4xl md:text-5xl font-heading font-bold gold-text text-shadow-gold">SUNCITY FC</h1>
           <p className="text-muted-foreground mt-2 tracking-[0.3em] uppercase text-sm font-body">Discipline • Unity • Victory</p>
           <div className="mt-4 mx-auto max-w-xs border-2 border-primary/20 rounded-2xl overflow-hidden">
-            <LottieCarousel animations={[dashboardAnimation]} className="h-44" />
+            <LottieCarousel animations={dashboardCarousel} className="h-44" />
           </div>
         </motion.section>
 
@@ -191,7 +189,8 @@ const Dashboard = () => {
           </motion.div>
         </div>
 
-        {mediaItems.length > 0 && (
+        {/* Team Gallery — logged-in users only */}
+        {user && mediaItems.length > 0 && (
           <motion.div {...fadeUp} transition={{ delay: 0.3 }}>
             <Card className="bg-card border-border card-glow">
               <CardHeader className="pb-3">

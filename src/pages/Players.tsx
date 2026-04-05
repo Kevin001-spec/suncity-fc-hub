@@ -11,6 +11,10 @@ import { type TeamMember, getFullPositionName, getPositionGroup } from "@/data/t
 import { getStatsForPosition } from "@/lib/position-stats";
 import LottieCarousel from "@/components/LottieCarousel";
 import playersAnimation from "@/assets/animations/playersanimation.json";
+import statsnplayerspagec1 from "@/assets/animations/statsnplayerspagec1.json";
+import statsnplayerspagec2 from "@/assets/animations/statsnplayerspagec2.json";
+
+const playersCarousel = [playersAnimation, statsnplayerspagec1, statsnplayerspagec2];
 
 const positionGroupOrder: Record<string, number> = { "GK": 1, "DEF": 2, "MID": 3, "ATT": 4 };
 const positionGroupLabels: Record<string, string> = { "GK": "Goalkeepers", "DEF": "Defenders", "MID": "Midfielders", "ATT": "Attackers" };
@@ -74,7 +78,7 @@ const Players = () => {
     return groups;
   }, [sortedPlayers]);
 
-  if (!user) return <Navigate to="/" replace />;
+  // Page is now public — no auth redirect
 
   return (
     <div className="min-h-screen bg-background">
@@ -84,7 +88,7 @@ const Players = () => {
       </Helmet>
       <Navbar />
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        <LottieCarousel animations={[playersAnimation]} className="h-44 mb-2" />
+        <LottieCarousel animations={playersCarousel} className="h-44 mb-2" />
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
           <h1 className="font-heading text-2xl gold-text">Players</h1>
           <p className="text-muted-foreground text-sm font-body mt-1">{playerMembers.length} squad members</p>
@@ -120,7 +124,7 @@ const Players = () => {
             </div>
             {/* Category divider animation — between sections */}
             {si < sections.length - 1 && (
-              <LottieCarousel animations={[playersAnimation]} className="h-16 w-[150px] md:w-[250px] mx-auto my-3" />
+              <LottieCarousel animations={playersCarousel} className="h-16 w-[150px] md:w-[250px] mx-auto my-3" />
             )}
           </div>
         ))}
