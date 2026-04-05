@@ -10,17 +10,24 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  if (!user) return null;
-
   const handleLogout = () => { logout(); navigate("/"); };
 
-  const links = [
-    { path: "/dashboard", label: "Home", icon: Home },
+  const publicLinks = [
+    { path: "/", label: "Home", icon: Home },
     { path: "/results", label: "Results", icon: Trophy },
     { path: "/players", label: "Players", icon: Users },
     { path: "/stats", label: "Stats", icon: BarChart3 },
-    { path: "/profile", label: "Profile", icon: User },
   ];
+
+  const allLinks = user
+    ? [...publicLinks, { path: "/profile", label: "Profile", icon: User }]
+    : publicLinks;
+
+  const isActive = (path: string) => {
+    if (path === "/" && location.pathname === "/dashboard") return true;
+    if (path === "/" && location.pathname === "/") return true;
+    return location.pathname === path;
+  };
 
   return (
     <nav className="sticky top-0 z-50 backdrop-blur-xl border-b border-border chelsea-bg">
@@ -34,26 +41,31 @@ const Navbar = () => {
         </div>
 
         <div className="flex items-center gap-1">
-          {links.map((link) => {
-            const isActive = location.pathname === link.path;
-            return (
-              <Button key={link.path} variant="ghost" size="sm" onClick={() => navigate(link.path)}
-                className={cn(
-                  "font-body text-sm text-white/70 hover:text-white hover:bg-white/10 glow-tab relative",
-                  isActive && "text-white bg-white/10 active"
-                )}>
-                <link.icon className="w-4 h-4 mr-1.5" />
-                {link.label}
-              </Button>
-            );
-          })}
+          {allLinks.map((link) => (
+            <Button key={link.path} variant="ghost" size="sm" onClick={() => navigate(link.path)}
+              className={cn(
+                "font-body text-sm text-white/70 hover:text-white hover:bg-white/10 glow-tab relative",
+                isActive(link.path) && "text-white bg-white/10 active"
+              )}>
+              <link.icon className="w-4 h-4 mr-1.5" />
+              {link.label}
+            </Button>
+          ))}
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-xs text-white/60 font-body">{user.name} • {user.role.toUpperCase()}</span>
-          <Button variant="ghost" size="icon" onClick={handleLogout} className="text-white/60 hover:text-red-400 hover:bg-white/10">
-            <LogOut className="w-4 h-4" />
-          </Button>
+          {user ? (
+            <>
+              <span className="text-xs text-white/60 font-body">{user.name} • {user.role.toUpperCase()}</span>
+              <Button variant="ghost" size="icon" onClick={handleLogout} className="text-white/60 hover:text-red-400 hover:bg-white/10">
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </>
+          ) : (
+            <Button variant="ghost" size="sm" onClick={() => navigate("/profile")} className="text-white/60 hover:text-white font-body text-xs">
+              Login
+            </Button>
+          )}
         </div>
       </div>
 
@@ -67,26 +79,31 @@ const Navbar = () => {
             <span className="font-heading text-xs font-bold text-white">SUNCITY FC</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-white/50 font-body">{user.name}</span>
-            <button onClick={handleLogout} className="text-white/50 hover:text-red-400 transition-colors p-1">
-              <LogOut className="w-4 h-4" />
-            </button>
+            {user ? (
+              <>
+                <span className="text-[10px] text-white/50 font-body">{user.name}</span>
+                <button onClick={handleLogout} className="text-white/50 hover:text-red-400 transition-colors p-1">
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <button onClick={() => navigate("/profile")} className="text-white/50 hover:text-white transition-colors p-1 text-[10px] font-body">
+                Login
+              </button>
+            )}
           </div>
         </div>
         <div className="flex items-center justify-around h-11 border-t border-white/10">
-          {links.map((link) => {
-            const isActive = location.pathname === link.path;
-            return (
-              <button key={link.path} onClick={() => navigate(link.path)}
-                className={cn(
-                  "flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-all glow-tab relative",
-                  isActive ? "text-white active" : "text-white/50"
-                )}>
-                <link.icon className="w-4 h-4" />
-                <span className="text-[9px] font-body">{link.label}</span>
-              </button>
-            );
-          })}
+          {allLinks.map((link) => (
+            <button key={link.path} onClick={() => navigate(link.path)}
+              className={cn(
+                "flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-all glow-tab relative",
+                isActive(link.path) ? "text-white active" : "text-white/50"
+              )}>
+              <link.icon className="w-4 h-4" />
+              <span className="text-[9px] font-body">{link.label}</span>
+            </button>
+          ))}
         </div>
       </div>
     </nav>
