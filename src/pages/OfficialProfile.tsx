@@ -33,7 +33,13 @@ import LineupBuilder from "@/components/LineupBuilder";
 import LottieAnimation from "@/components/LottieAnimation";
 import LottieCarousel from "@/components/LottieCarousel";
 import allmembersProfile from "@/assets/animations/allmembers_profile.json";
+import everyoneprofilecarrousel1 from "@/assets/animations/everyoneprofilecarrousel1.json";
+import everyoneprofilecarrousel2 from "@/assets/animations/everyoneprofilecarrousel2.json";
+import everyoneprofilecarrousel3 from "@/assets/animations/everyoneprofilecarrousel3.json";
+import everyoneprofilecarrousel5 from "@/assets/animations/everyoneprofilecarrousel5.json";
 import { getAwardAnimation } from "@/lib/award-animations";
+
+const profileCarousel = [allmembersProfile, everyoneprofilecarrousel1, everyoneprofilecarrousel2, everyoneprofilecarrousel3, everyoneprofilecarrousel5];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
