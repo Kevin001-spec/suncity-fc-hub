@@ -120,7 +120,7 @@ const Players = () => {
             </div>
             {/* Category divider animation — between sections */}
             {si < sections.length - 1 && (
-              <LottieCarousel animations={[playersAnimation]} className="h-16 w-[150px] md:w-[250px] mx-auto my-3" />
+              <LottieCarousel animations={playersCarousel} className="h-16 w-[150px] md:w-[250px] mx-auto my-3" />
             )}
           </div>
         ))}
