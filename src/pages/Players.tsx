@@ -74,7 +74,7 @@ const Players = () => {
     return groups;
   }, [sortedPlayers]);
 
-  if (!user) return <Navigate to="/" replace />;
+  // Page is now public — no auth redirect
 
   return (
     <div className="min-h-screen bg-background">
