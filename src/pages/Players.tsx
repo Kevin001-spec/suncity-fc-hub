@@ -84,7 +84,7 @@ const Players = () => {
       </Helmet>
       <Navbar />
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        <LottieCarousel animations={[playersAnimation]} className="h-44 mb-2" />
+        <LottieCarousel animations={playersCarousel} className="h-44 mb-2" />
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
           <h1 className="font-heading text-2xl gold-text">Players</h1>
           <p className="text-muted-foreground text-sm font-body mt-1">{playerMembers.length} squad members</p>
