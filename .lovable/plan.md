@@ -1,168 +1,128 @@
-
-
-# Final System Update: Homepage Removal, Auth Rearchitecture, Carousels, Financial Fixes, Awards & QA
+# Remaining Updates: Carousel Speed, SEO Fix, Role Manager, Lineup Integration, Player IDs, Public Results & System Tightening
 
 ## Summary
 
-Remove the standalone homepage/login page. Make Dashboard the entry point (`/`). Dashboard, Stats, Players, Results are public. Profile requires login (shows login UI inline). Copy uploaded carousel animation files. Fix Google OAuth persistence. Implement financial system reactivity. Deploy trophy cabinet with retroactive awards. Add member ID registry to coach profile.
+Complete all leftover work plus new requests in one implementation pass.
 
 ---
 
-## Architecture Change: Remove Homepage, Make Dashboard Public
+## 1. Carousel Interval: 6000ms → 3000ms
 
-### `src/App.tsx`
-- Remove `Login` lazy import and its route
-- Change `"/"` route to render `<Dashboard />`
-- Remove `ProtectedRoute` wrapper from Dashboard, Stats, Players, Results
-- Keep `ProtectedRoute` ONLY on `/profile`
-- `ProtectedRoute` now redirects to `/profile` login UI instead of `"/"`
-- Remove guest feature entirely
+- `src/components/LottieCarousel.tsx` line 11: Change default `interval` from `6000` to `3000`
+- All carousels site-wide automatically pick up the change
 
-### `src/pages/Dashboard.tsx`
-- Remove `if (!user) return <Navigate ... />`
-- Wrap the Team Gallery (MediaGallery) section in `{user && ...}` so only logged-in users see it
-- Move homepage carousel images section here (visible to all) — actually keep existing structure, just gate media behind auth
-- Add `dashboardc1`, `dashboardc2`, `dashboardc3` animations to the LottieCarousel array alongside existing `dashboardAnimation`
+## 2. SEO: Karatina University (Not Nairobi)
 
-### `src/pages/Stats.tsx`, `src/pages/Results.tsx`, `src/pages/Players.tsx`
-- Remove `if (!user) return <Navigate ... />` — make pages public
-- Stats/Players: Add `statsnplayerspagec1`, `statsnplayerspagec2` to their LottieCarousel arrays alongside existing animations
+- `index.html`: Update ALL references from "Nairobi" to "Karatina, Nyeri County" — title, meta description, OG tags, Twitter tags, JSON-LD schema `addressLocality`, `description`
+- Add "Karatina University" to `alternateName` and keywords
+- Each page's `<Helmet>` in `Dashboard.tsx`, `Stats.tsx`, `Players.tsx`, `Results.tsx`, `Profile.tsx`: update descriptions to mention "Karatina University"
+- `public/sitemap.xml`: ensure all routes listed with correct URLs
+- `public/robots.txt`: already correct
 
-### `src/pages/Profile.tsx`
-- If `!user && !isLinking`: Show a login UI (not redirect) with the results animation carousel on top, then the member ID input + Google sign-in button + PIN field
-- Remove the `<Navigate>` redirect — instead render inline login form
-- Add a multi-page carousel at top using ALL animations from dashboard + stats + players + profile carousels
-- After successful login, render PlayerProfile or OfficialProfile as before
+## 3. Results & Events Visible to Non-Logged-In Users
 
-### `src/components/Navbar.tsx`
-- Show navbar even when `!user` — but hide Profile link and logout for non-logged-in users
-- Show Home, Results, Players, Stats always; Profile + Logout only when logged in
+- `Results.tsx`: Already public (no auth redirect). Verify calendar events are shown — currently events come from `useTeamData()` context which loads for all. No change needed if already loading. Check that contribution events section isn't gated behind auth.
+- `Dashboard.tsx`: Ensure calendar events section is visible to all (not gated by `{user && ...}`)
 
----
+## 4. Return Player IDs in Cards
 
-## Carousel Animation Files
+- `Players.tsx` line 112: Re-add `<p className="text-xs text-primary font-body">{member.id}</p>` under the player name
+- `PlayerCard` modal: Add ID display under name
+- `handleAddPlayer` in `OfficialProfile.tsx`: Already shows ID in toast — verify and keep
 
-### Copy uploaded files to `src/assets/animations/`:
-- `dashboardc1.json`, `dashboardc2.json`, `dashboardc3.json`
-- `everyoneprofilecarrousel1.json`, `everyoneprofilecarrousel2.json`, `everyoneprofilecarrousel3.json`, `everyoneprofilecarrousel5.json`
-- `statsnplayerspagec1.json`, `statsnplayerspagec2.json`
+## 5. Manager: Role Editor (Promote/Demote Officials)
 
-### Carousel integration:
-| Page | Animation array |
-|------|----------------|
-| Dashboard | `[dashboardAnimation, dashboardc1, dashboardc2, dashboardc3]` |
-| Stats | `[statsAnimation, statsnplayerspagec1, statsnplayerspagec2]` |
-| Players | `[playersAnimation, statsnplayerspagec1, statsnplayerspagec2]` |
-| Profile (everyone) | `[allmembersProfile, everyoneprofilecarrousel1, everyoneprofilecarrousel2, everyoneprofilecarrousel3, everyoneprofilecarrousel5]` |
-| Profile login screen | All of the above combined |
-| Category dividers (Players) | `[playersAnimation, statsnplayerspagec1, statsnplayerspagec2]` |
+- `OfficialProfile.tsx`: Add new card visible only to Manager (`isManager`)
+- Title: "👔 Role Management"
+- UI: Dropdown to select any member → Dropdown to pick role (`player`, `captain`, `coach`, `manager`, `finance`, `assistant_coach`, `fan`) → Save button
+- Logic: `supabase.from("members").update({ role: newRole }).eq("id", selectedMemberId)`
+- After save, call `refreshData()` to reload members
+- Safety: Cannot change own role, cannot demote the only manager
 
-### Animation size increase:
-- Page-top carousels: keep `h-44` (already increased)
-- Profile badge: already `w-16 h-16 md:w-24 md:h-24`
+## 6. Coach's 3D Lineup ↔ First 11 Integration
 
----
+- `LineupBuilder.tsx`: When `assignPlayer` is called, also update the parent's `selectedFirst11` state
+- Approach: Add an `onFirst11Change` callback prop to `LineupBuilder`
+- In `OfficialProfile.tsx` where `<LineupBuilder />` is rendered (line 1698), pass `onFirst11Change` that syncs `selectedFirst11` state
+- When a player is assigned to any position in the 3D field, add them to `selectedFirst11` (if not already, max 11)
+- When removed from field, remove from `selectedFirst11`
+- Reverse: When a player is toggled as "Starting" in First 11 selector, it doesn't auto-place them on the field (that requires position knowledge), but the data stays in sync for export
 
-## Google OAuth Persistence Fix
+## 7. Financial System Remaining Fixes
 
-### `src/contexts/AuthContext.tsx`
-- In `onAuthStateChange`: After finding linked member, also persist to `localStorage` immediately (already done — verify it works)
-- On mount `getSession()`: If session exists AND localStorage has `suncity_user`, trust localStorage (don't re-query and overwrite)
-- Key fix: When returning from Google OAuth redirect, the `SIGNED_IN` event fires but if user is already set via localStorage, skip the linking screen
-- Add guard: if `user` is already set from localStorage, don't show linking screen even if `onAuthStateChange` fires
+### Fadhir Contribution Toggle (Switch style)
 
-### `src/pages/Profile.tsx` (login UI)
-- Update linking screen heading to: **"Link your SunCity ID with your Google account."**
-- Subtext: "You only need to do this once to permanently secure your account."
+- `OfficialProfile.tsx` lines 1416-1457: Replace the `<Checkbox>` per month with a `<Switch>` toggle, same visual style as attendance toggles
+- Add a small `<Input>` next to each member row for custom amount (default 100), stored alongside contribution status
 
----
+### Month-Reactive Financial Entries
 
-## Financial System Fixes
+- `handleRecordTransaction` (around line 400-450): When `finMonth` is a past month, insert the expense under that month's `financial_records` entry, not the current month
+- After inserting, recalculate closing balances for that month and all subsequent months by iterating through `financialRecords` sorted by month
 
-### `src/pages/OfficialProfile.tsx`
+### Contribution Events → Financial Summary Integration
 
-**Month-reactive transactions:**
-- `handleRecordTransaction`: Use `finMonth` (already selected by user) to determine which month's `financial_records` entry to update
-- After inserting the transaction, recalculate closing balances for that month and all subsequent months
-- The `finDate` should be used for the expense date label but the `finMonth` determines which record it belongs to
+- When `toggleContribPayment` is called and payment is toggled to paid, calculate total collected for that event and update the relevant month's `financial_records` contribution total
 
-**Fadhir contribution toggle:**
-- Replace checkbox-based contribution UI with Switch toggles matching the attendance toggle style
-- Add small Input next to each member for custom amount (default 100)
-- When toggled with custom amount, update `contributions` table and adjust `financial_records`
+### Financial DOCX Enhancement
 
-**Captain contribution events → financial summary integration:**
-- When a contribution event payment is toggled, calculate total collected and update the relevant month's `financial_records`
-- Show event label in financial overview cards
+- `exportFinancialPdf` in `OfficialProfile.tsx`: Add emojis (💰📊📈) to section headers, add contributor names with ✅/⬜ per month, summary statistics at the end
 
-**Financial DOCX export enhancement:**
-- Add emojis (💰📊📈💵) to headers
-- Add contributor names with ✅/⬜ per month
-- Match the richness of the player profile DOCX
+## 8. Smart Match Recorder Player Selector
 
----
+- `OfficialProfile.tsx` match perf section (around line 930-990 where `perfPlayerId` dropdown is rendered):
+  - When `perfGameId` is selected, query `match_performances` for that game to get already-recorded player IDs
+  - Filter those players OUT of the dropdown
+  - Query the most recent previous game's `match_performances` to get "last match players" — sort them first
+  - Show position badge next to each player name
 
-## Match Recorder UX (Smart Player Selector)
+## 9. Award System Tightening
 
-### `src/pages/OfficialProfile.tsx`
-- When `perfGameId` is selected, query `match_performances` for that game to find already-recorded players
-- Filter them OUT of the player dropdown (they don't appear)
-- Query last match's players and sort them first in the dropdown
-- Make the dropdown more visually appealing (show position, avatar)
+- Awards already exist in DB (confirmed: potm, defensive_wall, sharpshooter, iron_wall, rising_star, engine_room across multiple games)
+- `PlayerProfile.tsx` already loads `match_awards` and displays Recent Honour + Trophy Cabinet
+- Verify `getAwardAnimation()` in `award-animations.ts` maps all award types to correct animation files
+- Ensure weekly overview recognized players (most disciplined, top rated) get `otherMatchRewards` toast on login and badge on profile
+- Add weekly awards to the "Season Recognition" section of trophy cabinet
 
----
+## 10. Manager Awards Notification Card
 
-## Awards & Trophy Cabinet
+- `OfficialProfile.tsx`: Add a card for Manager showing recent match awards across all games
+- Query `match_awards` grouped by `game_id`, show which players got what
+- Purpose: Manager awareness of all system-generated awards
 
-### Retroactive award sweep
-- Awards already exist in `match_awards` table (confirmed from DB query above)
-- `PlayerProfile.tsx` already loads awards and shows Recent Honour + Trophy Cabinet
-- **Split trophy cabinet** into two sections:
-  1. "⚔️ Match Honours" — from `match_awards` table
-  2. "🏅 Season Recognition" — weekly recognized (most disciplined, top rated)
+## 11. Member ID Registry on Coach Profile
 
-### Weekly recognized awards on profiles
-- When weekly overview is locked, the recognized players (top rated, most disciplined) get awards placed on their profile
-- These stay until the next weekly overview is locked
-- Toast on login for weekly recognized players using `otherMatchRewards` animation
+- Already discussed but not implemented
+- `OfficialProfile.tsx`: Add collapsible card on coach's profile showing ALL members with ID and name, sorted alphabetically
+- Simple table: ID | Name | Role | Position
 
-### Manager notification card
-- Add a card in manager's profile showing all current system awards pending trophy animations
-- Show "🔔 Awards requiring attention: [list]"
+## 12. System Tightening & Auto-Improvements
 
----
-
-## Member ID Registry (Coach Profile)
-
-### `src/pages/OfficialProfile.tsx`
-- Add a collapsible card on coach's profile: "📋 Member ID Registry"
-- Show a table of ALL members with their ID and name, sorted alphabetically
-- This way the manager always knows the IDs when adding new members
-- When a new player/fan is added, the `addedFanId` toast already shows the ID — keep that
-
----
-
-## Favicon
-- Already copied to `public/favicon.png` and linked in `index.html` — verify
-
----
-
-## WhatsApp FAB Smoothness
-- Already uses spring transitions — add `layout` prop to main button for smoother toggle
+- Verify `sync_match_perf_to_member` trigger exists (it does as a function but trigger may not be attached) — if not attached, create migration to attach it
+- Ensure duplicate match performance detection works correctly
+- Verify financial balance cascading logic
+- Ensure all number inputs use the `onFocus`/`onBlur` pattern to handle sticky zeros
+- Ensure the google authentication with ID linking  works smoothly and correctly, no errors. also when someone enters their ID first instead of google, accept the ID then prompt them  the only way to enter is by linking with their google account, after succcesful google account selection now they can succesfully login. so the point is they can press the google button first then enter their ID ,or they can start by entering their correct ID, then accept the correct ID then prompt them to link the google account since they cant proceed withount linking the google account. ensure this procedure will have no errors bugs or anything that will interfere its smooth process and authentication, also welcome the user  with a notification toast with their name such as `welcome Kevin` but using their name.
 
 ---
 
 ## Files Changed Summary
 
-| Area | Files |
-|------|-------|
-| Architecture | `App.tsx`, `Profile.tsx`, `Navbar.tsx` |
-| Public pages | `Dashboard.tsx`, `Stats.tsx`, `Players.tsx`, `Results.tsx` |
-| Auth | `AuthContext.tsx` |
-| Animations | 9 new JSON files copied to `src/assets/animations/` |
-| Financial | `OfficialProfile.tsx`, `docx-export.ts` |
-| Awards | `PlayerProfile.tsx`, `OfficialProfile.tsx`, `Profile.tsx` |
-| UX | `WhatsAppFAB.tsx` |
 
-No new database migrations needed.
+| File                                | Changes                                                                                                    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `src/components/LottieCarousel.tsx` | Default interval 6000→3000                                                                                 |
+| `index.html`                        | SEO: Nairobi→Karatina University, enhanced keywords                                                        |
+| `public/sitemap.xml`                | Verify all routes                                                                                          |
+| `src/pages/Dashboard.tsx`           | SEO meta update, ensure events visible                                                                     |
+| `src/pages/Stats.tsx`               | SEO meta update                                                                                            |
+| `src/pages/Players.tsx`             | SEO meta, re-add player IDs in cards                                                                       |
+| `src/pages/Results.tsx`             | SEO meta, ensure events visible to all                                                                     |
+| `src/pages/Profile.tsx`             | SEO meta update                                                                                            |
+| `src/pages/OfficialProfile.tsx`     | Role editor, ID registry, financial fixes, smart player selector, awards notification, lineup↔first11 sync |
+| `src/components/LineupBuilder.tsx`  | Add `onFirst11Change` callback prop                                                                        |
+| `src/lib/award-animations.ts`       | Verify all mappings                                                                                        |
+| `src/contexts/TeamDataContext.tsx`  | Verify trigger, add `updateMemberRole` method                                                              |
 
+
+Possible migration: Attach `sync_match_perf_to_member` trigger to `match_performances` table if not already attached.
