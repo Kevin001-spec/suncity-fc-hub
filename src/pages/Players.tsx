@@ -84,7 +84,7 @@ const Players = () => {
     <div className="min-h-screen bg-background">
       <Helmet>
         <title>SunCity FC Squad | Player Profiles & Stats</title>
-        <meta name="description" content="Meet the SunCity FC squad — view all player profiles, positions, and performance stats." />
+        <meta name="description" content="Meet the SunCity FC squad based at Karatina University — view all player profiles, positions, and performance stats." />
       </Helmet>
       <Navbar />
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">

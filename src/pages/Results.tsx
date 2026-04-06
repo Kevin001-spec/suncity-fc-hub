@@ -96,7 +96,7 @@ const Results = () => {
     <div className="min-h-screen bg-background">
       <Helmet>
         <title>SunCity FC Match Results | Scores & League Standings</title>
-        <meta name="description" content="View all SunCity FC match results, league standings, and game statistics. Track our performance in the Kanjuri League." />
+        <meta name="description" content="View all SunCity FC match results, league standings, and game statistics. Karatina University's team competing in the Kanjuri League." />
       </Helmet>
       <Navbar />
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
