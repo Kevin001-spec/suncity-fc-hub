@@ -228,6 +228,14 @@ const OfficialProfile = () => {
   const [sendMsgTo, setSendMsgTo] = useState("");
   const [sendMsgContent, setSendMsgContent] = useState("");
 
+  // Role management
+  const [rolePlayerId, setRolePlayerId] = useState("");
+  const [newRole, setNewRole] = useState("");
+
+  // Smart player selector: already-recorded players for selected game
+  const [recordedPlayerIds, setRecordedPlayerIds] = useState<string[]>([]);
+  const [lastMatchPlayerIds, setLastMatchPlayerIds] = useState<string[]>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const homepageInputRef = useRef<HTMLInputElement>(null);
