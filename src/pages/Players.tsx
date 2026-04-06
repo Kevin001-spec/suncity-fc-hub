@@ -33,6 +33,7 @@ const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profi
             <AvatarFallback className="bg-secondary text-primary font-heading text-xl">{member.name.slice(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <h3 className="font-heading text-lg text-foreground">{member.name}</h3>
+          <p className="text-xs text-primary font-body">{member.id}</p>
           {member.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body mt-1">Field Captain</Badge>}
            {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(member.position)}</p>}
           <div className={`grid gap-3 mt-4 pt-4 border-t border-border`} style={{ gridTemplateColumns: `repeat(${Math.min(statFields.length, 5)}, 1fr)` }}>
