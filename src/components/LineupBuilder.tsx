@@ -20,7 +20,11 @@ const positions = [
   { id: "st2", label: "ST", x: 65, y: 22 },
 ];
 
-const LineupBuilder = () => {
+interface LineupBuilderProps {
+  onFirst11Change?: (playerIds: string[]) => void;
+}
+
+const LineupBuilder = ({ onFirst11Change }: LineupBuilderProps) => {
   const { members, lineup, updateLineup } = useTeamData();
   const [selectedPos, setSelectedPos] = useState<string | null>(null);
 
@@ -28,11 +32,19 @@ const LineupBuilder = () => {
   const assignedIds = lineup.filter((p) => p.playerId).map((p) => p.playerId);
   const availablePlayers = allPlayers.filter((p) => !assignedIds.includes(p.id));
 
+  const syncFirst11 = (updatedLineup: typeof lineup) => {
+    if (onFirst11Change) {
+      const ids = updatedLineup.filter(p => p.playerId).map(p => p.playerId!);
+      onFirst11Change(ids);
+    }
+  };
+
   const assignPlayer = (posId: string, playerId: string) => {
     const updated = lineup.map((p) =>
       p.positionId === posId ? { ...p, playerId } : p
     );
     updateLineup(updated);
+    syncFirst11(updated);
     setSelectedPos(null);
   };
 
@@ -41,6 +53,7 @@ const LineupBuilder = () => {
       p.positionId === posId ? { ...p, playerId: null } : p
     );
     updateLineup(updated);
+    syncFirst11(updated);
   };
 
   const getPlayerName = (playerId: string | null) => {
@@ -65,21 +78,13 @@ const LineupBuilder = () => {
         >
           {/* Field markings */}
           <div className="absolute inset-0" style={{ transform: "rotateX(15deg)", transformOrigin: "bottom center" }}>
-            {/* Center circle */}
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full border-2 border-white/30" />
-            {/* Center line */}
             <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-white/30" />
-            {/* Center dot */}
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white/50" />
-            {/* Penalty area top */}
             <div className="absolute left-1/2 -translate-x-1/2 top-0 w-40 h-20 border-2 border-t-0 border-white/30 rounded-b-lg" />
-            {/* Goal area top */}
             <div className="absolute left-1/2 -translate-x-1/2 top-0 w-20 h-8 border-2 border-t-0 border-white/30 rounded-b-lg" />
-            {/* Penalty area bottom */}
             <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-40 h-20 border-2 border-b-0 border-white/30 rounded-t-lg" />
-            {/* Goal area bottom */}
             <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-20 h-8 border-2 border-b-0 border-white/30 rounded-t-lg" />
-            {/* Field stripes */}
             {[20, 40, 60, 80].map((pct) => (
               <div key={pct} className="absolute left-0 right-0 h-0.5 bg-white/5" style={{ top: `${pct}%` }} />
             ))}
@@ -96,14 +101,7 @@ const LineupBuilder = () => {
                 key={pos.id}
                 whileHover={{ scale: 1.15 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  if (playerName) {
-                    // If already assigned, option to remove
-                    setSelectedPos(isSelected ? null : pos.id);
-                  } else {
-                    setSelectedPos(isSelected ? null : pos.id);
-                  }
-                }}
+                onClick={() => setSelectedPos(isSelected ? null : pos.id)}
                 className={`absolute flex flex-col items-center gap-0.5 -translate-x-1/2 -translate-y-1/2 z-10 transition-all ${isSelected ? "ring-2 ring-primary rounded-lg" : ""}`}
                 style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
               >
