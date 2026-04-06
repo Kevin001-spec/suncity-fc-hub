@@ -269,6 +269,24 @@ const OfficialProfile = () => {
     }
   }, [leagueLoaded]);
 
+  // Load recorded players when perfGameId changes
+  useEffect(() => {
+    if (!perfGameId) { setRecordedPlayerIds([]); setLastMatchPlayerIds([]); return; }
+    supabase.from("match_performances").select("player_id").eq("game_id", perfGameId).then(({ data }) => {
+      setRecordedPlayerIds(data ? data.map((d: any) => d.player_id) : []);
+    });
+    // Get last match's players (most recent game before this one)
+    const selectedGame = gameScores.find(g => g.id === perfGameId);
+    if (selectedGame) {
+      const prevGames = gameScores.filter(g => new Date(g.date) < new Date(selectedGame.date)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      if (prevGames[0]) {
+        supabase.from("match_performances").select("player_id").eq("game_id", prevGames[0].id).then(({ data }) => {
+          setLastMatchPlayerIds(data ? data.map((d: any) => d.player_id) : []);
+        });
+      }
+    }
+  }, [perfGameId, gameScores]);
+
   const isCoach = user.role === "coach";
   const isFadhir = user.id === "SCF-002";
   const isManager = user.role === "manager";
