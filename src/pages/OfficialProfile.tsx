@@ -1851,6 +1851,77 @@ const OfficialProfile = () => {
           </Card>
         )}
 
+        {/* ===== MANAGER: Role Management ===== */}
+        {isManager && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> 👔 Role Management</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground font-body">Promote or demote members. Cannot change your own role.</p>
+              <select value={rolePlayerId} onChange={(e) => setRolePlayerId(e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                <option value="">Select member</option>
+                {members.filter(m => m.id !== user.id).map(m => (
+                  <option key={m.id} value={m.id}>{m.name} — {m.role} ({m.id})</option>
+                ))}
+              </select>
+              {rolePlayerId && (
+                <>
+                  <select value={newRole} onChange={(e) => setNewRole(e.target.value)}
+                    className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                    <option value="">Select new role</option>
+                    <option value="player">Player</option>
+                    <option value="captain">Captain</option>
+                    <option value="coach">Coach</option>
+                    <option value="manager">Manager</option>
+                    <option value="finance">Finance</option>
+                    <option value="assistant_coach">Assistant Coach</option>
+                    <option value="fan">Fan</option>
+                  </select>
+                  <Button disabled={!newRole} onClick={async () => {
+                    await supabase.from("members").update({ role: newRole } as any).eq("id", rolePlayerId);
+                    const memberName = members.find(m => m.id === rolePlayerId)?.name;
+                    toast({ title: "Role Updated", description: `${memberName} is now ${newRole}` });
+                    setRolePlayerId(""); setNewRole("");
+                    // Force refresh
+                    window.location.reload();
+                  }} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Update Role</Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== COACH: Member ID Registry ===== */}
+        {isCoach && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> 📋 Member ID Registry</CardTitle></CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full font-body text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground">
+                      <th className="text-left py-2 px-2">ID</th>
+                      <th className="text-left py-2 px-2">Name</th>
+                      <th className="text-left py-2 px-2">Role</th>
+                      <th className="text-left py-2 px-2">Position</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...members].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
+                      <tr key={m.id} className="border-b border-border">
+                        <td className="py-1.5 px-2 text-primary font-heading text-xs">{m.id}</td>
+                        <td className="py-1.5 px-2 text-foreground">{m.name}</td>
+                        <td className="py-1.5 px-2 text-muted-foreground capitalize">{m.role}</td>
+                        <td className="py-1.5 px-2 text-muted-foreground">{getFullPositionName(m.position)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* ===== SEND MESSAGE (All officials) ===== */}
         <Card className="bg-card border-border card-glow">
           <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><MessageCircle className="w-5 h-5 text-primary" /> Send Message</CardTitle></CardHeader>
