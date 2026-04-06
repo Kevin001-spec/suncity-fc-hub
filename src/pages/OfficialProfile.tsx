@@ -1695,7 +1695,7 @@ const OfficialProfile = () => {
         )}
 
         {/* Lineup Builder — Coach only */}
-        {isCoach && <LineupBuilder />}
+        {isCoach && <LineupBuilder onFirst11Change={(ids) => setSelectedFirst11(ids.slice(0, 11))} />}
 
         {/* ===== FAN MANAGEMENT — Coach & Manager ===== */}
         {(isCoach || isManager) && (() => {
