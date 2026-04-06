@@ -110,6 +110,7 @@ const Players = () => {
                 >
                   <div className="flex-1 min-w-0">
                     <p className="font-heading text-sm text-foreground font-bold">{member.name}</p>
+                    <p className="text-xs text-primary font-body">{member.id}</p>
                     <p className="text-xs text-muted-foreground font-body">
                       {member.role === "captain" ? "Field Captain • " : ""}
                       {getFullPositionName(member.position)}
