@@ -134,7 +134,7 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background">
       <Helmet>
         <title>SunCity FC Dashboard | Team Updates & Results</title>
-        <meta name="description" content="SunCity FC dashboard — view recent results, upcoming events, team gallery and our story. Nairobi's finest football team." />
+        <meta name="description" content="SunCity FC dashboard — view recent results, upcoming events, team gallery and our story. Based at Karatina University, Nyeri County, Kenya." />
       </Helmet>
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-8">

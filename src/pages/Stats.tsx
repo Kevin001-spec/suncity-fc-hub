@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Helmet } from "react-helmet-async";
 import { type TeamMember, getFullPositionName, getPositionGroup } from "@/data/team-data";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
@@ -305,6 +306,10 @@ const Stats = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>SunCity FC Statistics | Performance & Finance</title>
+        <meta name="description" content="SunCity FC team statistics — player performance, contributions, attendance and finance. Based at Karatina University, Nyeri County." />
+      </Helmet>
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
         <LottieCarousel animations={statsCarousel} className="h-44 mb-2" />

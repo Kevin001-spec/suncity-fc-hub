@@ -65,6 +65,14 @@ const Profile = () => {
     setError("");
     const result = await (isPlayer ? login(memberId) : login(memberId, pin));
     if (!result.success) setError(result.error || "Invalid credentials");
+    else {
+      // Welcome toast
+      const saved = localStorage.getItem("suncity_user");
+      if (saved) {
+        const u = JSON.parse(saved);
+        toast({ title: `Welcome ${u.name}! 👋`, description: "You're now logged in." });
+      }
+    }
     setLoading(false);
   };
 

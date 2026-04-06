@@ -33,6 +33,7 @@ const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profi
             <AvatarFallback className="bg-secondary text-primary font-heading text-xl">{member.name.slice(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <h3 className="font-heading text-lg text-foreground">{member.name}</h3>
+          <p className="text-xs text-primary font-body">{member.id}</p>
           {member.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body mt-1">Field Captain</Badge>}
            {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(member.position)}</p>}
           <div className={`grid gap-3 mt-4 pt-4 border-t border-border`} style={{ gridTemplateColumns: `repeat(${Math.min(statFields.length, 5)}, 1fr)` }}>
@@ -84,7 +85,7 @@ const Players = () => {
     <div className="min-h-screen bg-background">
       <Helmet>
         <title>SunCity FC Squad | Player Profiles & Stats</title>
-        <meta name="description" content="Meet the SunCity FC squad — view all player profiles, positions, and performance stats." />
+        <meta name="description" content="Meet the SunCity FC squad based at Karatina University — view all player profiles, positions, and performance stats." />
       </Helmet>
       <Navbar />
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
@@ -110,6 +111,7 @@ const Players = () => {
                 >
                   <div className="flex-1 min-w-0">
                     <p className="font-heading text-sm text-foreground font-bold">{member.name}</p>
+                    <p className="text-xs text-primary font-body">{member.id}</p>
                     <p className="text-xs text-muted-foreground font-body">
                       {member.role === "captain" ? "Field Captain • " : ""}
                       {getFullPositionName(member.position)}

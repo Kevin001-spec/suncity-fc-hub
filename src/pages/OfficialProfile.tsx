@@ -228,6 +228,14 @@ const OfficialProfile = () => {
   const [sendMsgTo, setSendMsgTo] = useState("");
   const [sendMsgContent, setSendMsgContent] = useState("");
 
+  // Role management
+  const [rolePlayerId, setRolePlayerId] = useState("");
+  const [newRole, setNewRole] = useState("");
+
+  // Smart player selector: already-recorded players for selected game
+  const [recordedPlayerIds, setRecordedPlayerIds] = useState<string[]>([]);
+  const [lastMatchPlayerIds, setLastMatchPlayerIds] = useState<string[]>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const homepageInputRef = useRef<HTMLInputElement>(null);
@@ -260,6 +268,24 @@ const OfficialProfile = () => {
       });
     }
   }, [leagueLoaded]);
+
+  // Load recorded players when perfGameId changes
+  useEffect(() => {
+    if (!perfGameId) { setRecordedPlayerIds([]); setLastMatchPlayerIds([]); return; }
+    supabase.from("match_performances").select("player_id").eq("game_id", perfGameId).then(({ data }) => {
+      setRecordedPlayerIds(data ? data.map((d: any) => d.player_id) : []);
+    });
+    // Get last match's players (most recent game before this one)
+    const selectedGame = gameScores.find(g => g.id === perfGameId);
+    if (selectedGame) {
+      const prevGames = gameScores.filter(g => new Date(g.date) < new Date(selectedGame.date)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      if (prevGames[0]) {
+        supabase.from("match_performances").select("player_id").eq("game_id", prevGames[0].id).then(({ data }) => {
+          setLastMatchPlayerIds(data ? data.map((d: any) => d.player_id) : []);
+        });
+      }
+    }
+  }, [perfGameId, gameScores]);
 
   const isCoach = user.role === "coach";
   const isFadhir = user.id === "SCF-002";
@@ -1117,12 +1143,29 @@ const OfficialProfile = () => {
                 <option value="">Select match</option>
                 {gameScores.map(g => <option key={g.id} value={g.id}>{g.date} — vs {g.opponent} ({g.ourScore}-{g.theirScore})</option>)}
               </select>
-              {perfGameId && (
+              {perfGameId && (() => {
+                // Smart player selector: filter out already-recorded, prioritize last match
+                const availableForPerf = playerMembers
+                  .filter(m => !recordedPlayerIds.includes(m.id))
+                  .sort((a, b) => {
+                    const aLast = lastMatchPlayerIds.includes(a.id) ? 1 : 0;
+                    const bLast = lastMatchPlayerIds.includes(b.id) ? 1 : 0;
+                    return bLast - aLast;
+                  });
+                const recordedCount = recordedPlayerIds.length;
+                return (
                 <>
+                  {recordedCount > 0 && (
+                    <p className="text-xs text-primary font-body">✅ {recordedCount} player{recordedCount > 1 ? "s" : ""} already recorded for this match</p>
+                  )}
                   <select value={perfPlayerId} onChange={(e) => setPerfPlayerId(e.target.value)}
                     className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                    <option value="">Select player</option>
-                    {playerMembers.map(m => <option key={m.id} value={m.id}>{m.name} ({getFullPositionName(m.position)})</option>)}
+                    <option value="">Select player ({availableForPerf.length} remaining)</option>
+                    {availableForPerf.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {lastMatchPlayerIds.includes(m.id) ? "⭐ " : ""}{m.name} ({getFullPositionName(m.position)})
+                      </option>
+                    ))}
                   </select>
                   {perfPlayerId && (() => {
                     const perfPlayer = members.find(m => m.id === perfPlayerId);
@@ -1162,7 +1205,8 @@ const OfficialProfile = () => {
                     );
                   })()}
                 </>
-              )}
+                );
+              })()}
             </CardContent>
           </Card>
         )}
@@ -1695,7 +1739,7 @@ const OfficialProfile = () => {
         )}
 
         {/* Lineup Builder — Coach only */}
-        {isCoach && <LineupBuilder />}
+        {isCoach && <LineupBuilder onFirst11Change={(ids) => setSelectedFirst11(ids.slice(0, 11))} />}
 
         {/* ===== FAN MANAGEMENT — Coach & Manager ===== */}
         {(isCoach || isManager) && (() => {
@@ -1803,6 +1847,77 @@ const OfficialProfile = () => {
                 await supabase.from("season_config").insert({ end_date: format(seasonEndDate, "yyyy-MM-dd"), created_by: user.id } as any);
                 toast({ title: "Season End Date Set" });
               }} disabled={!seasonEndDate} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Save Season Config</Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== MANAGER: Role Management ===== */}
+        {isManager && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> 👔 Role Management</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground font-body">Promote or demote members. Cannot change your own role.</p>
+              <select value={rolePlayerId} onChange={(e) => setRolePlayerId(e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                <option value="">Select member</option>
+                {members.filter(m => m.id !== user.id).map(m => (
+                  <option key={m.id} value={m.id}>{m.name} — {m.role} ({m.id})</option>
+                ))}
+              </select>
+              {rolePlayerId && (
+                <>
+                  <select value={newRole} onChange={(e) => setNewRole(e.target.value)}
+                    className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                    <option value="">Select new role</option>
+                    <option value="player">Player</option>
+                    <option value="captain">Captain</option>
+                    <option value="coach">Coach</option>
+                    <option value="manager">Manager</option>
+                    <option value="finance">Finance</option>
+                    <option value="assistant_coach">Assistant Coach</option>
+                    <option value="fan">Fan</option>
+                  </select>
+                  <Button disabled={!newRole} onClick={async () => {
+                    await supabase.from("members").update({ role: newRole } as any).eq("id", rolePlayerId);
+                    const memberName = members.find(m => m.id === rolePlayerId)?.name;
+                    toast({ title: "Role Updated", description: `${memberName} is now ${newRole}` });
+                    setRolePlayerId(""); setNewRole("");
+                    // Force refresh
+                    window.location.reload();
+                  }} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Update Role</Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== COACH: Member ID Registry ===== */}
+        {isCoach && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> 📋 Member ID Registry</CardTitle></CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full font-body text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground">
+                      <th className="text-left py-2 px-2">ID</th>
+                      <th className="text-left py-2 px-2">Name</th>
+                      <th className="text-left py-2 px-2">Role</th>
+                      <th className="text-left py-2 px-2">Position</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...members].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
+                      <tr key={m.id} className="border-b border-border">
+                        <td className="py-1.5 px-2 text-primary font-heading text-xs">{m.id}</td>
+                        <td className="py-1.5 px-2 text-foreground">{m.name}</td>
+                        <td className="py-1.5 px-2 text-muted-foreground capitalize">{m.role}</td>
+                        <td className="py-1.5 px-2 text-muted-foreground">{getFullPositionName(m.position)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
         )}
