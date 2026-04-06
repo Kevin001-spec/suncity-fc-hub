@@ -1143,12 +1143,29 @@ const OfficialProfile = () => {
                 <option value="">Select match</option>
                 {gameScores.map(g => <option key={g.id} value={g.id}>{g.date} — vs {g.opponent} ({g.ourScore}-{g.theirScore})</option>)}
               </select>
-              {perfGameId && (
+              {perfGameId && (() => {
+                // Smart player selector: filter out already-recorded, prioritize last match
+                const availableForPerf = playerMembers
+                  .filter(m => !recordedPlayerIds.includes(m.id))
+                  .sort((a, b) => {
+                    const aLast = lastMatchPlayerIds.includes(a.id) ? 1 : 0;
+                    const bLast = lastMatchPlayerIds.includes(b.id) ? 1 : 0;
+                    return bLast - aLast;
+                  });
+                const recordedCount = recordedPlayerIds.length;
+                return (
                 <>
+                  {recordedCount > 0 && (
+                    <p className="text-xs text-primary font-body">✅ {recordedCount} player{recordedCount > 1 ? "s" : ""} already recorded for this match</p>
+                  )}
                   <select value={perfPlayerId} onChange={(e) => setPerfPlayerId(e.target.value)}
                     className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                    <option value="">Select player</option>
-                    {playerMembers.map(m => <option key={m.id} value={m.id}>{m.name} ({getFullPositionName(m.position)})</option>)}
+                    <option value="">Select player ({availableForPerf.length} remaining)</option>
+                    {availableForPerf.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {lastMatchPlayerIds.includes(m.id) ? "⭐ " : ""}{m.name} ({getFullPositionName(m.position)})
+                      </option>
+                    ))}
                   </select>
                   {perfPlayerId && (() => {
                     const perfPlayer = members.find(m => m.id === perfPlayerId);
