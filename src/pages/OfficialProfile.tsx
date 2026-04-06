@@ -1205,7 +1205,8 @@ const OfficialProfile = () => {
                     );
                   })()}
                 </>
-              )}
+                );
+              })()}
             </CardContent>
           </Card>
         )}
