@@ -8,7 +8,7 @@ interface LottieCarouselProps {
   className?: string;
 }
 
-const LottieCarousel = ({ animations, interval = 6000, className = "" }: LottieCarouselProps) => {
+const LottieCarousel = ({ animations, interval = 3000, className = "" }: LottieCarouselProps) => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
