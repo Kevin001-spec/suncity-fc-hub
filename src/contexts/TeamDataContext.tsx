@@ -83,6 +83,8 @@ interface TeamDataContextType {
   updateFanBadge: (fanId: string, badge: string) => Promise<void>;
   updateFanPoints: (fanId: string, points: number) => Promise<void>;
   updateFavouriteMoment: (fanId: string, moment: string) => Promise<void>;
+  updateMemberRole: (memberId: string, newRole: string) => Promise<void>;
+  recordTrainingMatch: (match: { teamAScore: number; teamBScore: number; performances: any[] }) => Promise<void>;
   loadWeeklyStatsLogs: (playerId: string) => Promise<WeeklyStatsLog[]>;
   saveGameStats: (gameId: string, half: string, stats: Omit<GameStats, "id" | "gameId" | "half">) => Promise<void>;
   loadPlayerGameLogs: (playerId: string) => Promise<PlayerGameLog[]>;
@@ -156,15 +158,15 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
         assists: member.assists || 0,
         games_played: member.gamesPlayed || 0,
         saves: member.saves || 0,
-        clean_sheets: member.cleanSheets || 0,
-        aerial_duels: member.aerialDuels || 0,
+        clean_sheets: member.clean_sheets || 0,
+        aerial_duels: member.aerial_duels || 0,
         tackles: member.tackles || 0,
         interceptions: member.interceptions || 0,
         blocks: member.blocks || 0,
         clearances: member.clearances || 0,
-        successful_tackles: member.successfulTackles || 0,
-        direct_targets: member.directTargets || 0,
-        direct_shots: member.directShots || 0,
+        successful_tackles: member.successful_tackles || 0,
+        direct_targets: member.direct_targets || 0,
+        direct_shots: member.direct_shots || 0,
       } as any);
 
       // Reset stats to 0 in members table
@@ -194,7 +196,7 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
         goals: m.goals, assists: m.assists, gamesPlayed: m.games_played,
         saves: m.saves || 0, cleanSheets: m.clean_sheets || 0, aerialDuels: m.aerial_duels || 0,
         tackles: m.tackles || 0, interceptions: m.interceptions || 0, blocks: m.blocks || 0, clearances: m.clearances || 0,
-        successfulTackles: (m as any).successful_tackles || 0, directTargets: (m as any).direct_targets || 0, directShots: (m as any).direct_shots || 0,
+        successfulTackles: (m as any).successful_tackles || 0, directTargets: (m as any).direct_targets || 0, direct_shots: (m as any).direct_shots || 0,
         excused: m.excused, excusedType: m.excused_type, excusedDays: m.excused_days,
         profilePic: m.profile_pic_url,
         fanBadge: (m as any).fan_badge || null,
@@ -474,7 +476,7 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
       // Always insert into expenses (negative amount acts as income)
       await supabase.from("financial_expenses").insert({ record_id: record.id, description: descPrefix + description, amount: signedAmount, date });
       
-      // Force a recalculation to update the closing balance correctly
+      // Force a recalculate to update the closing balance correctly
       await recalculateFinancialRecord(month);
     } else {
       const { data: allRecords } = await supabase.from("financial_records")
@@ -549,8 +551,8 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
         blocks: Math.max(0, (stats.blocks || 0) - (old.blocks || 0)),
         clearances: Math.max(0, (stats.clearances || 0) - (old.clearances || 0)),
         successful_tackles: Math.max(0, (stats.successfulTackles || 0) - (old.successful_tackles || 0)),
-        direct_targets: Math.max(0, (stats.directTargets || 0) - (old.direct_targets || 0)),
-        direct_shots: Math.max(0, (stats.directShots || 0) - (old.direct_shots || 0)),
+        direct_targets: Math.max(0, (stats.direct_targets || 0) - (old.direct_targets || 0)),
+        direct_shots: Math.max(0, (stats.direct_shots || 0) - (old.direct_shots || 0)),
       };
       const hasAnyDelta = Object.entries(delta).some(([k, v]) => k !== "player_id" && k !== "week_start" && (v as number) > 0);
       if (hasAnyDelta) {
@@ -770,6 +772,50 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
     loadMembers();
   }, [loadMembers]);
 
+  const updateMemberRole = useCallback(async (memberId: string, newRole: string) => {
+    await supabase.from("members").update({ role: newRole }).eq("id", memberId);
+    loadMembers();
+  }, [loadMembers]);
+
+  const recordTrainingMatch = useCallback(async (match: { teamAScore: number; teamBScore: number; performances: any[] }) => {
+    // Record game
+    const { data: game } = await supabase.from("game_scores").insert({
+      opponent: "Training Match (A vs B)",
+      our_score: match.teamAScore,
+      their_score: match.teamBScore,
+      date: new Date().toISOString().split("T")[0],
+      game_type: "training"
+    } as any).select().single();
+    
+    if (game) {
+      // Record performances
+      const perfInserts = match.performances.map(p => ({
+        game_id: game.id,
+        player_id: p.playerId,
+        goals: p.goals,
+        assists: p.assists,
+        rating: p.rating,
+        is_potm: p.isPotm,
+        // Training matches might be simplified
+      }));
+      await supabase.from("match_performances").insert(perfInserts as any);
+      
+      // Update individual member stats?
+      // User requested "this will be saved in everyones profile and given awards and all"
+      for (const p of match.performances) {
+        const { data: member } = await supabase.from("members").select("goals, assists, games_played").eq("id", p.playerId).single();
+        if (member) {
+          await supabase.from("members").update({
+            goals: (member.goals || 0) + p.goals,
+            assists: (member.assists || 0) + p.assists,
+            games_played: (member.games_played || 0) + 1
+          } as any).eq("id", p.playerId);
+        }
+      }
+    }
+    refreshData();
+  }, [refreshData]);
+
   const loadWeeklyStatsLogs = useCallback(async (playerId: string): Promise<WeeklyStatsLog[]> => {
     const { data } = await supabase.from("weekly_stats_log").select("*")
       .eq("player_id", playerId).order("week_start", { ascending: false });
@@ -798,62 +844,57 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
         shots: stats.shots, shots_on_target: stats.shotsOnTarget,
         penalties: stats.penalties, freekicks: stats.freekicks,
         corner_kicks: stats.cornerKicks, fouls: stats.fouls,
-        offsides: stats.offsides, yellow_cards: stats.yellowCards,
-        red_cards: stats.redCards,
-      } as any).eq("id", existing.id);
+        offsides: stats.offsides, yellow_cards: stats.yellowCards, red_cards: stats.redCards
+      } as any).eq("id", (existing as any).id);
     } else {
       await supabase.from("game_stats").insert({
         game_id: gameId, half,
         shots: stats.shots, shots_on_target: stats.shotsOnTarget,
         penalties: stats.penalties, freekicks: stats.freekicks,
         corner_kicks: stats.cornerKicks, fouls: stats.fouls,
-        offsides: stats.offsides, yellow_cards: stats.yellowCards,
-        red_cards: stats.redCards,
+        offsides: stats.offsides, yellow_cards: stats.yellowCards, red_cards: stats.redCards
       } as any);
     }
     loadGameStats();
   }, [loadGameStats]);
 
   const loadPlayerGameLogs = useCallback(async (playerId: string): Promise<PlayerGameLog[]> => {
-    const { data } = await supabase.from("player_game_log").select("*")
+    const { data } = await supabase.from("player_game_log").select("*, game_scores(*)")
       .eq("player_id", playerId).order("created_at", { ascending: false });
     if (data) {
-      return data.map((d: any) => ({
-        id: d.id, playerId: d.player_id, gameId: d.game_id, createdAt: d.created_at,
+      const mapped = data.map((d: any) => ({
+        id: d.id, playerId: d.player_id, gameId: d.game_id,
+        opponent: d.game_scores?.opponent || "Unknown",
+        date: d.game_scores?.date || "",
+        ourScore: d.game_scores?.our_score || 0,
+        theirScore: d.game_scores?.their_score || 0,
+        createdAt: d.created_at,
       }));
+      setPlayerGameLogs(mapped);
+      return mapped;
     }
     return [];
   }, []);
 
-  return (
-    <TeamDataContext.Provider
-      value={{
-        members, gameScores, calendarEvents, financialRecords, mediaItems,
-        pendingApprovals, lineup, profilePics, attendance, currentWeekStart,
-        homepageImages, matchPerformances, messages, weeklyStatsLogs,
-        gameStats, playerGameLogs,
-        addGameScore, deleteGameScore, updateGameScore,
-        addCalendarEvent, addMediaItems,
-        requestContribution, approveContribution, rejectContribution,
-        addFinancialTransaction, updatePlayerStats, setProfilePic,
-        setExcused, updateLineup, updateContributionDirect,
-        updateAttendance, markDayNoActivity,
-        uploadMediaToStorage, uploadProfilePicToStorage,
-        deleteMediaItem, removePlayer, addPlayer,
-        uploadHomepageImages, deleteHomepageImage,
-        addMatchPerformance, sendMessage, markMessageRead,
-        updateFanBadge, updateFanPoints, updateFavouriteMoment,
-        loadWeeklyStatsLogs, saveGameStats, loadPlayerGameLogs,
-        refreshData,
-      }}
-    >
-      {children}
-    </TeamDataContext.Provider>
-  );
+  const value = {
+    members, gameScores, calendarEvents, financialRecords, mediaItems, pendingApprovals,
+    lineup, profilePics, attendance, currentWeekStart, homepageImages, matchPerformances,
+    messages, weeklyStatsLogs, gameStats, playerGameLogs,
+    addGameScore, deleteGameScore, updateGameScore, addCalendarEvent, addMediaItems,
+    requestContribution, approveContribution, rejectContribution, addFinancialTransaction,
+    updatePlayerStats, setProfilePic, setExcused, updateLineup, updateContributionDirect,
+    updateAttendance, markDayNoActivity, uploadMediaToStorage, uploadProfilePicToStorage,
+    deleteMediaItem, removePlayer, addPlayer, uploadHomepageImages, deleteHomepageImage,
+    addMatchPerformance, sendMessage, markMessageRead, updateFanBadge, updateFanPoints,
+    updateFavouriteMoment, updateMemberRole, recordTrainingMatch, loadWeeklyStatsLogs,
+    saveGameStats, loadPlayerGameLogs, refreshData,
+  };
+
+  return <TeamDataContext.Provider value={value}>{children}</TeamDataContext.Provider>;
 }
 
 export function useTeamData() {
-  const ctx = useContext(TeamDataContext);
-  if (!ctx) throw new Error("useTeamData must be used within TeamDataProvider");
-  return ctx;
+  const context = useContext(TeamDataContext);
+  if (!context) throw new Error("useTeamData must be used within TeamDataProvider");
+  return context;
 }

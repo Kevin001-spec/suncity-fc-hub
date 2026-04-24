@@ -1,102 +1,68 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Helmet } from "react-helmet-async";
-import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
-import { Navigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import Navbar from "@/components/Navbar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { type TeamMember, getFullPositionName, getPositionGroup } from "@/data/team-data";
-import { getStatsForPosition } from "@/lib/position-stats";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Trophy, Star, Shield, Users, Target, Footprints, ChevronRight, MessageCircle } from "lucide-react";
+import { getFullPositionName, getPositionGroup } from "@/data/team-data";
+import LottieAnimation from "@/components/LottieAnimation";
+import players_profile from "@/assets/animations/players_profile.json";
+import players_carousel_1 from "@/assets/animations/players_carousel_1.json";
+import players_carousel_2 from "@/assets/animations/players_carousel_2.json";
+import players_carousel_3 from "@/assets/animations/players_carousel_3.json";
+import players_carousel_4 from "@/assets/animations/players_carousel_4.json";
 import LottieCarousel from "@/components/LottieCarousel";
-import playersAnimation from "@/assets/animations/playersanimation.json";
-import statsnplayerspagec1 from "@/assets/animations/statsnplayerspagec1.json";
-import statsnplayerspagec2 from "@/assets/animations/statsnplayerspagec2.json";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Paragraph, TextRun } from "docx";
 
-const playersCarousel = [playersAnimation, statsnplayerspagec1, statsnplayerspagec2];
-
-const positionGroupOrder: Record<string, number> = { "GK": 1, "DEF": 2, "MID": 3, "ATT": 4 };
-const positionGroupLabels: Record<string, string> = { "GK": "Goalkeepers", "DEF": "Defenders", "MID": "Midfielders", "ATT": "Attackers" };
-
-const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profilePic?: string; onClose: () => void }) => {
-  const statFields = getStatsForPosition(member.position);
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="bg-card border border-border rounded-xl p-6 w-full max-w-sm card-glow" onClick={(e) => e.stopPropagation()}>
-        <div className="text-center">
-          <Avatar className="w-20 h-20 mx-auto mb-4 border-2 border-primary">
-            {profilePic && <AvatarImage src={profilePic} className="aspect-square object-cover object-center" />}
-            <AvatarFallback className="bg-secondary text-primary font-heading text-xl">{member.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <h3 className="font-heading text-lg text-foreground">{member.name}</h3>
-          {member.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body mt-1">Field Captain</Badge>}
-           {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(member.position)}</p>}
-          <div className={`grid gap-3 mt-4 pt-4 border-t border-border`} style={{ gridTemplateColumns: `repeat(${Math.min(statFields.length, 5)}, 1fr)` }}>
-            {statFields.map(sf => (
-              <div key={sf.key}>
-                <p className="text-xl font-heading text-primary">{(member as any)[sf.key] || 0}</p>
-                <p className="text-xs text-muted-foreground font-body">{sf.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-};
+const playersCarousel = [players_carousel_1, players_carousel_2, players_carousel_3, players_carousel_4];
 
 const Players = () => {
-  const { user } = useAuth();
-  const { members, profilePics } = useTeamData();
-  const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
+  const { members, profilePics, matchPerformances } = useTeamData();
+  const [selectedMember, setSelectedMember] = useState<any>(null);
 
-  const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
-
-  const sortedPlayers = useMemo(() => {
-    return [...playerMembers].sort((a, b) => {
-      if (a.role === "captain" && b.role !== "captain") return -1;
-      if (a.role !== "captain" && b.role === "captain") return 1;
-      const aGroup = positionGroupOrder[getPositionGroup(a.position)] || 5;
-      const bGroup = positionGroupOrder[getPositionGroup(b.position)] || 5;
-      return aGroup - bGroup;
-    });
-  }, [playerMembers]);
-
+  const playerMembers = members.filter(m => m.role === "player" || m.role === "captain" || m.role === "finance" || m.role === "manager");
+  
   const sections = useMemo(() => {
-    const groups: { label: string; players: typeof sortedPlayers }[] = [];
-    const captains = sortedPlayers.filter(m => m.role === "captain");
-    if (captains.length > 0) groups.push({ label: "Field Captains", players: captains });
-    const nonCaptains = sortedPlayers.filter(m => m.role !== "captain");
-    for (const pg of ["GK", "DEF", "MID", "ATT"]) {
-      const inGroup = nonCaptains.filter(m => getPositionGroup(m.position) === pg);
-      if (inGroup.length > 0) groups.push({ label: positionGroupLabels[pg], players: inGroup });
-    }
-    return groups;
-  }, [sortedPlayers]);
-
-  // Page is now public — no auth redirect
+    return [
+      { label: "Captains", players: playerMembers.filter(m => m.role === "captain") },
+      { label: "Goalkeepers", players: playerMembers.filter(m => getPositionGroup(m.position) === "GK") },
+      { label: "Defenders", players: playerMembers.filter(m => getPositionGroup(m.position) === "DEF") },
+      { label: "Midfielders", players: playerMembers.filter(m => getPositionGroup(m.position) === "MID") },
+      { label: "Attackers", players: playerMembers.filter(m => getPositionGroup(m.position) === "ATT") },
+    ].filter(s => s.players.length > 0);
+  }, [playerMembers]);
 
   return (
     <div className="min-h-screen bg-background">
-      <Helmet>
-        <title>SunCity FC Squad | Player Profiles & Stats</title>
-        <meta name="description" content="Meet the SunCity FC squad based at Karatina University — view all player profiles, positions, and performance stats." />
-      </Helmet>
       <Navbar />
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        <LottieCarousel animations={playersCarousel} className="h-44 mb-2" />
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-          <h1 className="font-heading text-2xl gold-text">Players</h1>
-          <p className="text-muted-foreground text-sm font-body mt-1">{playerMembers.length} squad members</p>
-        </motion.div>
+      <main className="max-w-4xl mx-auto p-4 pt-24 pb-12">
+        
+        {/* Header */}
+        <div className="flex flex-col md:flex-row items-center gap-6 mb-12">
+          <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-primary/20 shadow-2xl overflow-hidden bg-card card-glow">
+            <LottieAnimation animationData={players_profile} className="w-full h-full scale-110" />
+          </div>
+          <div className="text-center md:text-left">
+            <Badge className="bg-primary/10 text-primary border-primary/30 font-heading mb-2">ACTIVE REGISTRY</Badge>
+            <h1 className="text-4xl md:text-5xl font-heading text-foreground mb-2">Squad Members</h1>
+            <p className="text-muted-foreground font-body max-w-md">
+              The elite squad representing SunCity FC. View player profiles and seasonal roles.
+            </p>
+          </div>
+        </div>
 
+        {/* Squad Sections */}
         {sections.map((section, si) => (
-          <div key={section.label}>
-            <motion.h3 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: si * 0.05 }}
+          <div key={section.label} className="mb-10 last:mb-0">
+            <motion.h3
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: si * 0.1 }}
               className="font-heading text-xs text-primary tracking-wider uppercase mb-3 mt-4">{section.label}</motion.h3>
             <div className="space-y-3">
               {section.players.map((member, i) => (
@@ -138,13 +104,42 @@ const Players = () => {
           style={{ borderColor: "#25D366", backgroundColor: "rgba(37,211,102,0.08)" }}
         >
           <p className="font-heading text-sm" style={{ color: "#25D366" }}>💬 Join Team WhatsApp Group</p>
-          <p className="text-xs text-muted-foreground font-body mt-1">Stay connected with the squad</p>
         </motion.a>
+
       </main>
 
-      <AnimatePresence>
-        {selectedMember && <PlayerCard member={selectedMember} profilePic={profilePics[selectedMember.id]} onClose={() => setSelectedMember(null)} />}
-      </AnimatePresence>
+      {/* Profile Modal */}
+      <Dialog open={!!selectedMember} onOpenChange={() => setSelectedMember(null)}>
+        <DialogContent className="bg-card border-border sm:max-w-[400px] p-0 overflow-hidden card-glow">
+          <DialogHeader className="p-0">
+            <div className="h-24 bg-primary/10 relative">
+               <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
+                  <Avatar className="w-20 h-20 border-4 border-card">
+                    {selectedMember && profilePics[selectedMember.id] && <AvatarImage src={profilePics[selectedMember.id]} className="aspect-square object-cover" />}
+                    <AvatarFallback className="bg-secondary text-primary font-heading text-xl">{selectedMember?.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+               </div>
+            </div>
+          </DialogHeader>
+          <div className="pt-12 pb-6 px-6 text-center">
+            <h2 className="font-heading text-xl text-foreground">{selectedMember?.name}</h2>
+            <p className="text-xs text-muted-foreground font-body mb-4">{getFullPositionName(selectedMember?.position)} • {selectedMember?.role.toUpperCase()}</p>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 rounded-xl bg-secondary/50 border border-border">
+                <p className="text-[10px] text-muted-foreground font-body uppercase">Goals</p>
+                <p className="text-2xl font-heading text-primary">{selectedMember?.goals || 0}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-secondary/50 border border-border">
+                <p className="text-[10px] text-muted-foreground font-body uppercase">Assists</p>
+                <p className="text-2xl font-heading text-foreground">{selectedMember?.assists || 0}</p>
+              </div>
+            </div>
+
+            <Button className="w-full mt-6 font-heading" onClick={() => setSelectedMember(null)}>Close Profile</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

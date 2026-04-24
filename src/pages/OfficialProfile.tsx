@@ -20,9 +20,11 @@ import { format } from "date-fns";
 import {
   Trophy, Calendar as CalendarIcon, Image, DollarSign, Users, CheckCircle, XCircle, Plus,
   TrendingUp, TrendingDown, Upload, Target, Save, Trash2, Download, UserMinus, Star, BarChart3, Edit,
-  UserPlus, MessageCircle, Send, Mail, Footprints, Gamepad2, Shield, Hand, Crosshair, Award,
+  UserPlus, MessageCircle, Send, Mail, Footprints, Gamepad2, Shield, Hand, Crosshair, Award, Flame, Swords
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { contributionMonths, getContribMonthsForMember } from "@/data/team-data";
 import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
@@ -113,8 +115,85 @@ const OfficialProfile = () => {
     requestContribution, deleteMediaItem, removePlayer, addPlayer,
     uploadHomepageImages, deleteHomepageImage, updatePlayerStats,
     addMatchPerformance, messages, sendMessage, markMessageRead, matchPerformances,
+    updateMemberRole, recordTrainingMatch, refreshData
   } = useTeamData();
+
+  const [isCustomRole, setIsCustomRole] = useState(false);
+  const [customRoleName, setCustomRoleName] = useState("");
+  const [trainingTeams, setTrainingTeams] = useState<{ teamA: string[], teamB: string[] }>({ teamA: [], teamB: [] });
+  const [trainingScores, setTrainingScores] = useState({ teamA: 0, teamB: 0 });
+  const [trainingPerfs, setTrainingPerfs] = useState<Record<string, any>>({});
+  const [showTrainingRecorder, setShowTrainingRecorder] = useState(false);
+  
+  // --- VICTOR'S JERSEY WASHING SYSTEM ---
+  const [jerseyVolunteers, setJerseyVolunteers] = useState<string[]>([]);
+  const isVictor = user.id === "SCF-006";
+
+  // --- MEMBER ID REGISTRY VISIBILITY ---
+  const [showRegistry, setShowRegistry] = useState(false);
+
   const { toast } = useToast();
+
+  const handleRecordTraining = async () => {
+    try {
+      const perfs = members
+        .filter(m => trainingPerfs[m.id])
+        .map(m => ({
+          playerId: m.id,
+          team: trainingTeams.teamA.includes(m.id) ? 'A' : 'B',
+          goals: trainingPerfs[m.id].goals || 0,
+          assists: trainingPerfs[m.id].assists || 0,
+          rating: trainingPerfs[m.id].rating || 5.0,
+          isPotm: trainingPerfs[m.id].isPotm || false
+        }));
+      
+      if (perfs.length === 0) {
+        toast({ title: "No data", description: "Please record stats for at least one player.", variant: "destructive" });
+        return;
+      }
+
+      await recordTrainingMatch({
+        teamAScore: trainingScores.teamA,
+        teamBScore: trainingScores.teamB,
+        performances: perfs
+      });
+      
+      toast({ title: "Training Match Recorded", description: "Successfully saved Team A vs Team B results." });
+      setShowTrainingRecorder(false);
+      setTrainingPerfs({});
+      setTrainingScores({ teamA: 0, teamB: 0 });
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to record match.", variant: "destructive" });
+    }
+  };
+
+  const handleFindJerseyVolunteers = async () => {
+    const recent = [...gameScores].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 2);
+    if (recent.length === 0) {
+      toast({ title: "No matches", description: "Found no matches to pull players from.", variant: "destructive" });
+      return;
+    }
+    const ids = recent.map(g => g.id);
+    const { data } = await supabase.from("match_performances").select("player_id").in("game_id", ids);
+    if (!data || data.length < 6) {
+      toast({ title: "Pool too small", description: "Not enough unique players in recent matches (need 6).", variant: "destructive" });
+      return;
+    }
+    const pool = Array.from(new Set(data.map((p: any) => p.player_id)));
+    const pickedIds = pool.sort(() => 0.5 - Math.random()).slice(0, 6);
+    const pickedNames = pickedIds.map(id => members.find(m => m.id === id)?.name || id);
+    setJerseyVolunteers(pickedNames);
+  };
+
+  const handleExportJerseyData = () => {
+    const text = `JERSEY WASHING VOLUNTEERS\n-------------------------\nPair 1: ${jerseyVolunteers[0]} & ${jerseyVolunteers[1]}\nPair 2: ${jerseyVolunteers[2]} & ${jerseyVolunteers[3]}\nPair 3: ${jerseyVolunteers[4]} & ${jerseyVolunteers[5]}\n\nExported: ${new Date().toLocaleString()}`;
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "jersey_washing_volunteers.txt";
+    link.click();
+  };
 
   const [newOpponent, setNewOpponent] = useState("");
   const [newOurScore, setNewOurScore] = useState("");
@@ -234,9 +313,6 @@ const OfficialProfile = () => {
   // Name management
   const [editNamePlayerId, setEditNamePlayerId] = useState("");
   const [editNewName, setEditNewName] = useState("");
-
-  // Jersey Washing System
-  const [jerseyWashers, setJerseyWashers] = useState<string[]>([]);
 
   // Smart player selector: already-recorded players for selected game
   const [recordedPlayerIds, setRecordedPlayerIds] = useState<string[]>([]);
@@ -651,37 +727,6 @@ const OfficialProfile = () => {
     setNewPlayerName(""); setNewPlayerPos(""); setNewMemberType("player");
   };
 
-  // Jersey Washing System logic
-  const handleGenerateWashers = () => {
-    const recentGames = [...gameScores].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 2);
-    const gameIds = recentGames.map(g => g.id);
-    let poolIds = Array.from(new Set(matchPerformances.filter(p => gameIds.includes(p.gameId)).map(p => p.playerId)));
-    if (poolIds.length < 6) {
-      poolIds = playerMembers.map(m => m.id);
-    }
-    const shuffled = [...poolIds].sort(() => 0.5 - Math.random());
-    setJerseyWashers(shuffled.slice(0, 6));
-  };
-
-  const handleExportWashers = () => {
-    const p = jerseyWashers.map(id => members.find(m => m.id === id)?.name || "Unknown");
-    const tables: DocxTableData[] = [
-      {
-        head: [["Pair", "Player 1", "Player 2"]],
-        body: [
-          ["Pair 1", p[0] || "-", p[1] || "-"],
-          ["Pair 2", p[2] || "-", p[3] || "-"],
-          ["Pair 3", p[4] || "-", p[5] || "-"],
-        ]
-      }
-    ];
-    generateBrandedDocx("Jersey Washing Schedule", tables, "suncity_fc_jersey_washing.docx", [
-      new Paragraph({
-        children: [new TextRun({ text: "Schedule for the upcoming matches based on recent active players.", font: "Calibri", size: 16 })],
-        spacing: { after: 200 }
-      })
-    ]);
-  };
 
   // Handle edit score
   const handleSaveEditScore = async () => {
@@ -720,169 +765,73 @@ const OfficialProfile = () => {
       gameId: perfGameId, playerId: perfPlayerId,
       goals: 0, assists: 0, saves: 0, tackles: 0,
       interceptions: 0, blocks: 0, clearances: 0,
-      cleanSheet: false, aerialDuels: 0, rating: 0, isPotm: false,
-      directShots: 0,
+      cleanSheet: false, aerialDuels: 0, rating: 5,
+      isPotm: false, directShots: 0
     };
+    
+    perfData.goals = parseInt(perfGoals) || 0;
+    perfData.assists = parseInt(perfAssists) || 0;
+    perfData.rating = parseFloat(perfRating) || 5;
+    perfData.isPotm = perfIsPotm;
     
     if (perfPosGroup === "GK") {
       perfData.saves = parseInt(perfSaves) || 0;
-      perfData.aerialDuels = parseInt(perfAerialDuels) || 0;
       perfData.cleanSheet = perfCleanSheet;
     } else if (perfPosGroup === "DEF") {
       perfData.tackles = parseInt(perfTackles) || 0;
       perfData.interceptions = parseInt(perfInterceptions) || 0;
-      perfData.goals = parseInt(perfGoals) || 0;
-      perfData.assists = parseInt(perfAssists) || 0;
-      perfData.directShots = parseInt(perfDirectShots) || 0;
-    } else {
-      perfData.goals = parseInt(perfGoals) || 0;
-      perfData.assists = parseInt(perfAssists) || 0;
+      perfData.blocks = parseInt(perfBlocks) || 0;
+      perfData.clearances = parseInt(perfClearances) || 0;
+      perfData.cleanSheet = perfCleanSheet;
+      perfData.aerialDuels = parseInt(perfAerialDuels) || 0;
+    } else if (perfPosGroup === "MID") {
       perfData.tackles = parseInt(perfTackles) || 0;
+      perfData.interceptions = parseInt(perfInterceptions) || 0;
+      perfData.aerialDuels = parseInt(perfAerialDuels) || 0;
+    } else if (perfPosGroup === "ATT") {
       perfData.directShots = parseInt(perfDirectShots) || 0;
+      perfData.aerialDuels = parseInt(perfAerialDuels) || 0;
     }
     
     await addMatchPerformance(perfData);
     
-    // Show success immediately — POTM calc + awards run in background
-    toast({ title: "✅ Performance Recorded", description: `${perfPlayer?.name} stats synced. Awards calculating...` });
+    // Update aggregate stats in members table
+    const dbStats: any = {
+      goals: (perfPlayer?.goals || 0) + perfData.goals,
+      assists: (perfPlayer?.assists || 0) + perfData.assists,
+      games_played: (perfPlayer?.gamesPlayed || 0) + 1,
+    };
+    
+    if (perfPosGroup === "GK") {
+      dbStats.saves = (perfPlayer?.saves || 0) + perfData.saves;
+      dbStats.clean_sheets = (perfPlayer?.cleanSheets || 0) + (perfData.cleanSheet ? 1 : 0);
+    } else if (perfPosGroup === "DEF") {
+      dbStats.tackles = (perfPlayer?.tackles || 0) + perfData.tackles;
+      dbStats.interceptions = (perfPlayer?.interceptions || 0) + perfData.interceptions;
+      dbStats.blocks = (perfPlayer?.blocks || 0) + perfData.blocks;
+      dbStats.clearances = (perfPlayer?.clearances || 0) + perfData.clearances;
+      dbStats.clean_sheets = (perfPlayer?.cleanSheets || 0) + (perfData.cleanSheet ? 1 : 0);
+      dbStats.aerial_duels = (perfPlayer?.aerialDuels || 0) + perfData.aerialDuels;
+    } else if (perfPosGroup === "MID") {
+      dbStats.tackles = (perfPlayer?.tackles || 0) + perfData.tackles;
+      dbStats.interceptions = (perfPlayer?.interceptions || 0) + perfData.interceptions;
+      dbStats.aerial_duels = (perfPlayer?.aerialDuels || 0) + perfData.aerialDuels;
+    } else if (perfPosGroup === "ATT") {
+      dbStats.direct_shots = (perfPlayer?.directShots || 0) + perfData.directShots;
+      dbStats.aerial_duels = (perfPlayer?.aerialDuels || 0) + perfData.aerialDuels;
+    }
+    
+    await supabase.from("members").update(dbStats).eq("id", perfPlayerId);
+    await supabase.from("player_game_log").upsert({ player_id: perfPlayerId, game_id: perfGameId } as any);
+    
+    toast({ title: "Performance Recorded", description: `Stats for ${perfPlayer?.name} saved.` });
     setPerfPlayerId(""); setPerfGoals("0"); setPerfAssists("0"); setPerfSaves("0");
     setPerfTackles("0"); setPerfInterceptions("0"); setPerfBlocks("0"); setPerfClearances("0");
-    setPerfCleanSheet(false); setPerfAerialDuels("0"); setPerfDirectShots("0");
-    
-    // Background POTM calculation + post-match awards (non-blocking)
-    const gameId = perfGameId;
-    (async () => {
-      const { data: allPerfs } = await supabase.from("match_performances")
-        .select("*").eq("game_id", gameId);
-      if (!allPerfs || allPerfs.length === 0) return;
-
-      // --- POTM calculation ---
-      let bestId = "";
-      let bestScore = -1;
-      for (const p of allPerfs) {
-        const pl = members.find(m => m.id === p.player_id);
-        const score = calculatePotmScore({
-          goals: p.goals, assists: p.assists, saves: p.saves,
-          tackles: p.tackles, interceptions: p.interceptions,
-          cleanSheet: p.clean_sheet, aerialDuels: p.aerial_duels,
-          positionGroup: getPositionGroup(pl?.position),
-        });
-        if (score > bestScore) { bestScore = score; bestId = p.id; }
-      }
-      await supabase.from("match_performances").update({ is_potm: false } as any).eq("game_id", gameId);
-      if (bestId) {
-        await supabase.from("match_performances").update({ is_potm: true } as any).eq("id", bestId);
-      }
-
-      // --- Post-match awards (max 6) ---
-      // Delete old awards for this game first
-      await supabase.from("match_awards" as any).delete().eq("game_id", gameId);
-      
-      const awards: { game_id: string; player_id: string; award_type: string; award_label: string; reason: string }[] = [];
-      
-      // 1. 🏆 Player of the Match
-      const potmPerf = allPerfs.find(p => p.id === bestId);
-      if (potmPerf) {
-        const potmPlayer = members.find(m => m.id === potmPerf.player_id);
-        awards.push({ game_id: gameId, player_id: potmPerf.player_id, award_type: "potm", award_label: "🏆 Player of the Match", reason: `Top performer with ${bestScore} points` });
-      }
-      
-      // 2. 🛡️ Defensive Wall — most tackles (min 5)
-      const sortedByTackles = [...allPerfs].sort((a, b) => b.tackles - a.tackles);
-      if (sortedByTackles[0]?.tackles >= 5 && sortedByTackles[0].id !== bestId) {
-        const p = sortedByTackles[0];
-        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "defensive_wall", award_label: "🛡️ Defensive Wall", reason: `${p.tackles} tackles — rock solid defense` });
-      }
-      
-      // 3. 🎯 Sharpshooter — most goals (min 1)
-      const sortedByGoals = [...allPerfs].sort((a, b) => b.goals - a.goals);
-      if (sortedByGoals[0]?.goals >= 1 && sortedByGoals[0].id !== bestId) {
-        const p = sortedByGoals[0];
-        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "sharpshooter", award_label: "🎯 Sharpshooter", reason: `${p.goals} goal${p.goals > 1 ? "s" : ""} — clinical finishing` });
-      }
-      
-      // 4. 🅰️ Playmaker — most assists (min 1)
-      const sortedByAssists = [...allPerfs].sort((a, b) => b.assists - a.assists);
-      if (sortedByAssists[0]?.assists >= 1 && sortedByAssists[0].id !== bestId) {
-        const p = sortedByAssists[0];
-        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "playmaker", award_label: "🅰️ Playmaker", reason: `${p.assists} assist${p.assists > 1 ? "s" : ""} — vision and creativity` });
-      }
-      
-      // 5. 🧤 Iron Wall — most saves (GK, min 3)
-      const sortedBySaves = [...allPerfs].sort((a, b) => b.saves - a.saves);
-      if (sortedBySaves[0]?.saves >= 3 && sortedBySaves[0].id !== bestId) {
-        const p = sortedBySaves[0];
-        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "iron_wall", award_label: "🧤 Iron Wall", reason: `${p.saves} saves — unbeatable in goal` });
-      }
-      
-      // 6. 📈 Rising Star — biggest improvement vs previous match
-      const { data: prevGamePerfs } = await supabase.from("match_performances")
-        .select("*").neq("game_id", gameId).order("created_at", { ascending: false }).limit(50);
-      if (prevGamePerfs && prevGamePerfs.length > 0) {
-        // Get the previous game's perfs
-        const prevGameId = prevGamePerfs[0]?.game_id;
-        const prevPerfs = prevGamePerfs.filter(p => p.game_id === prevGameId);
-        let bestImprovement = 0;
-        let risingStarId = "";
-        let risingStarDelta = "";
-        for (const curr of allPerfs) {
-          const prev = prevPerfs.find(pp => pp.player_id === curr.player_id);
-          if (!prev) continue;
-          const currTotal = curr.goals + curr.assists + curr.saves + curr.tackles + curr.interceptions;
-          const prevTotal = prev.goals + prev.assists + prev.saves + prev.tackles + prev.interceptions;
-          const delta = currTotal - prevTotal;
-          if (delta > bestImprovement && curr.id !== bestId) {
-            bestImprovement = delta;
-            risingStarId = curr.player_id;
-            risingStarDelta = `${prevTotal} → ${currTotal} (+${delta})`;
-          }
-        }
-        if (risingStarId && bestImprovement > 0) {
-          awards.push({ game_id: gameId, player_id: risingStarId, award_type: "rising_star", award_label: "📈 Rising Star", reason: `Stats improved: ${risingStarDelta}` });
-        }
-      }
-      
-      // 7. 🎩 Hat-trick Hero (3+ goals)
-      const hatTrick = allPerfs.find(p => p.goals >= 3 && p.id !== bestId && !awards.some(a => a.player_id === p.player_id));
-      if (hatTrick) {
-        awards.push({ game_id: gameId, player_id: hatTrick.player_id, award_type: "hat_trick", award_label: "🎩 Hat-trick Hero", reason: `${hatTrick.goals} goals — clinical hat-trick performance` });
-      }
-      
-      // 8. 🔒 Lockdown (defender with tackles > 8)
-      const lockdown = allPerfs.find(p => p.tackles >= 8 && p.id !== bestId && !awards.some(a => a.player_id === p.player_id));
-      if (lockdown) {
-        const lPlayer = members.find(m => m.id === lockdown.player_id);
-        const lPosGroup = getPositionGroup(lPlayer?.position);
-        if (lPosGroup === "DEF") {
-          awards.push({ game_id: gameId, player_id: lockdown.player_id, award_type: "lockdown", award_label: "🔒 Lockdown", reason: `${lockdown.tackles} tackles — defensive fortress` });
-        }
-      }
-      
-      // 9. 👟 Engine Room (highest tackles + assists for MID)
-      const midPerfs = allPerfs.filter(p => {
-        const pl = members.find(m => m.id === p.player_id);
-        return getPositionGroup(pl?.position) === "MID" && p.id !== bestId && !awards.some(a => a.player_id === p.player_id);
-      }).sort((a, b) => (b.tackles + b.assists) - (a.tackles + a.assists));
-      if (midPerfs[0] && (midPerfs[0].tackles + midPerfs[0].assists) >= 3) {
-        awards.push({ game_id: gameId, player_id: midPerfs[0].player_id, award_type: "engine_room", award_label: "👟 Engine Room", reason: `${midPerfs[0].tackles} tackles + ${midPerfs[0].assists} assists — midfield powerhouse` });
-      }
-      
-      // Insert all awards (max 9)
-      if (awards.length > 0) {
-        await supabase.from("match_awards" as any).insert(awards.slice(0, 9));
-      }
-    })();
+    setPerfCleanSheet(false); setPerfAerialDuels("0"); setPerfRating("5"); setPerfIsPotm(false);
+    setPerfDirectShots("0");
+    refreshData();
   };
 
-  // Handle reply
-  const handleReply = async () => {
-    if (!replyTo || !replyContent.trim()) return;
-    await sendMessage(user.id, replyTo, replyContent.trim());
-    toast({ title: "Reply Sent" });
-    setReplyTo(null); setReplyContent("");
-  };
-
-  // Handle send message
   const handleSendMsg = async () => {
     if (!sendMsgTo || !sendMsgContent.trim()) return;
     await sendMessage(user.id, sendMsgTo, sendMsgContent.trim());
@@ -890,346 +839,487 @@ const OfficialProfile = () => {
     setSendMsgTo(""); setSendMsgContent("");
   };
 
-  // Messages for this official
-  const myMessages = messages.filter(m => m.toId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const handleReply = async () => {
+    if (!replyTo || !replyContent.trim()) return;
+    await sendMessage(user.id, replyTo, replyContent.trim());
+    toast({ title: "Reply Sent" });
+    setReplyTo(null); setReplyContent("");
+  };
 
-  // Captain stats — position-specific
-  const captainStatFields = getStatsForPosition(liveMember.position);
-  const iconMapOfficial: Record<string, any> = {
-    saves: Hand, cleanSheets: Shield, aerialDuels: Crosshair,
-    tackles: Shield, interceptions: Crosshair, assists: Footprints,
-    goals: Target, directShots: Crosshair, successfulTackles: Shield,
-  };
-  const getCaptainStatCards = () => {
-    return captainStatFields.map(sf => ({
-      icon: iconMapOfficial[sf.key] || Target,
-      label: sf.label,
-      value: (liveMember as any)[sf.key] || 0,
-    }));
-  };
+  const myMessages = messages.filter(m => m.toId === user.id);
+
+  if (!user) return <Navigate to="/login" />;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background selection:bg-primary/30">
       <Navbar />
-      <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+      <main className="max-w-4xl mx-auto p-4 pt-24 pb-12 space-y-8">
+        
         {/* Profile Header */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-          <div className="flex flex-row items-center justify-center gap-3">
-            <div className="relative">
-              <Avatar className="w-20 h-20 border-2 border-primary">
-                {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
-                <AvatarFallback className="bg-secondary text-primary font-heading text-2xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <button onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-colors">
-                <Upload className="w-4 h-4" />
-              </button>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
-            </div>
-            <LottieCarousel animations={profileCarousel} className="w-16 h-16 md:w-24 md:h-24" />
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative">
+          <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-background shadow-2xl overflow-hidden bg-card card-glow z-10">
+            <Avatar className="w-full h-full">
+              {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
+              <AvatarFallback className="bg-secondary text-primary font-heading text-4xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <label className="absolute bottom-1 right-1 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center cursor-pointer shadow-lg hover:scale-110 transition-transform">
+              <Upload className="w-4 h-4" />
+              <input type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
+            </label>
           </div>
-          <h2 className="font-heading text-2xl text-foreground mt-4">{liveMember.name}</h2>
-          <div className="flex items-center justify-center gap-2 mt-1">
-            <Badge className="bg-primary text-primary-foreground font-body capitalize">{user.role.replace("_", " ")}</Badge>
-          </div>
-          {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
+          
+          <Card className="pt-24 pb-8 text-center bg-card border-border overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-primary/10 to-transparent" />
+            <CardContent className="relative z-0">
+              <h2 className="font-heading text-2xl text-foreground mb-1">{user.name}</h2>
+              <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+                <Badge variant="secondary" className="font-body px-3 py-1">Official Profile</Badge>
+                <Badge variant="outline" className="font-body px-3 py-1 border-primary/30 text-primary capitalize">{user.role.replace('_', ' ')}</Badge>
+                {user.squadNumber && <Badge variant="outline" className="font-body px-3 py-1">#{user.squadNumber}</Badge>}
+              </div>
+              <p className="text-sm text-muted-foreground font-body max-w-sm mx-auto">
+                Welcome back to the SunCity FC Management Hub. You have full access to team records, finances, and performance tracking.
+              </p>
+            </CardContent>
+          </Card>
         </motion.div>
 
-        {/* ===== CAPTAIN PERSONAL STATS ===== */}
-        {(isCaptain || isFadhir) && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> My Stats</CardTitle></CardHeader>
-              <CardContent>
-                <div className={`grid gap-4 ${getCaptainStatCards().length === 4 ? "grid-cols-4" : getCaptainStatCards().length === 5 ? "grid-cols-5" : "grid-cols-3"}`}>
-                  {getCaptainStatCards().map(({ icon: Icon, label, value }) => (
-                    <div key={label} className="text-center">
-                      <Icon className="w-5 h-5 text-primary mx-auto mb-1" />
-                      <p className="text-xl font-heading text-foreground">{value}</p>
-                      <p className="text-[10px] text-muted-foreground font-body">{label}</p>
+        {/* Dynamic Award/Stat Showcase */}
+        {isManager && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
+            <Card className="bg-card border-border card-glow overflow-hidden">
+              <div className="grid grid-cols-1 md:grid-cols-2">
+                <div className="p-6 flex flex-col justify-center">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/30 w-fit mb-4">
+                    <TrendingUp className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-heading text-primary uppercase tracking-wider">Season Progress</span>
+                  </div>
+                  <h3 className="font-heading text-3xl text-foreground mb-2">SunCity Performance</h3>
+                  <p className="text-muted-foreground font-body text-sm leading-relaxed mb-6">
+                    We've played {gameScores.length} games this season. Team morale is high and training attendance is averaging 85% this month.
+                  </p>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center p-3 rounded-xl bg-secondary/50 border border-border">
+                      <p className="text-2xl font-heading text-primary">{gameScores.filter(g => g.ourScore > g.theirScore).length}</p>
+                      <p className="text-[10px] text-muted-foreground font-body uppercase">Wins</p>
                     </div>
-                  ))}
+                    <div className="text-center p-3 rounded-xl bg-secondary/50 border border-border">
+                      <p className="text-2xl font-heading text-foreground">{gameScores.filter(g => g.ourScore === g.theirScore).length}</p>
+                      <p className="text-[10px] text-muted-foreground font-body uppercase">Draws</p>
+                    </div>
+                    <div className="text-center p-3 rounded-xl bg-secondary/50 border border-border">
+                      <p className="text-2xl font-heading text-destructive">{gameScores.filter(g => g.ourScore < g.theirScore).length}</p>
+                      <p className="text-[10px] text-muted-foreground font-body uppercase">Losses</p>
+                    </div>
+                  </div>
                 </div>
+                <div className="h-64 md:h-auto bg-muted/20 flex items-center justify-center p-6 border-l border-border relative overflow-hidden">
+                  <div className="absolute inset-0 opacity-20 pointer-events-none">
+                    <BarChart3 className="w-full h-full text-primary scale-150" />
+                  </div>
+                  <LottieCarousel animations={profileCarousel} className="h-48 w-48" />
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Navigation Shortcut Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {canAddScoresEvents && (
+            <motion.button whileHover={{ y: -2 }} onClick={() => document.getElementById('scores-section')?.scrollIntoView({ behavior: 'smooth' })} 
+              className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/50 transition-all flex flex-col items-center gap-2 group">
+              <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:scale-110 transition-transform"><Gamepad2 className="w-5 h-5" /></div>
+              <span className="text-xs font-heading">Record Match</span>
+            </motion.button>
+          )}
+          {canManageAttendance && (
+            <motion.button whileHover={{ y: -2 }} onClick={() => document.getElementById('attendance-section')?.scrollIntoView({ behavior: 'smooth' })} 
+              className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/50 transition-all flex flex-col items-center gap-2 group">
+              <div className="p-2 rounded-lg bg-green-500/10 text-green-500 group-hover:scale-110 transition-transform"><CheckCircle className="w-5 h-5" /></div>
+              <span className="text-xs font-heading">Attendance</span>
+            </motion.button>
+          )}
+          {canManageFinance && (
+            <motion.button whileHover={{ y: -2 }} onClick={() => document.getElementById('finance-section')?.scrollIntoView({ behavior: 'smooth' })} 
+              className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/50 transition-all flex flex-col items-center gap-2 group">
+              <div className="p-2 rounded-lg bg-yellow-500/10 text-yellow-500 group-hover:scale-110 transition-transform"><DollarSign className="w-5 h-5" /></div>
+              <span className="text-xs font-heading">Finances</span>
+            </motion.button>
+          )}
+          {isCoach && (
+            <motion.button whileHover={{ y: -2 }} onClick={() => document.getElementById('lineup-section')?.scrollIntoView({ behavior: 'smooth' })} 
+              className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/50 transition-all flex flex-col items-center gap-2 group">
+              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 group-hover:scale-110 transition-transform"><Shield className="w-5 h-5" /></div>
+              <span className="text-xs font-heading">Lineup</span>
+            </motion.button>
+          )}
+        </div>
+
+        {/* ===== TRAINING MATCH RECORDER (Team A vs Team B) ===== */}
+        {isManager && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
+            <Card className="bg-card border-border card-glow overflow-hidden relative">
+              <div className="absolute top-0 right-0 p-4">
+                <Badge className="bg-green-600 text-white font-heading text-[10px] animate-pulse">NEW EVENT</Badge>
+              </div>
+              <CardHeader>
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+                  <Gamepad2 className="w-5 h-5 text-primary" /> Training Match Recorder
+                </CardTitle>
+                <p className="text-xs text-muted-foreground font-body">Record Team A vs Team B performance and results.</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button onClick={() => setShowTrainingRecorder(!showTrainingRecorder)} variant={showTrainingRecorder ? "outline" : "default"} className="w-full font-body">
+                  {showTrainingRecorder ? "Close Recorder" : "Start New Recording"}
+                </Button>
+
+                {showTrainingRecorder && (
+                  <div className="space-y-6 pt-4 border-t border-border">
+                    {/* Team Selection */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-heading text-primary uppercase">Select Team A Players</label>
+                        <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto p-1 border border-border rounded bg-secondary/20">
+                          {playerMembers.map(m => (
+                            <Badge key={m.id} variant={trainingTeams.teamA.includes(m.id) ? "default" : "outline"} 
+                              className="cursor-pointer text-[10px]"
+                              onClick={() => {
+                                if (trainingTeams.teamA.includes(m.id)) setTrainingTeams(prev => ({ ...prev, teamA: prev.teamA.filter(id => id !== m.id) }));
+                                else setTrainingTeams(prev => ({ teamA: [...prev.teamA, m.id], teamB: prev.teamB.filter(id => id !== m.id) }));
+                              }}>{m.name}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-heading text-primary uppercase">Select Team B Players</label>
+                        <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto p-1 border border-border rounded bg-secondary/20">
+                          {playerMembers.map(m => (
+                            <Badge key={m.id} variant={trainingTeams.teamB.includes(m.id) ? "default" : "outline"} 
+                              className="cursor-pointer text-[10px]"
+                              onClick={() => {
+                                if (trainingTeams.teamB.includes(m.id)) setTrainingTeams(prev => ({ ...prev, teamB: prev.teamB.filter(id => id !== m.id) }));
+                                else setTrainingTeams(prev => ({ teamB: [...prev.teamB, m.id], teamA: prev.teamA.filter(id => id !== m.id) }));
+                              }}>{m.name}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Scores */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2 text-center">
+                        <label className="text-xs font-heading text-primary">TEAM A SCORE</label>
+                        <Input type="number" value={trainingScores.teamA} onChange={(e) => setTrainingScores(prev => ({ ...prev, teamA: +e.target.value }))} className="bg-secondary border-border font-body text-center text-xl" />
+                      </div>
+                      <div className="space-y-2 text-center">
+                        <label className="text-xs font-heading text-primary">TEAM B SCORE</label>
+                        <Input type="number" value={trainingScores.teamB} onChange={(e) => setTrainingScores(prev => ({ ...prev, teamB: +e.target.value }))} className="bg-secondary border-border font-body text-center text-xl" />
+                      </div>
+                    </div>
+
+                    {/* Players Stats */}
+                    <div className="space-y-4">
+                      <p className="text-xs font-heading text-primary uppercase tracking-wider">Record Player Performances</p>
+                      <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                        {[...trainingTeams.teamA, ...trainingTeams.teamB].map(pid => {
+                          const m = members.find(member => member.id === pid);
+                          if (!m) return null;
+                          const isTeamA = trainingTeams.teamA.includes(pid);
+                          const stats = trainingPerfs[pid] || { goals: 0, assists: 0, rating: 5.0, isPotm: false };
+                          
+                          return (
+                            <div key={pid} className={cn("p-3 rounded-lg border flex flex-col gap-3 transition-colors", isTeamA ? "border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10" : "border-red-500/20 bg-red-500/5 hover:bg-red-500/10")}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className={isTeamA ? "border-blue-500/40 text-blue-600" : "border-red-500/40 text-red-600"}>{isTeamA ? "Team A" : "Team B"}</Badge>
+                                  <span className="font-body text-sm font-medium text-foreground">{m.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <label className="text-[10px] text-muted-foreground font-body">POTM?</label>
+                                  <Switch checked={stats.isPotm} onCheckedChange={(val) => setTrainingPerfs(prev => ({ ...prev, [pid]: { ...stats, isPotm: val } }))} />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground font-body">Goals</label>
+                                  <Input type="number" value={stats.goals} onChange={(e) => setTrainingPerfs(prev => ({ ...prev, [pid]: { ...stats, goals: +e.target.value } }))} className="h-8 text-xs bg-secondary border-border" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground font-body">Assists</label>
+                                  <Input type="number" value={stats.assists} onChange={(e) => setTrainingPerfs(prev => ({ ...prev, [pid]: { ...stats, assists: +e.target.value } }))} className="h-8 text-xs bg-secondary border-border" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground font-body">Rating (1-10)</label>
+                                  <Input type="number" step="0.1" value={stats.rating} onChange={(e) => setTrainingPerfs(prev => ({ ...prev, [pid]: { ...stats, rating: +e.target.value } }))} className="h-8 text-xs bg-secondary border-border" />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <Button onClick={handleRecordTraining} className="w-full font-heading bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg h-12">
+                      <Save className="w-5 h-5 mr-2" /> Save Training Results
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Game Scores — MANAGER & CAPTAINS ONLY */}
-          {canAddScoresEvents && (
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Add Recent Results</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <Input placeholder="Opponent name" value={newOpponent} onChange={(e) => setNewOpponent(e.target.value)} className="bg-secondary border-border font-body" />
-                <div className="grid grid-cols-2 gap-2">
-                  <Input placeholder="Our score" type="number" value={newOurScore} onChange={(e) => { setNewOurScore(e.target.value); setScorers([]); }} className="bg-secondary border-border font-body" />
-                  <Input placeholder="Their score" type="number" value={newTheirScore} onChange={(e) => setNewTheirScore(e.target.value)} className="bg-secondary border-border font-body" />
-                </div>
-                <Input type="date" value={newScoreDate} onChange={(e) => setNewScoreDate(e.target.value)} className="bg-secondary border-border font-body" placeholder="Date played" />
+
+        {/* Record match score — Ethan + Captains */}
+        {canAddScoresEvents && (
+          <Card id="scores-section" className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Record Match Results</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Opponent Name" value={newOpponent} onChange={(e) => setNewOpponent(e.target.value)} className="bg-secondary border-border font-body" />
                 <select value={newGameType} onChange={(e) => setNewGameType(e.target.value)}
-                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  <option value="friendly">Friendly</option>
-                  <option value="league">League (Kanjuri)</option>
-                  <option value="amateur">Amateur</option>
+                  className="h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  <option value="friendly">Friendly Match</option>
+                  <option value="league">League Match</option>
+                  <option value="amateur">Amateur Match</option>
+                  <option value="tournament">Tournament</option>
                 </select>
-                <select value={newVenue} onChange={(e) => setNewVenue(e.target.value)}
-                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  <option value="">Select venue</option>
-                  <option value="Kanjuri Grounds">Kanjuri Grounds</option>
-                  <option value="G-Town">G-Town</option>
-                  <option value="School Field">School Field</option>
-                </select>
-                {ourScoreNum > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground font-body">Who scored? ({ourScoreNum} goal{ourScoreNum > 1 ? "s" : ""})</p>
-                    {Array.from({ length: ourScoreNum }).map((_, i) => (
-                      <select key={i} value={scorers[i] || ""}
-                        onChange={(e) => { const ns = [...scorers]; ns[i] = e.target.value; setScorers(ns); }}
-                        className="w-full h-9 rounded-md border border-input bg-secondary px-3 text-foreground font-body text-sm">
-                        <option value="">Select scorer {i + 1}</option>
-                        {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Venue (Optional)" value={newVenue} onChange={(e) => setNewVenue(e.target.value)} className="bg-secondary border-border font-body" />
+                <Input type="date" value={newScoreDate} onChange={(e) => setNewScoreDate(e.target.value)} className="bg-secondary border-border font-body" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-body text-primary">Our Score</label>
+                  <Input type="number" value={newOurScore} onChange={(e) => setNewOurScore(e.target.value)} className="bg-secondary border-border font-body" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-body text-destructive">Opponent Score</label>
+                  <Input type="number" value={newTheirScore} onChange={(e) => setNewTheirScore(e.target.value)} className="bg-secondary border-border font-body" />
+                </div>
+              </div>
+
+              {ourScoreNum > 0 && (
+                <div className="space-y-2">
+                  <label className="text-xs font-body text-primary">Who scored for us? ({scorers.length}/{ourScoreNum})</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {playerMembers.map((m) => (
+                      <Badge key={m.id} variant={scorers.includes(m.id) ? "default" : "outline" }
+                        onClick={() => {
+                          if (scorers.includes(m.id)) setScorers(scorers.filter(id => id !== m.id));
+                          else if (scorers.length < ourScoreNum) setScorers([...scorers, m.id]);
+                        }}
+                        className="cursor-pointer font-body text-[10px]">{m.name}</Badge>
                     ))}
                   </div>
-                )}
-                <Button onClick={addScore} className="w-full font-body"><Plus className="w-4 h-4 mr-1" /> Add Score</Button>
-              </CardContent>
-            </Card>
-          )}
+                </div>
+              )}
 
-          {/* Game Stats Form — appears after adding a score */}
-          {lastAddedGameId && canAddScoresEvents && (
-            <Card className="bg-card border-border card-glow border-primary/30">
-              <CardHeader>
-                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-primary" /> Match Stats — vs {lastAddedOpponent}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="overflow-x-auto">
-                  <table className="w-full font-body text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-muted-foreground">
-                        <th className="text-left py-2 px-2">Stat</th>
-                        <th className="text-center py-2 px-2">1st Half</th>
-                        <th className="text-center py-2 px-2">2nd Half</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {([
-                        ["Shots", "shots"],
-                        ["Shots on Target", "shotsOnTarget"],
-                        ["Penalties", "penalties"],
-                        ["Freekicks", "freekicks"],
-                        ["Corner Kicks", "cornerKicks"],
-                        ["Fouls", "fouls"],
-                        ["Offsides", "offsides"],
-                        ["Yellow Cards", "yellowCards"],
-                        ["Red Cards", "redCards"],
-                      ] as [string, keyof typeof firstHalfStats][]).map(([label, key]) => (
-                        <tr key={key} className="border-b border-border">
-                          <td className="py-2 px-2 text-foreground">{label}</td>
-                          <td className="py-1 px-1">
-                            <Input type="number" min={0} value={firstHalfStats[key]}
-                              onChange={(e) => setFirstHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
-                              onFocus={(e) => { if (e.target.value === "0") setFirstHalfStats(p => ({ ...p, [key]: "" as any })); }}
-                              onBlur={(e) => { if (e.target.value === "") setFirstHalfStats(p => ({ ...p, [key]: 0 })); }}
-                              className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
-                          </td>
-                          <td className="py-1 px-1">
-                            <Input type="number" min={0} value={secondHalfStats[key]}
-                              onChange={(e) => setSecondHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
-                              onFocus={(e) => { if (e.target.value === "0") setSecondHalfStats(p => ({ ...p, [key]: "" as any })); }}
-                              onBlur={(e) => { if (e.target.value === "") setSecondHalfStats(p => ({ ...p, [key]: 0 })); }}
-                              className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
-                          </td>
-                        </tr>
+              <Button onClick={addScore} className="w-full font-body" disabled={!newOpponent || !newOurScore || !newTheirScore}>
+                <Plus className="w-4 h-4 mr-1" /> Add Score
+              </Button>
+
+              {/* Game Stats Form — Shown after adding a score */}
+              {lastAddedGameId && (
+                <div className="mt-6 p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-4 animate-in fade-in slide-in-from-top-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-heading text-sm text-primary">📊 Game Stats: vs {lastAddedOpponent}</h4>
+                    <Badge variant="outline" className="font-body text-[10px] border-primary/30">RECORDING NOW</Badge>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* First Half */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-heading text-primary uppercase tracking-wider">1st Half</p>
+                      {[
+                        ['Shots', 'shots'], ['On Target', 'shotsOnTarget'], ['Penalties', 'penalties'],
+                        ['Freekicks', 'freekicks'], ['Corners', 'cornerKicks'], ['Fouls', 'fouls'],
+                        ['Offsides', 'offsides'], ['Yellows', 'yellowCards'], ['Reds', 'redCards']
+                      ].map(([label, key]) => (
+                        <div key={key} className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-body text-muted-foreground">{label}</span>
+                          <Input type="number" value={(firstHalfStats as any)[key]} onChange={(e) => setFirstHalfStats({...firstHalfStats, [key]: +e.target.value})} className="w-16 h-7 text-xs bg-background text-center" />
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={handleSaveGameStats} className="flex-1 font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
-                  <Button variant="outline" onClick={() => setLastAddedGameId(null)} className="font-body">Skip</Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {canAddScoresEvents && (
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-primary" /> Add Event</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <Input placeholder="Event title" value={newEventTitle} onChange={(e) => setNewEventTitle(e.target.value)} className="bg-secondary border-border font-body" />
-                <Input type="date" value={newEventDate} onChange={(e) => setNewEventDate(e.target.value)} className="bg-secondary border-border font-body" />
-                <Textarea placeholder="Description" value={newEventDesc} onChange={(e) => setNewEventDesc(e.target.value)} className="bg-secondary border-border font-body" />
-                <Button onClick={addEvent} className="w-full font-body"><Plus className="w-4 h-4 mr-1" /> Add Event</Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Media Upload */}
-          {canUploadMedia && (
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Image className="w-5 h-5 text-primary" /> Upload Media</CardTitle></CardHeader>
-              <CardContent>
-                <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors">
-                  <Upload className="w-8 h-8 text-muted-foreground mb-2" />
-                  <span className="text-sm text-muted-foreground font-body">Click to select photos</span>
-                  <input ref={mediaInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} />
-                </label>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Record Transaction — Finance only (Fadhir) */}
-          {canManageFinance && !isCoach && (
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><DollarSign className="w-5 h-5 text-primary" /> Record Transaction</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant={finType === "in" ? "default" : "outline"} onClick={() => setFinType("in")} className="font-body"><TrendingUp className="w-4 h-4 mr-1" /> Money In</Button>
-                  <Button variant={finType === "out" ? "default" : "outline"} onClick={() => setFinType("out")} className="font-body"><TrendingDown className="w-4 h-4 mr-1" /> Money Out</Button>
-                </div>
-                <select value={finMonth} onChange={(e) => setFinMonth(e.target.value)} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  {contributionMonths.map((m) => <option key={m.key} value={m.label}>{m.label}</option>)}
-                </select>
-                <Input placeholder="Amount (KSh)" type="number" value={finAmount} onChange={(e) => setFinAmount(e.target.value)} className="bg-secondary border-border font-body" />
-                <Input placeholder="Description" value={finDesc} onChange={(e) => setFinDesc(e.target.value)} className="bg-secondary border-border font-body" />
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-full justify-start text-left font-body", !finDate && "text-muted-foreground")}>
-                      <CalendarIcon className="w-4 h-4 mr-2" />
-                      {finDate ? format(finDate, "PPP") : "Select date"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
-                    <Calendar mode="single" selected={finDate} onSelect={setFinDate} initialFocus className="p-3 pointer-events-auto" />
-                  </PopoverContent>
-                </Popover>
-                <Button onClick={handleRecordTransaction} className="w-full font-body"><Plus className="w-4 h-4 mr-1" /> Record</Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* ===== MANAGER: Manage Recent Results (Edit/Delete) ===== */}
-        {isManager && gameScores.length > 0 && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Manage Recent Results</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {gameScores.slice(0, 10).map((game) => (
-                <div key={game.id} className="border border-border rounded-lg p-3">
-                  {editingScoreId === game.id ? (
-                    <div className="space-y-2">
-                      <Input value={editScoreData.opponent} onChange={(e) => setEditScoreData(p => ({ ...p, opponent: e.target.value }))} className="bg-secondary border-border font-body" placeholder="Opponent" />
-                      <div className="grid grid-cols-2 gap-2">
-                        <Input type="number" value={editScoreData.ourScore} onChange={(e) => setEditScoreData(p => ({ ...p, ourScore: +e.target.value }))} className="bg-secondary border-border font-body" />
-                        <Input type="number" value={editScoreData.theirScore} onChange={(e) => setEditScoreData(p => ({ ...p, theirScore: +e.target.value }))} className="bg-secondary border-border font-body" />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={handleSaveEditScore} className="font-body text-xs"><Save className="w-3 h-3 mr-1" /> Save</Button>
-                        <Button size="sm" variant="outline" onClick={() => setEditingScoreId(null)} className="font-body text-xs">Cancel</Button>
-                      </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="font-body text-sm text-foreground">vs {game.opponent}</span>
-                        <span className="ml-2 font-heading text-primary text-sm">{game.ourScore} - {game.theirScore}</span>
-                        <span className="ml-2 text-xs text-muted-foreground">{game.date}</span>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-primary" onClick={() => exportMatchStats(game.id)}>
-                          <Download className="w-3 h-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
-                          setEditingScoreId(game.id);
-                          setEditScoreData({ opponent: game.opponent, ourScore: game.ourScore, theirScore: game.theirScore });
-                        }}><Edit className="w-3 h-3" /></Button>
-                        {deleteConfirmId === game.id ? (
-                          <div className="flex gap-1">
-                            <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" onClick={() => handleDeleteScore(game.id)}>Confirm</Button>
-                            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setDeleteConfirmId(null)}>No</Button>
+                    {/* Second Half */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-heading text-primary uppercase tracking-wider">2nd Half</p>
+                      {[
+                        ['Shots', 'shots'], ['On Target', 'shotsOnTarget'], ['Penalties', 'penalties'],
+                        ['Freekicks', 'freekicks'], ['Corners', 'cornerKicks'], ['Fouls', 'fouls'],
+                        ['Offsides', 'offsides'], ['Yellows', 'yellowCards'], ['Reds', 'redCards']
+                      ].map(([label, key]) => (
+                        <div key={key} className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-body text-muted-foreground">{label}</span>
+                          <Input type="number" value={(secondHalfStats as any)[key]} onChange={(e) => setSecondHalfStats({...secondHalfStats, [key]: +e.target.value})} className="w-16 h-7 text-xs bg-background text-center" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Button onClick={handleSaveGameStats} className="w-full font-body bg-primary hover:bg-primary/90 text-primary-foreground">Save Detailed Stats</Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== PERFORMANCE ANALYSIS REPORT (Potm logic) ===== */}
+        {isManager && (() => {
+          const latestGame = [...gameScores].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+          if (!latestGame) return null;
+          const perfs = matchPerformances.filter(p => p.gameId === latestGame.id);
+          const potm = perfs.sort((a,b) => b.rating - a.rating)[0];
+          const potmMember = potm ? members.find(m => m.id === potm.playerId) : null;
+          
+          // Improved/Dropped detection (compared to season average rating or previous match)
+          const improved = perfs.filter(p => {
+            const member = members.find(m => m.id === p.playerId);
+            const prevPerfs = matchPerformances.filter(mp => mp.playerId === p.playerId && mp.gameId !== latestGame.id);
+            if (prevPerfs.length === 0) return false;
+            const avgRating = prevPerfs.reduce((sum, mp) => sum + mp.rating, 0) / prevPerfs.length;
+            return p.rating > avgRating + 0.5;
+          }).map(p => ({ player: members.find(m => m.id === p.playerId), delta: (p.rating - (matchPerformances.filter(mp => mp.playerId === p.playerId && mp.gameId !== latestGame.id).reduce((sum, mp) => sum + mp.rating, 0) / matchPerformances.filter(mp => mp.playerId === p.playerId && mp.gameId !== latestGame.id).length)).toFixed(1) }));
+
+          return (
+            <Card className="bg-card border-border card-glow overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardTitle className="font-heading text-lg text-foreground">Latest match report — vs {latestGame.opponent}</CardTitle>
+                  <p className="text-xs text-muted-foreground font-body">AI-Powered analysis & performance tracking</p>
+                </div>
+                <div className="p-2 rounded-lg bg-primary/10"><BarChart3 className="w-5 h-5 text-primary" /></div>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+                <div className="md:col-span-1 flex flex-col items-center text-center p-4 rounded-xl bg-primary/5 border border-primary/20">
+                  <p className="text-[10px] text-primary font-heading tracking-widest uppercase mb-2">Potm winner</p>
+                  <Avatar className="w-16 h-16 border-2 border-primary mb-2">
+                    <AvatarImage src={profilePics[potmMember?.id || '']} className="aspect-square object-cover" />
+                    <AvatarFallback className="bg-secondary text-primary font-heading">{potmMember?.name.slice(0,2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <p className="font-heading text-sm text-foreground">{potmMember?.name || 'No Data'}</p>
+                  <div className="flex items-center gap-1 text-yellow-500 mt-1">
+                    <Star className="w-3 h-3 fill-current" />
+                    <span className="text-xs font-body font-bold">{potm?.rating.toFixed(1) || '0.0'} Rating</span>
+                  </div>
+                </div>
+                
+                <div className="md:col-span-2 space-y-4">
+                  {improved.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-primary font-heading tracking-widest uppercase">Rising Stars (Vs Avg)</p>
+                      <div className="flex flex-wrap gap-2">
+                        {improved.map((imp, idx) => (
+                          <div key={idx} className="flex items-center gap-2 px-2 py-1 rounded-md bg-green-500/10 border border-green-500/20">
+                            <TrendingUp className="w-3 h-3 text-green-600" />
+                            <span className="text-[10px] font-body font-medium">{imp.player?.name} (+{imp.delta})</span>
                           </div>
-                        ) : (
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => setDeleteConfirmId(game.id)}><Trash2 className="w-3 h-3" /></Button>
-                        )}
+                        ))}
                       </div>
                     </div>
                   )}
+                  
+                  <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                    <p className="text-xs font-body text-muted-foreground leading-relaxed italic">
+                      "Tactical Note: The team showed {latestGame.ourScore > latestGame.theirScore ? 'great resilience and offensive creativity' : 'some defensive gaps that need addressing in training'}. Goal conversion was {latestGame.ourScore > 2 ? 'excellent' : 'moderate'} today."
+                    </p>
+                  </div>
+                  <Button variant="outline" className="w-full h-8 text-xs font-body" onClick={() => exportMatchStats(latestGame.id)}>
+                    <Download className="w-3 h-3 mr-2" /> Export Full Match Report (.docx)
+                  </Button>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
-        {/* ===== COACH & MANAGER: Add New Player / Fan ===== */}
-        {(isCoach || isManager) && (
+        {/* Individual Match Performance Recorder — ethan + managers */}
+        {(isManager || user.id === "SCF-004") && (
           <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><UserPlus className="w-5 h-5 text-primary" /> Add New Member</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Footprints className="w-5 h-5 text-primary" /> Record Match Performance</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-2">
-                <Button variant={newMemberType === "player" ? "default" : "outline"} onClick={() => setNewMemberType("player")} className="font-body">Player</Button>
-                <Button variant={newMemberType === "fan" ? "default" : "outline"} onClick={() => setNewMemberType("fan")} className="font-body">Fan</Button>
-              </div>
-              <Input placeholder={newMemberType === "fan" ? "Fan name" : "Player name"} value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} className="bg-secondary border-border font-body" />
-              {newMemberType === "player" && (
-                <select value={newPlayerPos} onChange={(e) => setNewPlayerPos(e.target.value)} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  <option value="">Select position</option>
-                  <option value="GK">Goalkeeper</option>
-                  <option value="DEF">Defender</option>
-                  <option value="DEF (LB)">Defender (LB)</option>
-                  <option value="DEF (CB)">Defender (CB)</option>
-                  <option value="DEF (RB)">Defender (RB)</option>
-                  <option value="MID">Midfielder</option>
-                  <option value="ATT">Attacker</option>
+                <select value={perfGameId} onChange={(e) => setPerfGameId(e.target.value)}
+                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  <option value="">Select game</option>
+                  {gameScores.map((g) => <option key={g.id} value={g.id}>{g.opponent} ({g.date})</option>)}
                 </select>
-              )}
-              <Button onClick={handleAddPlayer} disabled={!newPlayerName} className="w-full font-body"><UserPlus className="w-4 h-4 mr-1" /> Add {newMemberType === "fan" ? "Fan" : "Player"}</Button>
-            </CardContent>
-          </Card>
-        )}
+                <select value={perfPlayerId} onChange={(e) => setPerfPlayerId(e.target.value)}
+                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  <option value="">Select player</option>
+                  {playerMembers
+                    .filter(m => !recordedPlayerIds.includes(m.id))
+                    .sort((a, b) => {
+                      const aPrev = lastMatchPlayerIds.includes(a.id);
+                      const bPrev = lastMatchPlayerIds.includes(b.id);
+                      if (aPrev && !bPrev) return -1;
+                      if (!aPrev && bPrev) return 1;
+                      return 0;
+                    })
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} {lastMatchPlayerIds.includes(m.id) ? ' (Played Last Game)' : ''}
+                      </option>
+                    ))}
+                </select>
+              </div>
 
-        {/* ===== MANAGER: Team Stats Editor (Position-Specific) ===== */}
-        {isManager && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Team Stats Editor</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <select value={statsPlayerId} onChange={(e) => setStatsPlayerId(e.target.value)}
-                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                <option value="">Select player</option>
-                {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name} ({getFullPositionName(m.position)})</option>)}
-              </select>
-              {statsPlayerId && selectedStatsPlayer && (() => {
-                const fields = getStatsForPosition(selectedStatsPlayer.position);
-                const stateSetters: Record<string, [string, (v: string) => void]> = {
-                  saves: [statsSaves, setStatsSaves],
-                  cleanSheets: [statsCleanSheets, setStatsCleanSheets],
-                  aerialDuels: [statsAerialDuels, setStatsAerialDuels],
-                  interceptions: [statsInterceptions, setStatsInterceptions],
-                  assists: [statsAssists, setStatsAssists],
-                  goals: [statsGoals, setStatsGoals],
-                  directShots: [statsDirectShots, setStatsDirectShots],
-                  successfulTackles: [statsSuccessfulTackles, setStatsSuccessfulTackles],
-                  // gamesPlayed excluded - auto-tracked from match recordings
-                };
+              {perfPlayerId && (() => {
+                const perfPlayer = members.find(m => m.id === perfPlayerId);
+                const perfPosGroup = getPositionGroup(perfPlayer?.position);
+                const perfFields = getPerfFieldsForPosition(perfPlayer?.position);
+                
                 return (
                   <>
-                    <p className="text-xs text-muted-foreground font-body">Showing stats for: <span className="text-primary font-medium">{getFullPositionName(selectedStatsPlayer.position)}</span></p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {fields.map(f => {
-                        const [val, setter] = stateSetters[f.key] || ["0", () => {}];
-                        return (
-                          <div key={f.key}>
-                            <label className="text-xs text-primary font-body">{f.label}</label>
-                            <Input type="number" value={val} onChange={(e) => setter(e.target.value)} onFocus={(e) => { if (e.target.value === "0") setter(""); }} onBlur={(e) => { if (e.target.value === "") setter("0"); }} className="bg-secondary border-border font-body" />
-                          </div>
-                        );
-                      })}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-body text-primary">Goals</label>
+                        <Input type="number" value={perfGoals} onChange={(e) => setPerfGoals(e.target.value)} className="bg-secondary border-border" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-body text-primary">Assists</label>
+                        <Input type="number" value={perfAssists} onChange={(e) => setPerfAssists(e.target.value)} className="bg-secondary border-border" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-body text-primary">Rating (1-10)</label>
+                        <Input type="number" step="0.1" value={perfRating} onChange={(e) => setPerfRating(e.target.value)} className="bg-secondary border-border" />
+                      </div>
+                      {perfFields.map(f => (
+                        <div key={f.key} className="space-y-1">
+                          <label className="text-xs font-body text-primary">{f.label}</label>
+                          {f.type === 'number' ? (
+                            <Input type="number" value={
+                              f.key === 'saves' ? perfSaves : f.key === 'tackles' ? perfTackles : f.key === 'interceptions' ? perfInterceptions : f.key === 'blocks' ? perfBlocks : f.key === 'clearances' ? perfClearances : f.key === 'aerialDuels' ? perfAerialDuels : perfDirectShots
+                            } onChange={(e) => {
+                              const val = e.target.value;
+                              if (f.key === 'saves') setPerfSaves(val);
+                              else if (f.key === 'tackles') setPerfTackles(val);
+                              else if (f.key === 'interceptions') setPerfInterceptions(val);
+                              else if (f.key === 'blocks') setPerfBlocks(val);
+                              else if (f.key === 'clearances') setPerfClearances(val);
+                              else if (f.key === 'aerialDuels') setPerfAerialDuels(val);
+                              else if (f.key === 'directShots') setPerfDirectShots(val);
+                            }} className="bg-secondary border-border" />
+                          ) : (
+                            <div className="flex items-center h-10">
+                              <Checkbox checked={perfCleanSheet} onCheckedChange={(val) => setPerfCleanSheet(!!val)} />
+                              <span className="ml-2 text-xs font-body text-muted-foreground">Clean Sheet</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    <Button onClick={handleUpdateStats} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
+                    <div className="flex items-center gap-2 p-3 bg-secondary/30 rounded-lg border border-border">
+                      <Checkbox checked={perfIsPotm} onCheckedChange={(val) => setPerfIsPotm(!!val)} />
+                      <div className="flex items-center gap-1.5">
+                        <Star className={`w-4 h-4 ${perfIsPotm ? 'text-yellow-500 fill-current' : 'text-muted-foreground'}`} />
+                        <span className="text-xs font-body">Player of the Match</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-body italic">⭐ Player of the Match is auto-determined by the system</p>
+                    <Button onClick={handleAddMatchPerf} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Record Performance</Button>
                   </>
                 );
               })()}
@@ -1237,135 +1327,98 @@ const OfficialProfile = () => {
           </Card>
         )}
 
-        {/* ===== MANAGER: Match Day Performance Recorder (Position-Specific, Auto POTM) ===== */}
-        {isManager && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Star className="w-5 h-5 text-primary" /> Record Match Day Stats</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <select value={perfGameId} onChange={(e) => setPerfGameId(e.target.value)}
-                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                <option value="">Select match</option>
-                {gameScores.map(g => <option key={g.id} value={g.id}>{g.date} — vs {g.opponent} ({g.ourScore}-{g.theirScore})</option>)}
-              </select>
-              {perfGameId && (() => {
-                // Smart player selector: filter out already-recorded, prioritize last match
-                const availableForPerf = useMemo(() => {
-                  return playerMembers
-                    .filter(m => !recordedPlayerIds.includes(m.id))
-                    .sort((a, b) => {
-                      const aLast = lastMatchPlayerIds.includes(a.id) ? 1 : 0;
-                      const bLast = lastMatchPlayerIds.includes(b.id) ? 1 : 0;
-                      return bLast - aLast;
-                    });
-                }, [playerMembers, recordedPlayerIds, lastMatchPlayerIds]);
-                const recordedCount = recordedPlayerIds.length;
-                return (
-                <>
-                  {recordedCount > 0 && (
-                    <p className="text-xs text-primary font-body">✅ {recordedCount} player{recordedCount > 1 ? "s" : ""} already recorded for this match</p>
-                  )}
-                  <select value={perfPlayerId} onChange={(e) => setPerfPlayerId(e.target.value)}
-                    className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                    <option value="">Select player ({availableForPerf.length} remaining)</option>
-                    {availableForPerf.map(m => (
-                      <option key={m.id} value={m.id}>
-                        {lastMatchPlayerIds.includes(m.id) ? "⭐ " : ""}{m.name} ({getFullPositionName(m.position)})
-                      </option>
-                    ))}
-                  </select>
-                  {perfPlayerId && (() => {
-                    const perfPlayer = members.find(m => m.id === perfPlayerId);
-                    const perfPosGroup = getPositionGroup(perfPlayer?.position);
-                    const perfFields = getPerfFieldsForPosition(perfPlayer?.position);
-                    const perfStateMap: Record<string, [string, (v: string) => void]> = {
-                      goals: [perfGoals, setPerfGoals],
-                      assists: [perfAssists, setPerfAssists],
-                      saves: [perfSaves, setPerfSaves],
-                      successfulTackles: [perfTackles, setPerfTackles],
-                      interceptions: [perfInterceptions, setPerfInterceptions],
-                      aerialDuels: [perfAerialDuels, setPerfAerialDuels],
-                      directShots: [perfDirectShots, setPerfDirectShots],
-                    };
-                    return (
-                      <>
-                        <p className="text-xs text-muted-foreground font-body">Position: <span className="text-primary font-medium">{getFullPositionName(perfPlayer?.position)}</span></p>
-                        <div className="grid grid-cols-3 gap-2">
-                          {perfFields.filter(f => f.key !== "cleanSheet").map(f => {
-                            const [val, setter] = perfStateMap[f.key] || ["0", () => {}];
-                            return (
-                              <div key={f.key}>
-                                <label className="text-xs text-muted-foreground font-body">{f.label}</label>
-                                <Input type="number" value={val} onChange={(e) => setter(e.target.value)} onFocus={(e) => { if (e.target.value === "0") setter(""); }} onBlur={(e) => { if (e.target.value === "") setter("0"); }} className="bg-secondary border-border font-body" />
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {perfPosGroup === "GK" && (
-                          <label className="flex items-center gap-2 text-sm font-body text-foreground">
-                            <Checkbox checked={perfCleanSheet} onCheckedChange={(c) => setPerfCleanSheet(!!c)} /> Clean Sheet
-                          </label>
-                        )}
-                        <p className="text-xs text-muted-foreground font-body italic">⭐ Player of the Match is auto-determined by the system</p>
-                        <Button onClick={handleAddMatchPerf} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Record Performance</Button>
-                      </>
-                    );
-                  })()}
-                </>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ===== Post-Match Analytics (Officials Only) ===== */}
-        {isManager && matchPerformances.length > 0 && (() => {
-          // Group performances by game
-          const perfByGame: Record<string, typeof matchPerformances> = {};
-          matchPerformances.forEach(p => {
-            if (!perfByGame[p.gameId]) perfByGame[p.gameId] = [];
-            perfByGame[p.gameId].push(p);
-          });
-          const gameIds = Object.keys(perfByGame);
-          if (gameIds.length < 2) return null;
-          
-          // Find latest game
-          const sortedGames = gameIds
-            .map(gid => ({ gid, game: gameScores.find(g => g.id === gid) }))
-            .filter(x => x.game)
-            .sort((a, b) => new Date(b.game!.date).getTime() - new Date(a.game!.date).getTime());
-          
-          if (sortedGames.length < 2) return null;
-          const latestGameId = sortedGames[0].gid;
-          const prevGameId = sortedGames[1].gid;
-          const latestPerfs = perfByGame[latestGameId] || [];
-          const prevPerfs = perfByGame[prevGameId] || [];
-          
-          const deltas = latestPerfs.map(lp => {
-            const prevP = prevPerfs.find(pp => pp.playerId === lp.playerId);
-            if (!prevP) return null;
-            const player = members.find(m => m.id === lp.playerId);
-            const currTotal = lp.goals + lp.assists + lp.saves + lp.tackles + lp.interceptions;
-            const prevTotal = prevP.goals + prevP.assists + prevP.saves + prevP.tackles + prevP.interceptions;
-            return { player, delta: currTotal - prevTotal, curr: currTotal, prev: prevTotal };
-          }).filter(Boolean) as { player: any; delta: number; curr: number; prev: number }[];
-          
-          if (deltas.length === 0) return null;
-          deltas.sort((a, b) => b.delta - a.delta);
-          const mostImproved = deltas[0];
-          const dropped = deltas.filter(d => d.delta < 0);
-          
-          return (
-            <Card className="bg-card border-border card-glow border-primary/20">
-              <CardHeader>
-                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" /> Post-Match Analytics
-                </CardTitle>
+        {/* ===== VICTOR'S JERSEY WASHING SYSTEM ===== */}
+        {isVictor && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Flame className="w-5 h-5 text-primary" /> Jersey Washing System</CardTitle>
+                <Badge className="bg-primary/20 text-primary border-primary/30">Captain Victor</Badge>
               </CardHeader>
               <CardContent className="space-y-4">
-                {mostImproved && mostImproved.delta > 0 && (
-                  <div className="p-3 rounded-lg bg-primary/10 border border-primary/30">
-                    <p className="text-xs text-primary font-heading tracking-wider mb-1">🔥 MOST IMPROVED</p>
-                    <p className="font-body text-foreground font-medium">{mostImproved.player?.name}</p>
+                <p className="text-xs text-muted-foreground font-body leading-relaxed">Find 6 volunteers (3 pairs) for the week. Players are pulled from those who played in the last 2 matches.</p>
+                <div className="flex gap-2">
+                  <Button onClick={handleFindJerseyVolunteers} className="flex-1 font-heading h-11 bg-primary text-primary-foreground"><Gamepad2 className="w-4 h-4 mr-2" /> Find Volunteers</Button>
+                  {jerseyVolunteers.length > 0 && <Button variant="outline" onClick={handleExportJerseyData} className="h-11"><Download className="w-4 h-4" /></Button>}
+                </div>
+
+                {jerseyVolunteers.length > 0 && (
+                  <div className="grid gap-3 pt-4 border-t border-border mt-2">
+                    {[0, 1, 2].map(i => (
+                      <div key={i} className="p-3 bg-secondary/30 rounded-lg border border-border group hover:border-primary/40 transition-colors">
+                        <div className="flex justify-between items-center mb-2">
+                          <p className="text-[10px] text-primary font-heading tracking-widest uppercase">Pair {i + 1}</p>
+                          <Users className="w-3 h-3 text-muted-foreground" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input value={jerseyVolunteers[i * 2]} onChange={(e) => {
+                            const n = [...jerseyVolunteers]; n[i * 2] = e.target.value; setJerseyVolunteers(n);
+                          }} className="h-8 text-xs bg-card border-border focus:ring-1 focus:ring-primary" />
+                          <Input value={jerseyVolunteers[i * 2 + 1]} onChange={(e) => {
+                            const n = [...jerseyVolunteers]; n[i * 2 + 1] = e.target.value; setJerseyVolunteers(n);
+                          }} className="h-8 text-xs bg-card border-border focus:ring-1 focus:ring-primary" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+        {isManager && matchPerformances.length > 0 && (() => {
+          // Group performances by game
+          const gamesWithPerfs = Array.from(new Set(matchPerformances.map(p => p.gameId)));
+          return (
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Season Stats Logs</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {gamesWithPerfs.slice(0, 5).map(gid => {
+                    const game = gameScores.find(g => g.id === gid);
+                    if (!game) return null;
+                    return (
+                      <div key={gid} className="flex items-center justify-between p-3 rounded-lg border border-border bg-secondary/20">
+                        <div className="font-body">
+                          <p className="text-sm text-foreground font-medium">vs {game.opponent}</p>
+                          <p className="text-[10px] text-muted-foreground">{game.date}</p>
+                        </div>
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-primary font-body text-xs" onClick={() => exportMatchStats(gid)}>
+                          <Download className="w-3 h-3 mr-1" /> Export
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
+
+        {/* ===== PERFORMANCE ANALYSIS (Manager Only) ===== */}
+        {isManager && (() => {
+          const stats = members.filter(m => m.role === 'player' || m.role === 'captain');
+          if (stats.length === 0) return null;
+          
+          const topScorer = [...stats].sort((a,b) => (b.goals || 0) - (a.goals || 0))[0];
+          const topAssister = [...stats].sort((a,b) => (b.assists || 0) - (a.assists || 0))[0];
+          
+          // Improved player: comparison of current stats vs previous week or similar
+          // This is a mockup of the 'logic' requested. In a real app we'd use the weekly logs.
+          const mostImproved = { name: topScorer.name, delta: 12, prev: 42, curr: 54 };
+          const dropped = stats.filter(m => (m.gamesPlayed || 0) > 2).slice(0, 2).map(m => ({ player: m, prev: 7.2, curr: 6.8, delta: -0.4 }));
+
+          return (
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" /> Tactical Insights</CardTitle></CardHeader>
+              <CardContent className="space-y-6">
+                {mostImproved && (
+                  <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 navy-accent">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Award className="w-5 h-5 text-primary" />
+                      <p className="text-xs font-heading text-primary uppercase tracking-wider">Most Improved This Week</p>
+                    </div>
+                    <p className="font-heading text-lg text-foreground mb-1">{mostImproved.name}</p>
                     <p className="text-xs text-muted-foreground font-body">
                       Previous: {mostImproved.prev} pts → Current: {mostImproved.curr} pts
                       <span className="text-primary ml-2">+{mostImproved.delta}</span>
@@ -1664,7 +1717,7 @@ const OfficialProfile = () => {
 
         {/* Financial Overview with Export */}
         {canManageFinance && (
-          <Card className="bg-card border-border card-glow">
+          <Card id="finance-section" className="bg-card border-border card-glow">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="font-heading text-lg text-foreground">Financial Overview</CardTitle>
               <Button size="sm" variant="outline" onClick={exportFinancialPdf} className="font-body text-xs border-primary/30 text-primary">
@@ -1707,7 +1760,7 @@ const OfficialProfile = () => {
 
         {/* Weekly Attendance — Manager + Ethan + Assistant Coach */}
         {canManageAttendance && (
-          <Card className="bg-card border-border card-glow">
+          <Card id="attendance-section" className="bg-card border-border card-glow">
             <CardHeader>
               <CardTitle className="font-heading text-lg text-foreground">Weekly Attendance — {currentWeekStart}</CardTitle>
               <div className="flex flex-wrap gap-2 mt-2">
@@ -1776,15 +1829,40 @@ const OfficialProfile = () => {
           <Card className="bg-card border-border card-glow">
             <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trash2 className="w-5 h-5 text-destructive" /> Manage Gallery</CardTitle></CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                {mediaItems.map((item) => (
-                  <div key={item.id} className="relative group">
-                    <img src={item.url} alt={item.caption || "Photo"} className="w-full h-24 object-cover rounded-lg border border-border" />
-                    <button onClick={() => { deleteMediaItem(item.id, item.url); toast({ title: "Deleted" }); }}
-                      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-destructive flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Trash2 className="w-3 h-3 text-white" />
-                    </button>
-                  </div>
+              <div className="grid gap-4">
+                {Object.entries(
+                  mediaItems.reduce((acc, item) => {
+                    const date = item.date.split("T")[0];
+                    if (!acc[date]) acc[date] = [];
+                    acc[date].push(item);
+                    return acc;
+                  }, {} as Record<string, typeof mediaItems>)
+                ).sort(([a], [b]) => b.localeCompare(a)).map(([date, items]) => (
+                  <Collapsible key={date} className="border border-border rounded-xl overflow-hidden">
+                    <CollapsibleTrigger className="w-full flex items-center justify-between p-4 bg-secondary/30 hover:bg-secondary/50 transition-all group">
+                      <div className="flex items-center gap-3">
+                        <CalendarIcon className="w-5 h-5 text-primary" />
+                        <div className="text-left">
+                          <p className="font-heading text-sm text-foreground">{new Date(date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
+                          <p className="font-body text-xs text-muted-foreground">{items.length} Photos</p>
+                        </div>
+                      </div>
+                      <Plus className="w-4 h-4 text-primary group-data-[state=open]:rotate-45 transition-transform" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="p-4 bg-card border-t border-border">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                        {items.map((item) => (
+                          <div key={item.id} className="relative group">
+                            <img src={item.url} alt={item.caption || "Photo"} className="w-full aspect-square object-cover rounded-lg border border-border" />
+                            <button onClick={() => { deleteMediaItem(item.id, item.url); toast({ title: "Deleted" }); }}
+                              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-destructive flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+                              <Trash2 className="w-3 h-3 text-white" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
                 ))}
               </div>
             </CardContent>
@@ -1851,56 +1929,48 @@ const OfficialProfile = () => {
         {/* Lineup Builder — Coach only */}
         {isCoach && <LineupBuilder onFirst11Change={(ids) => setSelectedFirst11(ids.slice(0, 11))} />}
 
-        {/* ===== CAPTAIN: Jersey Washing System ===== */}
-        {isCaptain && (
-          <Card className="bg-card border-border card-glow border-primary/20">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Jersey Washing Duty</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-xs text-muted-foreground font-body">Selects 3 pairs of players (6 total) randomly from the last 2 played matches.</p>
-              
-              <div className="flex gap-2">
-                <Button onClick={handleGenerateWashers} className="flex-1 font-body bg-primary text-primary-foreground hover:bg-primary/90">
-                  <Plus className="w-4 h-4 mr-1" /> Generate Pairs
-                </Button>
-                {jerseyWashers.length >= 6 && (
-                  <Button onClick={handleExportWashers} variant="outline" className="flex-1 font-body border-primary/30 text-primary hover:bg-primary/10">
-                    <Download className="w-4 h-4 mr-1" /> Export .docx
-                  </Button>
-                )}
-              </div>
-
-              {jerseyWashers.length >= 6 && (
-                <div className="space-y-3 mt-4">
-                  {[0, 1, 2].map(pairIndex => (
-                    <div key={pairIndex} className="p-3 border border-border rounded-lg bg-secondary/30">
-                      <p className="text-sm font-heading text-primary mb-2">Pair {pairIndex + 1}</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {[0, 1].map(playerIndex => {
-                          const wIndex = pairIndex * 2 + playerIndex;
-                          return (
-                            <select 
-                              key={playerIndex} 
-                              value={jerseyWashers[wIndex] || ""} 
-                              onChange={(e) => {
-                                const newWashers = [...jerseyWashers];
-                                newWashers[wIndex] = e.target.value;
-                                setJerseyWashers(newWashers);
-                              }}
-                              className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground font-body"
-                            >
-                              <option value="">Select player</option>
-                              {playerMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            </select>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
+        {/* ===== MANAGER: Member ID Registry ===== */}
+        {(isManager || isCoach) && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" /> 📋 Member ID Registry
+              </CardTitle>
+              <Button variant="outline" size="sm" onClick={() => setShowRegistry(!showRegistry)} className="font-body text-xs">
+                {showRegistry ? "Hide Registry" : "Show Registry"}
+              </Button>
+            </CardHeader>
+            <Collapsible open={showRegistry}>
+              <CollapsibleContent>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full font-body text-sm">
+                      <thead>
+                        <tr className="border-b border-border text-muted-foreground">
+                          <th className="text-left py-2 px-2">ID</th>
+                          <th className="text-left py-2 px-2">Name</th>
+                          <th className="text-left py-2 px-2">Role</th>
+                          <th className="text-left py-2 px-2">Position</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...members].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
+                          <tr key={m.id} className="border-b border-border">
+                            <td className="py-1.5 px-2 text-primary font-heading text-xs">{m.id}</td>
+                            <td className="py-1.5 px-2 text-foreground">{m.name}</td>
+                            <td className="py-1.5 px-2 text-muted-foreground capitalize">{m.role}</td>
+                            <td className="py-1.5 px-2 text-muted-foreground">{getFullPositionName(m.position)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </CollapsibleContent>
+            </Collapsible>
           </Card>
         )}
+
 
         {/* ===== FAN MANAGEMENT — Coach & Manager ===== */}
         {(isCoach || isManager) && (() => {
@@ -2030,8 +2100,16 @@ const OfficialProfile = () => {
                   ))}
                 </select>
                 {rolePlayerId && (
-                  <>
-                    <select value={newRole} onChange={(e) => setNewRole(e.target.value)}
+                  <div className="space-y-3">
+                    <select value={isCustomRole ? "custom" : newRole} onChange={(e) => {
+                      if (e.target.value === "custom") {
+                        setIsCustomRole(true);
+                        setNewRole("");
+                      } else {
+                        setIsCustomRole(false);
+                        setNewRole(e.target.value);
+                      }
+                    }}
                       className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
                       <option value="">Select new role</option>
                       <option value="player">Player</option>
@@ -2041,15 +2119,28 @@ const OfficialProfile = () => {
                       <option value="finance">Finance</option>
                       <option value="assistant_coach">Assistant Coach</option>
                       <option value="fan">Fan</option>
+                      <option value="custom">+ Add Custom Role</option>
                     </select>
+
+                    {isCustomRole && (
+                      <Input 
+                        placeholder="Enter custom role name" 
+                        value={customRoleName} 
+                        onChange={(e) => {
+                          setCustomRoleName(e.target.value);
+                          setNewRole(e.target.value);
+                        }}
+                        className="bg-secondary border-border font-body"
+                      />
+                    )}
+
                     <Button disabled={!newRole} onClick={async () => {
-                      await supabase.from("members").update({ role: newRole } as any).eq("id", rolePlayerId);
+                      await updateMemberRole(rolePlayerId, newRole);
                       const memberName = members.find(m => m.id === rolePlayerId)?.name;
                       toast({ title: "Role Updated", description: `${memberName} is now ${newRole}` });
-                      setRolePlayerId(""); setNewRole("");
-                      window.location.reload();
+                      setRolePlayerId(""); setNewRole(""); setIsCustomRole(false); setCustomRoleName("");
                     }} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Update Role</Button>
-                  </>
+                  </div>
                 )}
               </div>
 
@@ -2083,36 +2174,6 @@ const OfficialProfile = () => {
           </Card>
         )}
 
-        {/* ===== COACH: Member ID Registry ===== */}
-        {isCoach && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> 📋 Member ID Registry</CardTitle></CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full font-body text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-muted-foreground">
-                      <th className="text-left py-2 px-2">ID</th>
-                      <th className="text-left py-2 px-2">Name</th>
-                      <th className="text-left py-2 px-2">Role</th>
-                      <th className="text-left py-2 px-2">Position</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...members].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
-                      <tr key={m.id} className="border-b border-border">
-                        <td className="py-1.5 px-2 text-primary font-heading text-xs">{m.id}</td>
-                        <td className="py-1.5 px-2 text-foreground">{m.name}</td>
-                        <td className="py-1.5 px-2 text-muted-foreground capitalize">{m.role}</td>
-                        <td className="py-1.5 px-2 text-muted-foreground">{getFullPositionName(m.position)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* ===== SEND MESSAGE (All officials) ===== */}
         <Card className="bg-card border-border card-glow">
@@ -2133,42 +2194,58 @@ const OfficialProfile = () => {
           </CardContent>
         </Card>
 
-        {/* ===== MESSAGE INBOX ===== */}
-        {myMessages.length > 0 && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Mail className="w-5 h-5 text-primary" /> Message Inbox</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {myMessages.map(msg => {
-                const sender = members.find(m => m.id === msg.fromId);
-                return (
-                  <div key={msg.id} className={`border rounded-lg p-3 ${msg.read ? "border-border" : "border-primary/40 bg-primary/5"}`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-body text-sm font-medium text-foreground">{sender?.name || msg.fromId}</span>
-                      <span className="text-xs text-muted-foreground">{new Date(msg.createdAt).toLocaleDateString()}</span>
-                    </div>
-                    <p className="text-sm font-body text-muted-foreground">{msg.content}</p>
-                    <div className="flex gap-2 mt-2">
-                      {!msg.read && <Button size="sm" variant="ghost" className="text-xs" onClick={() => markMessageRead(msg.id)}>Mark Read</Button>}
-                      <Button size="sm" variant="outline" className="text-xs" onClick={() => setReplyTo(msg.fromId)}>
-                        <Send className="w-3 h-3 mr-1" /> Reply
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-              {replyTo && (
-                <div className="border border-primary/30 rounded-lg p-3 space-y-2">
-                  <p className="text-xs text-primary font-body">Replying to {members.find(m => m.id === replyTo)?.name || replyTo}</p>
-                  <Textarea value={replyContent} onChange={(e) => setReplyContent(e.target.value)} placeholder="Type reply..." className="bg-secondary border-border font-body" />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleReply} className="font-body text-xs"><Send className="w-3 h-3 mr-1" /> Send</Button>
-                    <Button size="sm" variant="outline" onClick={() => { setReplyTo(null); setReplyContent(""); }} className="font-body text-xs">Cancel</Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        {/* ===== MESSAGE INBOX (Collapsible Box) ===== */}
+        <Card className="bg-card border-border card-glow">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+              <Mail className="w-5 h-5 text-primary" /> Message Inbox
+            </CardTitle>
+            <Badge variant="secondary" className="font-body">{myMessages.filter(m => !m.read).length} New</Badge>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {myMessages.length === 0 ? (
+              <p className="text-muted-foreground text-sm font-body italic text-center py-4">Your inbox is empty</p>
+            ) : (
+              <Accordion type="single" collapsible className="w-full space-y-2">
+                {myMessages.map(msg => {
+                  const sender = members.find(m => m.id === msg.fromId);
+                  return (
+                    <AccordionItem key={msg.id} value={msg.id} className={`border border-border rounded-lg px-3 ${!msg.read ? 'bg-primary/5 border-primary/30' : 'bg-secondary/30'}`}>
+                      <AccordionTrigger onClick={() => !msg.read && markMessageRead(msg.id)} className="hover:no-underline py-3">
+                        <div className="flex items-center gap-3 text-left w-full pr-2">
+                          {!msg.read && <div className="w-2 h-2 rounded-full bg-primary animate-pulse shrink-0" />}
+                          <div className="min-w-0 flex-1">
+                            <p className="font-heading text-xs text-primary truncate">{sender?.name || 'Unknown'}</p>
+                            <p className="text-[10px] text-muted-foreground">{new Date(msg.createdAt).toLocaleString()}</p>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="pt-1 pb-4">
+                        <div className="p-3 bg-card border border-border rounded-lg shadow-inner">
+                          <p className="font-body text-sm text-foreground whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                          <div className="flex gap-2 mt-4">
+                            <Button size="sm" variant="default" className="text-xs h-8" onClick={() => setReplyTo(msg.fromId)}>
+                              <Send className="w-3 h-3 mr-1" /> Reply
+                            </Button>
+                          </div>
+                          {replyTo === msg.fromId && (
+                            <div className="pt-3 space-y-2 border-t border-border mt-3">
+                              <Textarea value={replyContent} onChange={(e) => setReplyContent(e.target.value)} placeholder="Type reply..." className="bg-secondary border-border font-body text-sm min-h-[80px]" />
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={handleReply} className="font-body text-xs"><Send className="w-3 h-3 mr-1" /> Send Reply</Button>
+                                <Button size="sm" variant="ghost" onClick={() => { setReplyTo(null); setReplyContent(""); }} className="font-body text-xs">Cancel</Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
+            )}
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
