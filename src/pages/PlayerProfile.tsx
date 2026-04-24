@@ -255,6 +255,10 @@ const PlayerProfile = () => {
                 <div>
                   <p className="font-heading text-sm text-foreground">{recentAward.award_label}</p>
                   <p className="text-xs text-muted-foreground font-body italic">{recentAward.reason}</p>
+                  {(() => {
+                    const game = gameScores.find(g => g.id === recentAward.game_id);
+                    return game ? <p className="text-xs text-primary/80 font-heading mt-1">vs {game.opponent} ({new Date(game.date).toLocaleDateString()})</p> : null;
+                  })()}
                 </div>
               </div>
               {historicalAwards.length > 0 && (
@@ -276,6 +280,14 @@ const PlayerProfile = () => {
                   <LottieAnimation animationData={getAwardAnimation(award.award_type)} className="h-20 w-20 mx-auto" />
                   <p className="font-heading text-xs text-foreground mt-2">{award.award_label}</p>
                   <p className="text-[10px] text-muted-foreground font-body italic">{award.reason}</p>
+                  {(() => {
+                    const game = gameScores.find(g => g.id === award.game_id);
+                    return game ? (
+                      <p className="text-[10px] text-primary/80 font-heading mt-1">
+                        vs {game.opponent} <br/> ({new Date(game.date).toLocaleDateString()})
+                      </p>
+                    ) : null;
+                  })()}
                 </div>
               ))}
             </div>

@@ -76,7 +76,7 @@ export function getPerfFieldsForPosition(position?: string): PerfField[] {
   return MID_ATT_PERF;
 }
 
-// POTM calculation: weighted scoring formula
+// POTM calculation: weighted scoring formula (position-aware)
 export function calculatePotmScore(perf: {
   goals: number;
   assists: number;
@@ -85,14 +85,18 @@ export function calculatePotmScore(perf: {
   interceptions: number;
   cleanSheet: boolean;
   aerialDuels: number;
+  positionGroup?: string;
 }): number {
+  const isGK = perf.positionGroup === "GK";
+  const isDef = perf.positionGroup === "DEF";
+  
   return (
-    (perf.goals || 0) * 10 +
-    (perf.assists || 0) * 7 +
-    (perf.saves || 0) * 5 +
-    (perf.tackles || 0) * 3 +
-    (perf.interceptions || 0) * 3 +
-    (perf.cleanSheet ? 8 : 0) +
-    (perf.aerialDuels || 0) * 2
+    (perf.goals || 0) * (isDef ? 20 : 15) + 
+    (perf.assists || 0) * 10 +
+    (perf.saves || 0) * (isGK ? 4 : 2) +
+    (perf.tackles || 0) * (isDef ? 2 : 3) + 
+    (perf.interceptions || 0) * (isDef ? 2 : 3) +
+    (perf.cleanSheet ? (isGK || isDef ? 10 : 0) : 0) +
+    (perf.aerialDuels || 0) * 1
   );
 }

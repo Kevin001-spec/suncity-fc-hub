@@ -228,9 +228,15 @@ const OfficialProfile = () => {
   const [sendMsgTo, setSendMsgTo] = useState("");
   const [sendMsgContent, setSendMsgContent] = useState("");
 
-  // Role management
   const [rolePlayerId, setRolePlayerId] = useState("");
   const [newRole, setNewRole] = useState("");
+  
+  // Name management
+  const [editNamePlayerId, setEditNamePlayerId] = useState("");
+  const [editNewName, setEditNewName] = useState("");
+
+  // Jersey Washing System
+  const [jerseyWashers, setJerseyWashers] = useState<string[]>([]);
 
   // Smart player selector: already-recorded players for selected game
   const [recordedPlayerIds, setRecordedPlayerIds] = useState<string[]>([]);
@@ -287,19 +293,18 @@ const OfficialProfile = () => {
     }
   }, [perfGameId, gameScores]);
 
-  const isCoach = user.role === "coach";
+  const isCoach = user.role === "coach" || user.role === "assistant_coach";
   const isFadhir = user.id === "SCF-002";
   const isManager = user.role === "manager";
   const isFabian = user.id === "SCF-001";
   const isCaptain = user.role === "captain";
-  const isAssistantCoach = user.role === "assistant_coach";
   const canUploadMedia = ["coach", "manager", "captain", "assistant_coach"].includes(user.role);
   const canManageFinance = isFadhir || isCoach;
   const canApproveContributions = isFadhir || isCoach;
   const canDeletePhotos = isManager;
   const canManageContribEvents = isFadhir || isCaptain;
-  const showContributions = !isFabian && !isAssistantCoach;
-  const canManageAttendance = isManager || user.id === "SCF-004" || isAssistantCoach;
+  const showContributions = !isCoach;
+  const canManageAttendance = isManager || user.id === "SCF-004" || isCoach;
   const canAddScoresEvents = isManager || isCaptain;
   const canReceiveMessages = true; // All officials can receive messages now
 
@@ -548,6 +553,68 @@ const OfficialProfile = () => {
     generateBrandedDocx("Match Day Squad Selection", tables, "suncity_fc_first11.docx");
   };
 
+  const exportMatchStats = (gameId: string) => {
+    const game = gameScores.find(g => g.id === gameId);
+    if (!game) return;
+    const perfs = matchPerformances.filter(p => p.gameId === gameId);
+    if (perfs.length === 0) {
+      toast({ title: "No Stats", description: "No player stats recorded for this match yet." });
+      return;
+    }
+    
+    const groups: Record<string, typeof perfs> = { "GK": [], "DEF": [], "MID": [], "ATT": [] };
+    perfs.forEach(p => {
+      const member = members.find(m => m.id === p.playerId);
+      const posGroup = getPositionGroup(member?.position);
+      if (groups[posGroup]) groups[posGroup].push(p);
+      else groups["ATT"].push(p); // fallback
+    });
+    
+    const tables: DocxTableData[] = [];
+    
+    if (groups["GK"].length > 0) {
+      tables.push({
+        head: [["Goalkeepers", "Saves", "Clean Sheet", "Goals", "Assists"]],
+        body: groups["GK"].map(p => {
+          const m = members.find(mem => mem.id === p.playerId);
+          return [m?.name || "Unknown", String(p.saves || 0), p.clean_sheet ? "Yes" : "No", String(p.goals), String(p.assists)];
+        })
+      });
+    }
+    
+    if (groups["DEF"].length > 0) {
+      tables.push({
+        head: [["Defenders", "Tackles", "Interceptions", "Goals", "Assists"]],
+        body: groups["DEF"].map(p => {
+          const m = members.find(mem => mem.id === p.playerId);
+          return [m?.name || "Unknown", String(p.tackles || 0), String(p.interceptions || 0), String(p.goals), String(p.assists)];
+        })
+      });
+    }
+    
+    if (groups["MID"].length > 0) {
+      tables.push({
+        head: [["Midfielders", "Goals", "Assists", "Tackles", "Interceptions"]],
+        body: groups["MID"].map(p => {
+          const m = members.find(mem => mem.id === p.playerId);
+          return [m?.name || "Unknown", String(p.goals), String(p.assists), String(p.tackles || 0), String(p.interceptions || 0)];
+        })
+      });
+    }
+    
+    if (groups["ATT"].length > 0) {
+      tables.push({
+        head: [["Attackers", "Goals", "Assists", "Shots", "Aerial Duels"]],
+        body: groups["ATT"].map(p => {
+          const m = members.find(mem => mem.id === p.playerId);
+          return [m?.name || "Unknown", String(p.goals), String(p.assists), String(p.direct_shots || 0), String(p.aerial_duels || 0)];
+        })
+      });
+    }
+    
+    generateBrandedDocx(`Match Report — vs ${game.opponent} (${game.ourScore}-${game.theirScore})`, tables, `suncity_fc_match_${game.opponent.replace(/\s+/g, "_")}.docx`);
+  };
+
   const liveMember = members.find((m) => m.id === user.id) || user;
 
   // When selecting a player for stats editor, load their current stats
@@ -582,6 +649,38 @@ const OfficialProfile = () => {
       toast({ title: "Player Added", description: `${newPlayerName} added.` });
     }
     setNewPlayerName(""); setNewPlayerPos(""); setNewMemberType("player");
+  };
+
+  // Jersey Washing System logic
+  const handleGenerateWashers = () => {
+    const recentGames = [...gameScores].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 2);
+    const gameIds = recentGames.map(g => g.id);
+    let poolIds = Array.from(new Set(matchPerformances.filter(p => gameIds.includes(p.gameId)).map(p => p.playerId)));
+    if (poolIds.length < 6) {
+      poolIds = playerMembers.map(m => m.id);
+    }
+    const shuffled = [...poolIds].sort(() => 0.5 - Math.random());
+    setJerseyWashers(shuffled.slice(0, 6));
+  };
+
+  const handleExportWashers = () => {
+    const p = jerseyWashers.map(id => members.find(m => m.id === id)?.name || "Unknown");
+    const tables: DocxTableData[] = [
+      {
+        head: [["Pair", "Player 1", "Player 2"]],
+        body: [
+          ["Pair 1", p[0] || "-", p[1] || "-"],
+          ["Pair 2", p[2] || "-", p[3] || "-"],
+          ["Pair 3", p[4] || "-", p[5] || "-"],
+        ]
+      }
+    ];
+    generateBrandedDocx("Jersey Washing Schedule", tables, "suncity_fc_jersey_washing.docx", [
+      new Paragraph({
+        children: [new TextRun({ text: "Schedule for the upcoming matches based on recent active players.", font: "Calibri", size: 16 })],
+        spacing: { after: 200 }
+      })
+    ]);
   };
 
   // Handle edit score
@@ -661,10 +760,12 @@ const OfficialProfile = () => {
       let bestId = "";
       let bestScore = -1;
       for (const p of allPerfs) {
+        const pl = members.find(m => m.id === p.player_id);
         const score = calculatePotmScore({
           goals: p.goals, assists: p.assists, saves: p.saves,
           tackles: p.tackles, interceptions: p.interceptions,
           cleanSheet: p.clean_sheet, aerialDuels: p.aerial_duels,
+          positionGroup: getPositionGroup(pl?.position),
         });
         if (score > bestScore) { bestScore = score; bestId = p.id; }
       }
@@ -1040,6 +1141,9 @@ const OfficialProfile = () => {
                         <span className="ml-2 text-xs text-muted-foreground">{game.date}</span>
                       </div>
                       <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-primary" onClick={() => exportMatchStats(game.id)}>
+                          <Download className="w-3 h-3" />
+                        </Button>
                         <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
                           setEditingScoreId(game.id);
                           setEditScoreData({ opponent: game.opponent, ourScore: game.ourScore, theirScore: game.theirScore });
@@ -1145,13 +1249,15 @@ const OfficialProfile = () => {
               </select>
               {perfGameId && (() => {
                 // Smart player selector: filter out already-recorded, prioritize last match
-                const availableForPerf = playerMembers
-                  .filter(m => !recordedPlayerIds.includes(m.id))
-                  .sort((a, b) => {
-                    const aLast = lastMatchPlayerIds.includes(a.id) ? 1 : 0;
-                    const bLast = lastMatchPlayerIds.includes(b.id) ? 1 : 0;
-                    return bLast - aLast;
-                  });
+                const availableForPerf = useMemo(() => {
+                  return playerMembers
+                    .filter(m => !recordedPlayerIds.includes(m.id))
+                    .sort((a, b) => {
+                      const aLast = lastMatchPlayerIds.includes(a.id) ? 1 : 0;
+                      const bLast = lastMatchPlayerIds.includes(b.id) ? 1 : 0;
+                      return bLast - aLast;
+                    });
+                }, [playerMembers, recordedPlayerIds, lastMatchPlayerIds]);
                 const recordedCount = recordedPlayerIds.length;
                 return (
                 <>
@@ -1578,12 +1684,16 @@ const OfficialProfile = () => {
                     <div className="space-y-2 font-body text-sm">
                       <div className="flex justify-between text-muted-foreground"><span>Opening Balance</span><span>KSh {f.openingBalance.toLocaleString()}</span></div>
                       <div className="flex justify-between text-green-600"><span>Contributions</span><span>+KSh {f.contributions.toLocaleString()}</span></div>
-                      {f.expenses.length > 0 && f.expenses.map((exp, i) => (
-                        <div key={i} className="flex justify-between text-destructive/80">
-                          <span className="text-xs">{exp.date} — {exp.description}</span>
-                          <span>-KSh {exp.amount.toLocaleString()}</span>
-                        </div>
-                      ))}
+                      {f.expenses.length > 0 && f.expenses.map((exp, i) => {
+                        const isIncome = exp.amount < 0;
+                        const displayAmount = Math.abs(exp.amount);
+                        return (
+                          <div key={i} className={`flex justify-between ${isIncome ? "text-green-600/80" : "text-destructive/80"}`}>
+                            <span className="text-xs">{exp.date} — {exp.description}</span>
+                            <span>{isIncome ? "+" : "-"}KSh {displayAmount.toLocaleString()}</span>
+                          </div>
+                        );
+                      })}
                       <div className={`flex justify-between font-heading text-sm pt-2 border-t border-border ${f.closingBalance >= 0 ? "text-primary" : "text-destructive"}`}>
                         <span>Closing Balance</span><span>KSh {f.closingBalance.toLocaleString()}</span>
                       </div>
@@ -1741,6 +1851,57 @@ const OfficialProfile = () => {
         {/* Lineup Builder — Coach only */}
         {isCoach && <LineupBuilder onFirst11Change={(ids) => setSelectedFirst11(ids.slice(0, 11))} />}
 
+        {/* ===== CAPTAIN: Jersey Washing System ===== */}
+        {isCaptain && (
+          <Card className="bg-card border-border card-glow border-primary/20">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Jersey Washing Duty</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground font-body">Selects 3 pairs of players (6 total) randomly from the last 2 played matches.</p>
+              
+              <div className="flex gap-2">
+                <Button onClick={handleGenerateWashers} className="flex-1 font-body bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Plus className="w-4 h-4 mr-1" /> Generate Pairs
+                </Button>
+                {jerseyWashers.length >= 6 && (
+                  <Button onClick={handleExportWashers} variant="outline" className="flex-1 font-body border-primary/30 text-primary hover:bg-primary/10">
+                    <Download className="w-4 h-4 mr-1" /> Export .docx
+                  </Button>
+                )}
+              </div>
+
+              {jerseyWashers.length >= 6 && (
+                <div className="space-y-3 mt-4">
+                  {[0, 1, 2].map(pairIndex => (
+                    <div key={pairIndex} className="p-3 border border-border rounded-lg bg-secondary/30">
+                      <p className="text-sm font-heading text-primary mb-2">Pair {pairIndex + 1}</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {[0, 1].map(playerIndex => {
+                          const wIndex = pairIndex * 2 + playerIndex;
+                          return (
+                            <select 
+                              key={playerIndex} 
+                              value={jerseyWashers[wIndex] || ""} 
+                              onChange={(e) => {
+                                const newWashers = [...jerseyWashers];
+                                newWashers[wIndex] = e.target.value;
+                                setJerseyWashers(newWashers);
+                              }}
+                              className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground font-body"
+                            >
+                              <option value="">Select player</option>
+                              {playerMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            </select>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* ===== FAN MANAGEMENT — Coach & Manager ===== */}
         {(isCoach || isManager) && (() => {
           const fans = members.filter(m => m.role === "fan");
@@ -1854,39 +2015,70 @@ const OfficialProfile = () => {
         {/* ===== MANAGER: Role Management ===== */}
         {isManager && (
           <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> 👔 Role Management</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground font-body">Promote or demote members. Cannot change your own role.</p>
-              <select value={rolePlayerId} onChange={(e) => setRolePlayerId(e.target.value)}
-                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                <option value="">Select member</option>
-                {members.filter(m => m.id !== user.id).map(m => (
-                  <option key={m.id} value={m.id}>{m.name} — {m.role} ({m.id})</option>
-                ))}
-              </select>
-              {rolePlayerId && (
-                <>
-                  <select value={newRole} onChange={(e) => setNewRole(e.target.value)}
-                    className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                    <option value="">Select new role</option>
-                    <option value="player">Player</option>
-                    <option value="captain">Captain</option>
-                    <option value="coach">Coach</option>
-                    <option value="manager">Manager</option>
-                    <option value="finance">Finance</option>
-                    <option value="assistant_coach">Assistant Coach</option>
-                    <option value="fan">Fan</option>
-                  </select>
-                  <Button disabled={!newRole} onClick={async () => {
-                    await supabase.from("members").update({ role: newRole } as any).eq("id", rolePlayerId);
-                    const memberName = members.find(m => m.id === rolePlayerId)?.name;
-                    toast({ title: "Role Updated", description: `${memberName} is now ${newRole}` });
-                    setRolePlayerId(""); setNewRole("");
-                    // Force refresh
-                    window.location.reload();
-                  }} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Update Role</Button>
-                </>
-              )}
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> 👔 Member Management</CardTitle></CardHeader>
+            <CardContent className="space-y-6">
+              
+              {/* Role Update */}
+              <div className="space-y-3">
+                <p className="text-sm font-heading text-primary">Update Role</p>
+                <p className="text-xs text-muted-foreground font-body">Promote or demote members. Cannot change your own role.</p>
+                <select value={rolePlayerId} onChange={(e) => setRolePlayerId(e.target.value)}
+                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  <option value="">Select member</option>
+                  {members.filter(m => m.id !== user.id).map(m => (
+                    <option key={m.id} value={m.id}>{m.name} — {m.role}</option>
+                  ))}
+                </select>
+                {rolePlayerId && (
+                  <>
+                    <select value={newRole} onChange={(e) => setNewRole(e.target.value)}
+                      className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                      <option value="">Select new role</option>
+                      <option value="player">Player</option>
+                      <option value="captain">Captain</option>
+                      <option value="coach">Coach</option>
+                      <option value="manager">Manager</option>
+                      <option value="finance">Finance</option>
+                      <option value="assistant_coach">Assistant Coach</option>
+                      <option value="fan">Fan</option>
+                    </select>
+                    <Button disabled={!newRole} onClick={async () => {
+                      await supabase.from("members").update({ role: newRole } as any).eq("id", rolePlayerId);
+                      const memberName = members.find(m => m.id === rolePlayerId)?.name;
+                      toast({ title: "Role Updated", description: `${memberName} is now ${newRole}` });
+                      setRolePlayerId(""); setNewRole("");
+                      window.location.reload();
+                    }} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Update Role</Button>
+                  </>
+                )}
+              </div>
+
+              {/* Name Update */}
+              <div className="space-y-3 pt-3 border-t border-border">
+                <p className="text-sm font-heading text-primary">Edit Name</p>
+                <select value={editNamePlayerId} onChange={(e) => {
+                  setEditNamePlayerId(e.target.value);
+                  const mem = members.find(m => m.id === e.target.value);
+                  if (mem) setEditNewName(mem.name);
+                }} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  <option value="">Select member to rename</option>
+                  {members.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+                {editNamePlayerId && (
+                  <>
+                    <Input placeholder="New Name" value={editNewName} onChange={(e) => setEditNewName(e.target.value)} className="bg-secondary border-border font-body" />
+                    <Button disabled={!editNewName.trim()} onClick={async () => {
+                      await supabase.from("members").update({ name: editNewName.trim() } as any).eq("id", editNamePlayerId);
+                      toast({ title: "Name Updated", description: `Updated name to ${editNewName.trim()}` });
+                      setEditNamePlayerId(""); setEditNewName("");
+                      window.location.reload();
+                    }} className="w-full font-body"><Edit className="w-4 h-4 mr-1" /> Save Name</Button>
+                  </>
+                )}
+              </div>
+
             </CardContent>
           </Card>
         )}

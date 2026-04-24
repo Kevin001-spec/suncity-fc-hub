@@ -468,36 +468,29 @@ export function TeamDataProvider({ children }: { children: React.ReactNode }) {
   const addFinancialTransaction = useCallback(async (month: string, description: string, amount: number, date: string, type: "in" | "out") => {
     const { data: record } = await supabase.from("financial_records").select("*").eq("month", month).single();
     if (record) {
-      if (type === "out") {
-        await supabase.from("financial_expenses").insert({ record_id: record.id, description, amount, date });
-      }
-      const monthObj = contributionMonths.find((m) => m.label === month);
-      if (monthObj) {
-        const { count } = await supabase.from("contributions")
-          .select("*", { count: "exact", head: true })
-          .eq("month_key", monthObj.key).eq("status", "paid");
-        const paidCount = count || 0;
-        const contributionTotal = type === "in" ? paidCount * CONTRIBUTION_AMOUNT + amount : paidCount * CONTRIBUTION_AMOUNT;
-        const { data: allExp } = await supabase.from("financial_expenses").select("amount").eq("record_id", record.id);
-        const expTotal = allExp?.reduce((sum: number, e: any) => sum + Number(e.amount), 0) || 0;
-        const newClosing = Number(record.opening_balance) + contributionTotal - expTotal;
-        await supabase.from("financial_records").update({
-          contributions: contributionTotal, closing_balance: newClosing,
-          ...(type === "in" ? { contributors: paidCount } : {}),
-        }).eq("id", record.id);
-      }
+      const signedAmount = type === "out" ? amount : -amount;
+      const descPrefix = type === "in" && !description.includes("(Income)") ? "(Income) " : "";
+      
+      // Always insert into expenses (negative amount acts as income)
+      await supabase.from("financial_expenses").insert({ record_id: record.id, description: descPrefix + description, amount: signedAmount, date });
+      
+      // Force a recalculation to update the closing balance correctly
+      await recalculateFinancialRecord(month);
     } else {
       const { data: allRecords } = await supabase.from("financial_records")
         .select("closing_balance").order("created_at", { ascending: false }).limit(1);
       const openingBalance = allRecords?.[0] ? Number((allRecords[0] as any).closing_balance) : 0;
-      const contrib = type === "in" ? amount : 0;
-      const exp = type === "out" ? amount : 0;
+      
       const { data: newRecord } = await supabase.from("financial_records").insert({
-        month, opening_balance: openingBalance, contributions: contrib,
-        closing_balance: openingBalance + contrib - exp, contributors: type === "in" ? 1 : 0,
+        month, opening_balance: openingBalance, contributions: 0,
+        closing_balance: openingBalance, contributors: 0,
       }).select().single();
-      if (newRecord && type === "out") {
-        await supabase.from("financial_expenses").insert({ record_id: newRecord.id, description, amount, date });
+      
+      if (newRecord) {
+        const signedAmount = type === "out" ? amount : -amount;
+        const descPrefix = type === "in" && !description.includes("(Income)") ? "(Income) " : "";
+        await supabase.from("financial_expenses").insert({ record_id: newRecord.id, description: descPrefix + description, amount: signedAmount, date });
+        await recalculateFinancialRecord(month);
       }
     }
     loadFinancialRecords();
