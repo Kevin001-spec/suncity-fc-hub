@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -62,12 +60,24 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Rajdhani', sans-serif;
+    font-family: 'Inter', sans-serif;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Roboto Slab', serif;
+    font-weight: 700;
   }
+}
+
+@layer utilities {
+  .font-sans { font-family: 'Inter', sans-serif; }
+  .font-serif { font-family: 'Merriweather', serif; }
+  .font-mono { font-family: 'Fira Code', monospace; }
+  .font-slab { font-family: 'Roboto Slab', serif; }
+  .font-script { font-family: 'Dancing Script', cursive; }
+
+  .font-heading { font-family: 'Roboto Slab', serif; font-weight: 700; letter-spacing: -0.02em; }
+  .font-body { font-family: 'Inter', sans-serif; }
 }
 
 @layer utilities {

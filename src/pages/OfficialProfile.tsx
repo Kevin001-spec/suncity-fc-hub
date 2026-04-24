@@ -20,7 +20,7 @@ import { format } from "date-fns";
 import {
   Trophy, Calendar as CalendarIcon, Image, DollarSign, Users, CheckCircle, XCircle, Plus,
   TrendingUp, TrendingDown, Upload, Target, Save, Trash2, Download, UserMinus, Star, BarChart3, Edit,
-  UserPlus, MessageCircle, Send, Mail, Footprints, Gamepad2, Shield, Hand, Crosshair, Award, Flame, Swords
+  UserPlus, MessageCircle, Send, Mail, Footprints, Gamepad2, Shield, Hand, Crosshair, Award,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -765,80 +765,161 @@ const OfficialProfile = () => {
       gameId: perfGameId, playerId: perfPlayerId,
       goals: 0, assists: 0, saves: 0, tackles: 0,
       interceptions: 0, blocks: 0, clearances: 0,
-      cleanSheet: false, aerialDuels: 0, rating: 5,
-      isPotm: false, directShots: 0
+      cleanSheet: false, aerialDuels: 0, rating: 0, isPotm: false,
+      directShots: 0,
     };
-    
-    perfData.goals = parseInt(perfGoals) || 0;
-    perfData.assists = parseInt(perfAssists) || 0;
-    perfData.rating = parseFloat(perfRating) || 5;
-    perfData.isPotm = perfIsPotm;
     
     if (perfPosGroup === "GK") {
       perfData.saves = parseInt(perfSaves) || 0;
+      perfData.aerialDuels = parseInt(perfAerialDuels) || 0;
       perfData.cleanSheet = perfCleanSheet;
     } else if (perfPosGroup === "DEF") {
       perfData.tackles = parseInt(perfTackles) || 0;
       perfData.interceptions = parseInt(perfInterceptions) || 0;
-      perfData.blocks = parseInt(perfBlocks) || 0;
-      perfData.clearances = parseInt(perfClearances) || 0;
-      perfData.cleanSheet = perfCleanSheet;
-      perfData.aerialDuels = parseInt(perfAerialDuels) || 0;
-    } else if (perfPosGroup === "MID") {
-      perfData.tackles = parseInt(perfTackles) || 0;
-      perfData.interceptions = parseInt(perfInterceptions) || 0;
-      perfData.aerialDuels = parseInt(perfAerialDuels) || 0;
-    } else if (perfPosGroup === "ATT") {
+      perfData.goals = parseInt(perfGoals) || 0;
+      perfData.assists = parseInt(perfAssists) || 0;
       perfData.directShots = parseInt(perfDirectShots) || 0;
-      perfData.aerialDuels = parseInt(perfAerialDuels) || 0;
+    } else {
+      perfData.goals = parseInt(perfGoals) || 0;
+      perfData.assists = parseInt(perfAssists) || 0;
+      perfData.tackles = parseInt(perfTackles) || 0;
+      perfData.directShots = parseInt(perfDirectShots) || 0;
     }
     
     await addMatchPerformance(perfData);
     
-    // Update aggregate stats in members table
-    const dbStats: any = {
-      goals: (perfPlayer?.goals || 0) + perfData.goals,
-      assists: (perfPlayer?.assists || 0) + perfData.assists,
-      games_played: (perfPlayer?.gamesPlayed || 0) + 1,
-    };
-    
-    if (perfPosGroup === "GK") {
-      dbStats.saves = (perfPlayer?.saves || 0) + perfData.saves;
-      dbStats.clean_sheets = (perfPlayer?.cleanSheets || 0) + (perfData.cleanSheet ? 1 : 0);
-    } else if (perfPosGroup === "DEF") {
-      dbStats.tackles = (perfPlayer?.tackles || 0) + perfData.tackles;
-      dbStats.interceptions = (perfPlayer?.interceptions || 0) + perfData.interceptions;
-      dbStats.blocks = (perfPlayer?.blocks || 0) + perfData.blocks;
-      dbStats.clearances = (perfPlayer?.clearances || 0) + perfData.clearances;
-      dbStats.clean_sheets = (perfPlayer?.cleanSheets || 0) + (perfData.cleanSheet ? 1 : 0);
-      dbStats.aerial_duels = (perfPlayer?.aerialDuels || 0) + perfData.aerialDuels;
-    } else if (perfPosGroup === "MID") {
-      dbStats.tackles = (perfPlayer?.tackles || 0) + perfData.tackles;
-      dbStats.interceptions = (perfPlayer?.interceptions || 0) + perfData.interceptions;
-      dbStats.aerial_duels = (perfPlayer?.aerialDuels || 0) + perfData.aerialDuels;
-    } else if (perfPosGroup === "ATT") {
-      dbStats.direct_shots = (perfPlayer?.directShots || 0) + perfData.directShots;
-      dbStats.aerial_duels = (perfPlayer?.aerialDuels || 0) + perfData.aerialDuels;
-    }
-    
-    await supabase.from("members").update(dbStats).eq("id", perfPlayerId);
-    await supabase.from("player_game_log").upsert({ player_id: perfPlayerId, game_id: perfGameId } as any);
-    
-    toast({ title: "Performance Recorded", description: `Stats for ${perfPlayer?.name} saved.` });
+    // Show success immediately — POTM calc + awards run in background
+    toast({ title: "✅ Performance Recorded", description: `${perfPlayer?.name} stats synced. Awards calculating...` });
     setPerfPlayerId(""); setPerfGoals("0"); setPerfAssists("0"); setPerfSaves("0");
     setPerfTackles("0"); setPerfInterceptions("0"); setPerfBlocks("0"); setPerfClearances("0");
-    setPerfCleanSheet(false); setPerfAerialDuels("0"); setPerfRating("5"); setPerfIsPotm(false);
-    setPerfDirectShots("0");
-    refreshData();
+    setPerfCleanSheet(false); setPerfAerialDuels("0"); setPerfDirectShots("0");
+    
+    // Background POTM calculation + post-match awards (non-blocking)
+    const gameId = perfGameId;
+    (async () => {
+      const { data: allPerfs } = await supabase.from("match_performances")
+        .select("*").eq("game_id", gameId);
+      if (!allPerfs || allPerfs.length === 0) return;
+
+      // --- POTM calculation ---
+      let bestId = "";
+      let bestScore = -1;
+      for (const p of allPerfs) {
+        const pl = members.find(m => m.id === p.player_id);
+        const score = calculatePotmScore({
+          goals: p.goals, assists: p.assists, saves: p.saves,
+          tackles: p.tackles, interceptions: p.interceptions,
+          cleanSheet: p.clean_sheet, aerialDuels: p.aerial_duels,
+          positionGroup: getPositionGroup(pl?.position),
+        });
+        if (score > bestScore) { bestScore = score; bestId = p.id; }
+      }
+      await supabase.from("match_performances").update({ is_potm: false } as any).eq("game_id", gameId);
+      if (bestId) {
+        await supabase.from("match_performances").update({ is_potm: true } as any).eq("id", bestId);
+      }
+
+      // --- Post-match awards (max 6) ---
+      // Delete old awards for this game first
+      await supabase.from("match_awards" as any).delete().eq("game_id", gameId);
+      
+      const awards: { game_id: string; player_id: string; award_type: string; award_label: string; reason: string }[] = [];
+      
+      // 1. 🏆 Player of the Match
+      const potmPerf = allPerfs.find(p => p.id === bestId);
+      if (potmPerf) {
+        const potmPlayer = members.find(m => m.id === potmPerf.player_id);
+        awards.push({ game_id: gameId, player_id: potmPerf.player_id, award_type: "potm", award_label: "🏆 Player of the Match", reason: `Top performer with ${bestScore} points` });
+      }
+      
+      // 2. 🛡️ Defensive Wall — most tackles (min 5)
+      const sortedByTackles = [...allPerfs].sort((a, b) => b.tackles - a.tackles);
+      if (sortedByTackles[0]?.tackles >= 5 && sortedByTackles[0].id !== bestId) {
+        const p = sortedByTackles[0];
+        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "defensive_wall", award_label: "🛡️ Defensive Wall", reason: `${p.tackles} tackles — rock solid defense` });
+      }
+      
+      // 3. 🎯 Sharpshooter — most goals (min 1)
+      const sortedByGoals = [...allPerfs].sort((a, b) => b.goals - a.goals);
+      if (sortedByGoals[0]?.goals >= 1 && sortedByGoals[0].id !== bestId) {
+        const p = sortedByGoals[0];
+        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "sharpshooter", award_label: "🎯 Sharpshooter", reason: `${p.goals} goal${p.goals > 1 ? "s" : ""} — clinical finishing` });
+      }
+      
+      // 4. 🅰️ Playmaker — most assists (min 1)
+      const sortedByAssists = [...allPerfs].sort((a, b) => b.assists - a.assists);
+      if (sortedByAssists[0]?.assists >= 1 && sortedByAssists[0].id !== bestId) {
+        const p = sortedByAssists[0];
+        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "playmaker", award_label: "🅰️ Playmaker", reason: `${p.assists} assist${p.assists > 1 ? "s" : ""} — vision and creativity` });
+      }
+      
+      // 5. 🧤 Iron Wall — most saves (GK, min 3)
+      const sortedBySaves = [...allPerfs].sort((a, b) => b.saves - a.saves);
+      if (sortedBySaves[0]?.saves >= 3 && sortedBySaves[0].id !== bestId) {
+        const p = sortedBySaves[0];
+        awards.push({ game_id: gameId, player_id: p.player_id, award_type: "iron_wall", award_label: "🧤 Iron Wall", reason: `${p.saves} saves — unbeatable in goal` });
+      }
+      
+      // 6. 📈 Rising Star — biggest improvement vs previous match
+      const { data: prevGamePerfs } = await supabase.from("match_performances")
+        .select("*").neq("game_id", gameId).order("created_at", { ascending: false }).limit(50);
+      if (prevGamePerfs && prevGamePerfs.length > 0) {
+        // Get the previous game's perfs
+        const prevGameId = prevGamePerfs[0]?.game_id;
+        const prevPerfs = prevGamePerfs.filter(p => p.game_id === prevGameId);
+        let bestImprovement = 0;
+        let risingStarId = "";
+        let risingStarDelta = "";
+        for (const curr of allPerfs) {
+          const prev = prevPerfs.find(pp => pp.player_id === curr.player_id);
+          if (!prev) continue;
+          const currTotal = curr.goals + curr.assists + curr.saves + curr.tackles + curr.interceptions;
+          const prevTotal = prev.goals + prev.assists + prev.saves + prev.tackles + prev.interceptions;
+          const delta = currTotal - prevTotal;
+          if (delta > bestImprovement && curr.id !== bestId) {
+            bestImprovement = delta;
+            risingStarId = curr.player_id;
+            risingStarDelta = `${prevTotal} → ${currTotal} (+${delta})`;
+          }
+        }
+        if (risingStarId && bestImprovement > 0) {
+          awards.push({ game_id: gameId, player_id: risingStarId, award_type: "rising_star", award_label: "📈 Rising Star", reason: `Stats improved: ${risingStarDelta}` });
+        }
+      }
+      
+      // 7. 🎩 Hat-trick Hero (3+ goals)
+      const hatTrick = allPerfs.find(p => p.goals >= 3 && p.id !== bestId && !awards.some(a => a.player_id === p.player_id));
+      if (hatTrick) {
+        awards.push({ game_id: gameId, player_id: hatTrick.player_id, award_type: "hat_trick", award_label: "🎩 Hat-trick Hero", reason: `${hatTrick.goals} goals — clinical hat-trick performance` });
+      }
+      
+      // 8. 🔒 Lockdown (defender with tackles > 8)
+      const lockdown = allPerfs.find(p => p.tackles >= 8 && p.id !== bestId && !awards.some(a => a.player_id === p.player_id));
+      if (lockdown) {
+        const lPlayer = members.find(m => m.id === lockdown.player_id);
+        const lPosGroup = getPositionGroup(lPlayer?.position);
+        if (lPosGroup === "DEF") {
+          awards.push({ game_id: gameId, player_id: lockdown.player_id, award_type: "lockdown", award_label: "🔒 Lockdown", reason: `${lockdown.tackles} tackles — defensive fortress` });
+        }
+      }
+      
+      // 9. 👟 Engine Room (highest tackles + assists for MID)
+      const midPerfs = allPerfs.filter(p => {
+        const pl = members.find(m => m.id === p.player_id);
+        return getPositionGroup(pl?.position) === "MID" && p.id !== bestId && !awards.some(a => a.player_id === p.player_id);
+      }).sort((a, b) => (b.tackles + b.assists) - (a.tackles + a.assists));
+      if (midPerfs[0] && (midPerfs[0].tackles + midPerfs[0].assists) >= 3) {
+        awards.push({ game_id: gameId, player_id: midPerfs[0].player_id, award_type: "engine_room", award_label: "👟 Engine Room", reason: `${midPerfs[0].tackles} tackles + ${midPerfs[0].assists} assists — midfield powerhouse` });
+      }
+      
+      // Insert all awards (max 9)
+      if (awards.length > 0) {
+        await supabase.from("match_awards" as any).insert(awards.slice(0, 9));
+      }
+    })();
   };
 
-  const handleSendMsg = async () => {
-    if (!sendMsgTo || !sendMsgContent.trim()) return;
-    await sendMessage(user.id, sendMsgTo, sendMsgContent.trim());
-    toast({ title: "Message Sent" });
-    setSendMsgTo(""); setSendMsgContent("");
-  };
-
+  // Handle reply
   const handleReply = async () => {
     if (!replyTo || !replyContent.trim()) return;
     await sendMessage(user.id, replyTo, replyContent.trim());
@@ -846,115 +927,78 @@ const OfficialProfile = () => {
     setReplyTo(null); setReplyContent("");
   };
 
-  const myMessages = messages.filter(m => m.toId === user.id);
+  // Handle send message
+  const handleSendMsg = async () => {
+    if (!sendMsgTo || !sendMsgContent.trim()) return;
+    await sendMessage(user.id, sendMsgTo, sendMsgContent.trim());
+    toast({ title: "Message Sent" });
+    setSendMsgTo(""); setSendMsgContent("");
+  };
 
-  if (!user) return <Navigate to="/login" />;
+  // Messages for this official
+  const myMessages = messages.filter(m => m.toId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Captain stats — position-specific
+  const captainStatFields = getStatsForPosition(liveMember.position);
+  const iconMapOfficial: Record<string, any> = {
+    saves: Hand, cleanSheets: Shield, aerialDuels: Crosshair,
+    tackles: Shield, interceptions: Crosshair, assists: Footprints,
+    goals: Target, directShots: Crosshair, successfulTackles: Shield,
+  };
+  const getCaptainStatCards = () => {
+    return captainStatFields.map(sf => ({
+      icon: iconMapOfficial[sf.key] || Target,
+      label: sf.label,
+      value: (liveMember as any)[sf.key] || 0,
+    }));
+  };
 
   return (
-    <div className="min-h-screen bg-background selection:bg-primary/30">
+    <div className="min-h-screen bg-background">
       <Navbar />
-      <main className="max-w-4xl mx-auto p-4 pt-24 pb-12 space-y-8">
-        
+      <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
         {/* Profile Header */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative">
-          <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-background shadow-2xl overflow-hidden bg-card card-glow z-10">
-            <Avatar className="w-full h-full">
-              {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
-              <AvatarFallback className="bg-secondary text-primary font-heading text-4xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <label className="absolute bottom-1 right-1 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center cursor-pointer shadow-lg hover:scale-110 transition-transform">
-              <Upload className="w-4 h-4" />
-              <input type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
-            </label>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
+          <div className="flex flex-row items-center justify-center gap-3">
+            <div className="relative">
+              <Avatar className="w-20 h-20 border-2 border-primary">
+                {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
+                <AvatarFallback className="bg-secondary text-primary font-heading text-2xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <button onClick={() => fileInputRef.current?.click()}
+                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-colors">
+                <Upload className="w-4 h-4" />
+              </button>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
+            </div>
+            <LottieCarousel animations={profileCarousel} className="w-16 h-16 md:w-24 md:h-24" />
           </div>
-          
-          <Card className="pt-24 pb-8 text-center bg-card border-border overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-primary/10 to-transparent" />
-            <CardContent className="relative z-0">
-              <h2 className="font-heading text-2xl text-foreground mb-1">{user.name}</h2>
-              <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
-                <Badge variant="secondary" className="font-body px-3 py-1">Official Profile</Badge>
-                <Badge variant="outline" className="font-body px-3 py-1 border-primary/30 text-primary capitalize">{user.role.replace('_', ' ')}</Badge>
-                {user.squadNumber && <Badge variant="outline" className="font-body px-3 py-1">#{user.squadNumber}</Badge>}
-              </div>
-              <p className="text-sm text-muted-foreground font-body max-w-sm mx-auto">
-                Welcome back to the SunCity FC Management Hub. You have full access to team records, finances, and performance tracking.
-              </p>
-            </CardContent>
-          </Card>
+          <h2 className="font-heading text-2xl text-foreground mt-4">{liveMember.name}</h2>
+          <div className="flex items-center justify-center gap-2 mt-1">
+            <Badge className="bg-primary text-primary-foreground font-body capitalize">{user.role.replace("_", " ")}</Badge>
+          </div>
+          {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
         </motion.div>
 
-        {/* Dynamic Award/Stat Showcase */}
-        {isManager && (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
-            <Card className="bg-card border-border card-glow overflow-hidden">
-              <div className="grid grid-cols-1 md:grid-cols-2">
-                <div className="p-6 flex flex-col justify-center">
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/30 w-fit mb-4">
-                    <TrendingUp className="w-4 h-4 text-primary" />
-                    <span className="text-xs font-heading text-primary uppercase tracking-wider">Season Progress</span>
-                  </div>
-                  <h3 className="font-heading text-3xl text-foreground mb-2">SunCity Performance</h3>
-                  <p className="text-muted-foreground font-body text-sm leading-relaxed mb-6">
-                    We've played {gameScores.length} games this season. Team morale is high and training attendance is averaging 85% this month.
-                  </p>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center p-3 rounded-xl bg-secondary/50 border border-border">
-                      <p className="text-2xl font-heading text-primary">{gameScores.filter(g => g.ourScore > g.theirScore).length}</p>
-                      <p className="text-[10px] text-muted-foreground font-body uppercase">Wins</p>
+        {/* ===== CAPTAIN PERSONAL STATS ===== */}
+        {(isCaptain || isFadhir) && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> My Stats</CardTitle></CardHeader>
+              <CardContent>
+                <div className={`grid gap-4 ${getCaptainStatCards().length === 4 ? "grid-cols-4" : getCaptainStatCards().length === 5 ? "grid-cols-5" : "grid-cols-3"}`}>
+                  {getCaptainStatCards().map(({ icon: Icon, label, value }) => (
+                    <div key={label} className="text-center">
+                      <Icon className="w-5 h-5 text-primary mx-auto mb-1" />
+                      <p className="text-xl font-heading text-foreground">{value}</p>
+                      <p className="text-[10px] text-muted-foreground font-body">{label}</p>
                     </div>
-                    <div className="text-center p-3 rounded-xl bg-secondary/50 border border-border">
-                      <p className="text-2xl font-heading text-foreground">{gameScores.filter(g => g.ourScore === g.theirScore).length}</p>
-                      <p className="text-[10px] text-muted-foreground font-body uppercase">Draws</p>
-                    </div>
-                    <div className="text-center p-3 rounded-xl bg-secondary/50 border border-border">
-                      <p className="text-2xl font-heading text-destructive">{gameScores.filter(g => g.ourScore < g.theirScore).length}</p>
-                      <p className="text-[10px] text-muted-foreground font-body uppercase">Losses</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-                <div className="h-64 md:h-auto bg-muted/20 flex items-center justify-center p-6 border-l border-border relative overflow-hidden">
-                  <div className="absolute inset-0 opacity-20 pointer-events-none">
-                    <BarChart3 className="w-full h-full text-primary scale-150" />
-                  </div>
-                  <LottieCarousel animations={profileCarousel} className="h-48 w-48" />
-                </div>
-              </div>
+              </CardContent>
             </Card>
           </motion.div>
         )}
-
-        {/* Navigation Shortcut Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {canAddScoresEvents && (
-            <motion.button whileHover={{ y: -2 }} onClick={() => document.getElementById('scores-section')?.scrollIntoView({ behavior: 'smooth' })} 
-              className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/50 transition-all flex flex-col items-center gap-2 group">
-              <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:scale-110 transition-transform"><Gamepad2 className="w-5 h-5" /></div>
-              <span className="text-xs font-heading">Record Match</span>
-            </motion.button>
-          )}
-          {canManageAttendance && (
-            <motion.button whileHover={{ y: -2 }} onClick={() => document.getElementById('attendance-section')?.scrollIntoView({ behavior: 'smooth' })} 
-              className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/50 transition-all flex flex-col items-center gap-2 group">
-              <div className="p-2 rounded-lg bg-green-500/10 text-green-500 group-hover:scale-110 transition-transform"><CheckCircle className="w-5 h-5" /></div>
-              <span className="text-xs font-heading">Attendance</span>
-            </motion.button>
-          )}
-          {canManageFinance && (
-            <motion.button whileHover={{ y: -2 }} onClick={() => document.getElementById('finance-section')?.scrollIntoView({ behavior: 'smooth' })} 
-              className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/50 transition-all flex flex-col items-center gap-2 group">
-              <div className="p-2 rounded-lg bg-yellow-500/10 text-yellow-500 group-hover:scale-110 transition-transform"><DollarSign className="w-5 h-5" /></div>
-              <span className="text-xs font-heading">Finances</span>
-            </motion.button>
-          )}
-          {isCoach && (
-            <motion.button whileHover={{ y: -2 }} onClick={() => document.getElementById('lineup-section')?.scrollIntoView({ behavior: 'smooth' })} 
-              className="p-4 rounded-xl border border-border bg-card hover:bg-secondary/50 transition-all flex flex-col items-center gap-2 group">
-              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 group-hover:scale-110 transition-transform"><Shield className="w-5 h-5" /></div>
-              <span className="text-xs font-heading">Lineup</span>
-            </motion.button>
-          )}
-        </div>
 
         {/* ===== TRAINING MATCH RECORDER (Team A vs Team B) ===== */}
         {isManager && (
@@ -1070,257 +1114,362 @@ const OfficialProfile = () => {
           </motion.div>
         )}
 
-
-        {/* Record match score — Ethan + Captains */}
-        {canAddScoresEvents && (
-          <Card id="scores-section" className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Record Match Results</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-2">
-                <Input placeholder="Opponent Name" value={newOpponent} onChange={(e) => setNewOpponent(e.target.value)} className="bg-secondary border-border font-body" />
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Game Scores — MANAGER & CAPTAINS ONLY */}
+          {canAddScoresEvents && (
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Add Recent Results</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <Input placeholder="Opponent name" value={newOpponent} onChange={(e) => setNewOpponent(e.target.value)} className="bg-secondary border-border font-body" />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input placeholder="Our score" type="number" value={newOurScore} onChange={(e) => { setNewOurScore(e.target.value); setScorers([]); }} className="bg-secondary border-border font-body" />
+                  <Input placeholder="Their score" type="number" value={newTheirScore} onChange={(e) => setNewTheirScore(e.target.value)} className="bg-secondary border-border font-body" />
+                </div>
+                <Input type="date" value={newScoreDate} onChange={(e) => setNewScoreDate(e.target.value)} className="bg-secondary border-border font-body" placeholder="Date played" />
                 <select value={newGameType} onChange={(e) => setNewGameType(e.target.value)}
-                  className="h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  <option value="friendly">Friendly Match</option>
-                  <option value="league">League Match</option>
-                  <option value="amateur">Amateur Match</option>
-                  <option value="tournament">Tournament</option>
+                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  <option value="friendly">Friendly</option>
+                  <option value="league">League (Kanjuri)</option>
+                  <option value="amateur">Amateur</option>
                 </select>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Input placeholder="Venue (Optional)" value={newVenue} onChange={(e) => setNewVenue(e.target.value)} className="bg-secondary border-border font-body" />
-                <Input type="date" value={newScoreDate} onChange={(e) => setNewScoreDate(e.target.value)} className="bg-secondary border-border font-body" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-xs font-body text-primary">Our Score</label>
-                  <Input type="number" value={newOurScore} onChange={(e) => setNewOurScore(e.target.value)} className="bg-secondary border-border font-body" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-body text-destructive">Opponent Score</label>
-                  <Input type="number" value={newTheirScore} onChange={(e) => setNewTheirScore(e.target.value)} className="bg-secondary border-border font-body" />
-                </div>
-              </div>
-
-              {ourScoreNum > 0 && (
-                <div className="space-y-2">
-                  <label className="text-xs font-body text-primary">Who scored for us? ({scorers.length}/{ourScoreNum})</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {playerMembers.map((m) => (
-                      <Badge key={m.id} variant={scorers.includes(m.id) ? "default" : "outline" }
-                        onClick={() => {
-                          if (scorers.includes(m.id)) setScorers(scorers.filter(id => id !== m.id));
-                          else if (scorers.length < ourScoreNum) setScorers([...scorers, m.id]);
-                        }}
-                        className="cursor-pointer font-body text-[10px]">{m.name}</Badge>
+                <select value={newVenue} onChange={(e) => setNewVenue(e.target.value)}
+                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  <option value="">Select venue</option>
+                  <option value="Kanjuri Grounds">Kanjuri Grounds</option>
+                  <option value="G-Town">G-Town</option>
+                  <option value="School Field">School Field</option>
+                </select>
+                {ourScoreNum > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground font-body">Who scored? ({ourScoreNum} goal{ourScoreNum > 1 ? "s" : ""})</p>
+                    {Array.from({ length: ourScoreNum }).map((_, i) => (
+                      <select key={i} value={scorers[i] || ""}
+                        onChange={(e) => { const ns = [...scorers]; ns[i] = e.target.value; setScorers(ns); }}
+                        className="w-full h-9 rounded-md border border-input bg-secondary px-3 text-foreground font-body text-sm">
+                        <option value="">Select scorer {i + 1}</option>
+                        {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+                <Button onClick={addScore} className="w-full font-body"><Plus className="w-4 h-4 mr-1" /> Add Score</Button>
+              </CardContent>
+            </Card>
+          )}
 
-              <Button onClick={addScore} className="w-full font-body" disabled={!newOpponent || !newOurScore || !newTheirScore}>
-                <Plus className="w-4 h-4 mr-1" /> Add Score
-              </Button>
-
-              {/* Game Stats Form — Shown after adding a score */}
-              {lastAddedGameId && (
-                <div className="mt-6 p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-4 animate-in fade-in slide-in-from-top-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-heading text-sm text-primary">📊 Game Stats: vs {lastAddedOpponent}</h4>
-                    <Badge variant="outline" className="font-body text-[10px] border-primary/30">RECORDING NOW</Badge>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-6">
-                    {/* First Half */}
-                    <div className="space-y-3">
-                      <p className="text-xs font-heading text-primary uppercase tracking-wider">1st Half</p>
-                      {[
-                        ['Shots', 'shots'], ['On Target', 'shotsOnTarget'], ['Penalties', 'penalties'],
-                        ['Freekicks', 'freekicks'], ['Corners', 'cornerKicks'], ['Fouls', 'fouls'],
-                        ['Offsides', 'offsides'], ['Yellows', 'yellowCards'], ['Reds', 'redCards']
-                      ].map(([label, key]) => (
-                        <div key={key} className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-body text-muted-foreground">{label}</span>
-                          <Input type="number" value={(firstHalfStats as any)[key]} onChange={(e) => setFirstHalfStats({...firstHalfStats, [key]: +e.target.value})} className="w-16 h-7 text-xs bg-background text-center" />
-                        </div>
+          {/* Game Stats Form — appears after adding a score */}
+          {lastAddedGameId && canAddScoresEvents && (
+            <Card className="bg-card border-border card-glow border-primary/30">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-primary" /> Match Stats — vs {lastAddedOpponent}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="overflow-x-auto">
+                  <table className="w-full font-body text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-muted-foreground">
+                        <th className="text-left py-2 px-2">Stat</th>
+                        <th className="text-center py-2 px-2">1st Half</th>
+                        <th className="text-center py-2 px-2">2nd Half</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {([
+                        ["Shots", "shots"],
+                        ["Shots on Target", "shotsOnTarget"],
+                        ["Penalties", "penalties"],
+                        ["Freekicks", "freekicks"],
+                        ["Corner Kicks", "cornerKicks"],
+                        ["Fouls", "fouls"],
+                        ["Offsides", "offsides"],
+                        ["Yellow Cards", "yellowCards"],
+                        ["Red Cards", "redCards"],
+                      ] as [string, keyof typeof firstHalfStats][]).map(([label, key]) => (
+                        <tr key={key} className="border-b border-border">
+                          <td className="py-2 px-2 text-foreground">{label}</td>
+                          <td className="py-1 px-1">
+                            <Input type="number" min={0} value={firstHalfStats[key]}
+                              onChange={(e) => setFirstHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
+                              onFocus={(e) => { if (e.target.value === "0") setFirstHalfStats(p => ({ ...p, [key]: "" as any })); }}
+                              onBlur={(e) => { if (e.target.value === "") setFirstHalfStats(p => ({ ...p, [key]: 0 })); }}
+                              className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
+                          </td>
+                          <td className="py-1 px-1">
+                            <Input type="number" min={0} value={secondHalfStats[key]}
+                              onChange={(e) => setSecondHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
+                              onFocus={(e) => { if (e.target.value === "0") setSecondHalfStats(p => ({ ...p, [key]: "" as any })); }}
+                              onBlur={(e) => { if (e.target.value === "") setSecondHalfStats(p => ({ ...p, [key]: 0 })); }}
+                              className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
+                          </td>
+                        </tr>
                       ))}
-                    </div>
-                    {/* Second Half */}
-                    <div className="space-y-3">
-                      <p className="text-xs font-heading text-primary uppercase tracking-wider">2nd Half</p>
-                      {[
-                        ['Shots', 'shots'], ['On Target', 'shotsOnTarget'], ['Penalties', 'penalties'],
-                        ['Freekicks', 'freekicks'], ['Corners', 'cornerKicks'], ['Fouls', 'fouls'],
-                        ['Offsides', 'offsides'], ['Yellows', 'yellowCards'], ['Reds', 'redCards']
-                      ].map(([label, key]) => (
-                        <div key={key} className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-body text-muted-foreground">{label}</span>
-                          <Input type="number" value={(secondHalfStats as any)[key]} onChange={(e) => setSecondHalfStats({...secondHalfStats, [key]: +e.target.value})} className="w-16 h-7 text-xs bg-background text-center" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <Button onClick={handleSaveGameStats} className="w-full font-body bg-primary hover:bg-primary/90 text-primary-foreground">Save Detailed Stats</Button>
+                    </tbody>
+                  </table>
                 </div>
-              )}
+                <div className="flex gap-2">
+                  <Button onClick={handleSaveGameStats} className="flex-1 font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
+                  <Button variant="outline" onClick={() => setLastAddedGameId(null)} className="font-body">Skip</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {canAddScoresEvents && (
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-primary" /> Add Event</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <Input placeholder="Event title" value={newEventTitle} onChange={(e) => setNewEventTitle(e.target.value)} className="bg-secondary border-border font-body" />
+                <Input type="date" value={newEventDate} onChange={(e) => setNewEventDate(e.target.value)} className="bg-secondary border-border font-body" />
+                <Textarea placeholder="Description" value={newEventDesc} onChange={(e) => setNewEventDesc(e.target.value)} className="bg-secondary border-border font-body" />
+                <Button onClick={addEvent} className="w-full font-body"><Plus className="w-4 h-4 mr-1" /> Add Event</Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Media Upload */}
+          {canUploadMedia && (
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Image className="w-5 h-5 text-primary" /> Upload Media</CardTitle></CardHeader>
+              <CardContent>
+                <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors">
+                  <Upload className="w-8 h-8 text-muted-foreground mb-2" />
+                  <span className="text-sm text-muted-foreground font-body">Click to select photos</span>
+                  <input ref={mediaInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} />
+                </label>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Record Transaction — Finance only (Fadhir) */}
+          {canManageFinance && !isCoach && (
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><DollarSign className="w-5 h-5 text-primary" /> Record Transaction</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant={finType === "in" ? "default" : "outline"} onClick={() => setFinType("in")} className="font-body"><TrendingUp className="w-4 h-4 mr-1" /> Money In</Button>
+                  <Button variant={finType === "out" ? "default" : "outline"} onClick={() => setFinType("out")} className="font-body"><TrendingDown className="w-4 h-4 mr-1" /> Money Out</Button>
+                </div>
+                <select value={finMonth} onChange={(e) => setFinMonth(e.target.value)} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  {contributionMonths.map((m) => <option key={m.key} value={m.label}>{m.label}</option>)}
+                </select>
+                <Input placeholder="Amount (KSh)" type="number" value={finAmount} onChange={(e) => setFinAmount(e.target.value)} className="bg-secondary border-border font-body" />
+                <Input placeholder="Description" value={finDesc} onChange={(e) => setFinDesc(e.target.value)} className="bg-secondary border-border font-body" />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-full justify-start text-left font-body", !finDate && "text-muted-foreground")}>
+                      <CalendarIcon className="w-4 h-4 mr-2" />
+                      {finDate ? format(finDate, "PPP") : "Select date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                    <Calendar mode="single" selected={finDate} onSelect={setFinDate} initialFocus className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+                <Button onClick={handleRecordTransaction} className="w-full font-body"><Plus className="w-4 h-4 mr-1" /> Record</Button>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* ===== MANAGER: Manage Recent Results (Edit/Delete) ===== */}
+        {isManager && gameScores.length > 0 && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Manage Recent Results</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {gameScores.slice(0, 10).map((game) => (
+                <div key={game.id} className="border border-border rounded-lg p-3">
+                  {editingScoreId === game.id ? (
+                    <div className="space-y-2">
+                      <Input value={editScoreData.opponent} onChange={(e) => setEditScoreData(p => ({ ...p, opponent: e.target.value }))} className="bg-secondary border-border font-body" placeholder="Opponent" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input type="number" value={editScoreData.ourScore} onChange={(e) => setEditScoreData(p => ({ ...p, ourScore: +e.target.value }))} className="bg-secondary border-border font-body" />
+                        <Input type="number" value={editScoreData.theirScore} onChange={(e) => setEditScoreData(p => ({ ...p, theirScore: +e.target.value }))} className="bg-secondary border-border font-body" />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={handleSaveEditScore} className="font-body text-xs"><Save className="w-3 h-3 mr-1" /> Save</Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingScoreId(null)} className="font-body text-xs">Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-body text-sm text-foreground">vs {game.opponent}</span>
+                        <span className="ml-2 font-heading text-primary text-sm">{game.ourScore} - {game.theirScore}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{game.date}</span>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-primary" onClick={() => exportMatchStats(game.id)}>
+                          <Download className="w-3 h-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
+                          setEditingScoreId(game.id);
+                          setEditScoreData({ opponent: game.opponent, ourScore: game.ourScore, theirScore: game.theirScore });
+                        }}><Edit className="w-3 h-3" /></Button>
+                        {deleteConfirmId === game.id ? (
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" onClick={() => handleDeleteScore(game.id)}>Confirm</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setDeleteConfirmId(null)}>No</Button>
+                          </div>
+                        ) : (
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => setDeleteConfirmId(game.id)}><Trash2 className="w-3 h-3" /></Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </CardContent>
           </Card>
         )}
 
-        {/* ===== PERFORMANCE ANALYSIS REPORT (Potm logic) ===== */}
-        {isManager && (() => {
-          const latestGame = [...gameScores].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-          if (!latestGame) return null;
-          const perfs = matchPerformances.filter(p => p.gameId === latestGame.id);
-          const potm = perfs.sort((a,b) => b.rating - a.rating)[0];
-          const potmMember = potm ? members.find(m => m.id === potm.playerId) : null;
-          
-          // Improved/Dropped detection (compared to season average rating or previous match)
-          const improved = perfs.filter(p => {
-            const member = members.find(m => m.id === p.playerId);
-            const prevPerfs = matchPerformances.filter(mp => mp.playerId === p.playerId && mp.gameId !== latestGame.id);
-            if (prevPerfs.length === 0) return false;
-            const avgRating = prevPerfs.reduce((sum, mp) => sum + mp.rating, 0) / prevPerfs.length;
-            return p.rating > avgRating + 0.5;
-          }).map(p => ({ player: members.find(m => m.id === p.playerId), delta: (p.rating - (matchPerformances.filter(mp => mp.playerId === p.playerId && mp.gameId !== latestGame.id).reduce((sum, mp) => sum + mp.rating, 0) / matchPerformances.filter(mp => mp.playerId === p.playerId && mp.gameId !== latestGame.id).length)).toFixed(1) }));
-
-          return (
-            <Card className="bg-card border-border card-glow overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div>
-                  <CardTitle className="font-heading text-lg text-foreground">Latest match report — vs {latestGame.opponent}</CardTitle>
-                  <p className="text-xs text-muted-foreground font-body">AI-Powered analysis & performance tracking</p>
-                </div>
-                <div className="p-2 rounded-lg bg-primary/10"><BarChart3 className="w-5 h-5 text-primary" /></div>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
-                <div className="md:col-span-1 flex flex-col items-center text-center p-4 rounded-xl bg-primary/5 border border-primary/20">
-                  <p className="text-[10px] text-primary font-heading tracking-widest uppercase mb-2">Potm winner</p>
-                  <Avatar className="w-16 h-16 border-2 border-primary mb-2">
-                    <AvatarImage src={profilePics[potmMember?.id || '']} className="aspect-square object-cover" />
-                    <AvatarFallback className="bg-secondary text-primary font-heading">{potmMember?.name.slice(0,2).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <p className="font-heading text-sm text-foreground">{potmMember?.name || 'No Data'}</p>
-                  <div className="flex items-center gap-1 text-yellow-500 mt-1">
-                    <Star className="w-3 h-3 fill-current" />
-                    <span className="text-xs font-body font-bold">{potm?.rating.toFixed(1) || '0.0'} Rating</span>
-                  </div>
-                </div>
-                
-                <div className="md:col-span-2 space-y-4">
-                  {improved.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] text-primary font-heading tracking-widest uppercase">Rising Stars (Vs Avg)</p>
-                      <div className="flex flex-wrap gap-2">
-                        {improved.map((imp, idx) => (
-                          <div key={idx} className="flex items-center gap-2 px-2 py-1 rounded-md bg-green-500/10 border border-green-500/20">
-                            <TrendingUp className="w-3 h-3 text-green-600" />
-                            <span className="text-[10px] font-body font-medium">{imp.player?.name} (+{imp.delta})</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="p-3 rounded-lg bg-secondary/30 border border-border">
-                    <p className="text-xs font-body text-muted-foreground leading-relaxed italic">
-                      "Tactical Note: The team showed {latestGame.ourScore > latestGame.theirScore ? 'great resilience and offensive creativity' : 'some defensive gaps that need addressing in training'}. Goal conversion was {latestGame.ourScore > 2 ? 'excellent' : 'moderate'} today."
-                    </p>
-                  </div>
-                  <Button variant="outline" className="w-full h-8 text-xs font-body" onClick={() => exportMatchStats(latestGame.id)}>
-                    <Download className="w-3 h-3 mr-2" /> Export Full Match Report (.docx)
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })()}
-
-        {/* Individual Match Performance Recorder — ethan + managers */}
-        {(isManager || user.id === "SCF-004") && (
+        {/* ===== COACH & MANAGER: Add New Player / Fan ===== */}
+        {(isCoach || isManager) && (
           <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Footprints className="w-5 h-5 text-primary" /> Record Match Performance</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><UserPlus className="w-5 h-5 text-primary" /> Add New Member</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
-                <select value={perfGameId} onChange={(e) => setPerfGameId(e.target.value)}
-                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  <option value="">Select game</option>
-                  {gameScores.map((g) => <option key={g.id} value={g.id}>{g.opponent} ({g.date})</option>)}
-                </select>
-                <select value={perfPlayerId} onChange={(e) => setPerfPlayerId(e.target.value)}
-                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  <option value="">Select player</option>
-                  {playerMembers
-                    .filter(m => !recordedPlayerIds.includes(m.id))
-                    .sort((a, b) => {
-                      const aPrev = lastMatchPlayerIds.includes(a.id);
-                      const bPrev = lastMatchPlayerIds.includes(b.id);
-                      if (aPrev && !bPrev) return -1;
-                      if (!aPrev && bPrev) return 1;
-                      return 0;
-                    })
-                    .map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} {lastMatchPlayerIds.includes(m.id) ? ' (Played Last Game)' : ''}
-                      </option>
-                    ))}
-                </select>
+                <Button variant={newMemberType === "player" ? "default" : "outline"} onClick={() => setNewMemberType("player")} className="font-body">Player</Button>
+                <Button variant={newMemberType === "fan" ? "default" : "outline"} onClick={() => setNewMemberType("fan")} className="font-body">Fan</Button>
               </div>
+              <Input placeholder={newMemberType === "fan" ? "Fan name" : "Player name"} value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} className="bg-secondary border-border font-body" />
+              {newMemberType === "player" && (
+                <select value={newPlayerPos} onChange={(e) => setNewPlayerPos(e.target.value)} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                  <option value="">Select position</option>
+                  <option value="GK">Goalkeeper</option>
+                  <option value="DEF">Defender</option>
+                  <option value="DEF (LB)">Defender (LB)</option>
+                  <option value="DEF (CB)">Defender (CB)</option>
+                  <option value="DEF (RB)">Defender (RB)</option>
+                  <option value="MID">Midfielder</option>
+                  <option value="ATT">Attacker</option>
+                </select>
+              )}
+              <Button onClick={handleAddPlayer} disabled={!newPlayerName} className="w-full font-body"><UserPlus className="w-4 h-4 mr-1" /> Add {newMemberType === "fan" ? "Fan" : "Player"}</Button>
+            </CardContent>
+          </Card>
+        )}
 
-              {perfPlayerId && (() => {
-                const perfPlayer = members.find(m => m.id === perfPlayerId);
-                const perfPosGroup = getPositionGroup(perfPlayer?.position);
-                const perfFields = getPerfFieldsForPosition(perfPlayer?.position);
-                
+        {/* ===== MANAGER: Team Stats Editor (Position-Specific) ===== */}
+        {isManager && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Team Stats Editor</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <select value={statsPlayerId} onChange={(e) => setStatsPlayerId(e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                <option value="">Select player</option>
+                {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name} ({getFullPositionName(m.position)})</option>)}
+              </select>
+              {statsPlayerId && selectedStatsPlayer && (() => {
+                const fields = getStatsForPosition(selectedStatsPlayer.position);
+                const stateSetters: Record<string, [string, (v: string) => void]> = {
+                  saves: [statsSaves, setStatsSaves],
+                  cleanSheets: [statsCleanSheets, setStatsCleanSheets],
+                  aerialDuels: [statsAerialDuels, setStatsAerialDuels],
+                  interceptions: [statsInterceptions, setStatsInterceptions],
+                  assists: [statsAssists, setStatsAssists],
+                  goals: [statsGoals, setStatsGoals],
+                  directShots: [statsDirectShots, setStatsDirectShots],
+                  successfulTackles: [statsSuccessfulTackles, setStatsSuccessfulTackles],
+                  // gamesPlayed excluded - auto-tracked from match recordings
+                };
                 return (
                   <>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-xs font-body text-primary">Goals</label>
-                        <Input type="number" value={perfGoals} onChange={(e) => setPerfGoals(e.target.value)} className="bg-secondary border-border" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-body text-primary">Assists</label>
-                        <Input type="number" value={perfAssists} onChange={(e) => setPerfAssists(e.target.value)} className="bg-secondary border-border" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-body text-primary">Rating (1-10)</label>
-                        <Input type="number" step="0.1" value={perfRating} onChange={(e) => setPerfRating(e.target.value)} className="bg-secondary border-border" />
-                      </div>
-                      {perfFields.map(f => (
-                        <div key={f.key} className="space-y-1">
-                          <label className="text-xs font-body text-primary">{f.label}</label>
-                          {f.type === 'number' ? (
-                            <Input type="number" value={
-                              f.key === 'saves' ? perfSaves : f.key === 'tackles' ? perfTackles : f.key === 'interceptions' ? perfInterceptions : f.key === 'blocks' ? perfBlocks : f.key === 'clearances' ? perfClearances : f.key === 'aerialDuels' ? perfAerialDuels : perfDirectShots
-                            } onChange={(e) => {
-                              const val = e.target.value;
-                              if (f.key === 'saves') setPerfSaves(val);
-                              else if (f.key === 'tackles') setPerfTackles(val);
-                              else if (f.key === 'interceptions') setPerfInterceptions(val);
-                              else if (f.key === 'blocks') setPerfBlocks(val);
-                              else if (f.key === 'clearances') setPerfClearances(val);
-                              else if (f.key === 'aerialDuels') setPerfAerialDuels(val);
-                              else if (f.key === 'directShots') setPerfDirectShots(val);
-                            }} className="bg-secondary border-border" />
-                          ) : (
-                            <div className="flex items-center h-10">
-                              <Checkbox checked={perfCleanSheet} onCheckedChange={(val) => setPerfCleanSheet(!!val)} />
-                              <span className="ml-2 text-xs font-body text-muted-foreground">Clean Sheet</span>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                    <p className="text-xs text-muted-foreground font-body">Showing stats for: <span className="text-primary font-medium">{getFullPositionName(selectedStatsPlayer.position)}</span></p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {fields.map(f => {
+                        const [val, setter] = stateSetters[f.key] || ["0", () => {}];
+                        return (
+                          <div key={f.key}>
+                            <label className="text-xs text-primary font-body">{f.label}</label>
+                            <Input type="number" value={val} onChange={(e) => setter(e.target.value)} onFocus={(e) => { if (e.target.value === "0") setter(""); }} onBlur={(e) => { if (e.target.value === "") setter("0"); }} className="bg-secondary border-border font-body" />
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="flex items-center gap-2 p-3 bg-secondary/30 rounded-lg border border-border">
-                      <Checkbox checked={perfIsPotm} onCheckedChange={(val) => setPerfIsPotm(!!val)} />
-                      <div className="flex items-center gap-1.5">
-                        <Star className={`w-4 h-4 ${perfIsPotm ? 'text-yellow-500 fill-current' : 'text-muted-foreground'}`} />
-                        <span className="text-xs font-body">Player of the Match</span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground font-body italic">⭐ Player of the Match is auto-determined by the system</p>
-                    <Button onClick={handleAddMatchPerf} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Record Performance</Button>
+                    <Button onClick={handleUpdateStats} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
                   </>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== MANAGER: Match Day Performance Recorder (Position-Specific, Auto POTM) ===== */}
+        {isManager && (
+          <Card className="bg-card border-border card-glow">
+            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Star className="w-5 h-5 text-primary" /> Record Match Day Stats</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <select value={perfGameId} onChange={(e) => setPerfGameId(e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                <option value="">Select match</option>
+                {gameScores.map(g => <option key={g.id} value={g.id}>{g.date} — vs {g.opponent} ({g.ourScore}-{g.theirScore})</option>)}
+              </select>
+              {perfGameId && (() => {
+                // Smart player selector: filter out already-recorded, prioritize last match
+                const availableForPerf = useMemo(() => {
+                  return playerMembers
+                    .filter(m => !recordedPlayerIds.includes(m.id))
+                    .sort((a, b) => {
+                      const aLast = lastMatchPlayerIds.includes(a.id) ? 1 : 0;
+                      const bLast = lastMatchPlayerIds.includes(b.id) ? 1 : 0;
+                      return bLast - aLast;
+                    });
+                }, [playerMembers, recordedPlayerIds, lastMatchPlayerIds]);
+                const recordedCount = recordedPlayerIds.length;
+                return (
+                <>
+                  {recordedCount > 0 && (
+                    <p className="text-xs text-primary font-body">✅ {recordedCount} player{recordedCount > 1 ? "s" : ""} already recorded for this match</p>
+                  )}
+                  <select value={perfPlayerId} onChange={(e) => setPerfPlayerId(e.target.value)}
+                    className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
+                    <option value="">Select player ({availableForPerf.length} remaining)</option>
+                    {availableForPerf.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {lastMatchPlayerIds.includes(m.id) ? "⭐ " : ""}{m.name} ({getFullPositionName(m.position)})
+                      </option>
+                    ))}
+                  </select>
+                  {perfPlayerId && (() => {
+                    const perfPlayer = members.find(m => m.id === perfPlayerId);
+                    const perfPosGroup = getPositionGroup(perfPlayer?.position);
+                    const perfFields = getPerfFieldsForPosition(perfPlayer?.position);
+                    const perfStateMap: Record<string, [string, (v: string) => void]> = {
+                      goals: [perfGoals, setPerfGoals],
+                      assists: [perfAssists, setPerfAssists],
+                      saves: [perfSaves, setPerfSaves],
+                      successfulTackles: [perfTackles, setPerfTackles],
+                      interceptions: [perfInterceptions, setPerfInterceptions],
+                      aerialDuels: [perfAerialDuels, setPerfAerialDuels],
+                      directShots: [perfDirectShots, setPerfDirectShots],
+                    };
+                    return (
+                      <>
+                        <p className="text-xs text-muted-foreground font-body">Position: <span className="text-primary font-medium">{getFullPositionName(perfPlayer?.position)}</span></p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {perfFields.filter(f => f.key !== "cleanSheet").map(f => {
+                            const [val, setter] = perfStateMap[f.key] || ["0", () => {}];
+                            return (
+                              <div key={f.key}>
+                                <label className="text-xs text-muted-foreground font-body">{f.label}</label>
+                                <Input type="number" value={val} onChange={(e) => setter(e.target.value)} onFocus={(e) => { if (e.target.value === "0") setter(""); }} onBlur={(e) => { if (e.target.value === "") setter("0"); }} className="bg-secondary border-border font-body" />
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {perfPosGroup === "GK" && (
+                          <label className="flex items-center gap-2 text-sm font-body text-foreground">
+                            <Checkbox checked={perfCleanSheet} onCheckedChange={(c) => setPerfCleanSheet(!!c)} /> Clean Sheet
+                          </label>
+                        )}
+                        <p className="text-xs text-muted-foreground font-body italic">⭐ Player of the Match is auto-determined by the system</p>
+                        <Button onClick={handleAddMatchPerf} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Record Performance</Button>
+                      </>
+                    );
+                  })()}
+                </>
                 );
               })()}
             </CardContent>
@@ -1368,57 +1517,52 @@ const OfficialProfile = () => {
         )}
         {isManager && matchPerformances.length > 0 && (() => {
           // Group performances by game
-          const gamesWithPerfs = Array.from(new Set(matchPerformances.map(p => p.gameId)));
-          return (
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Season Stats Logs</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {gamesWithPerfs.slice(0, 5).map(gid => {
-                    const game = gameScores.find(g => g.id === gid);
-                    if (!game) return null;
-                    return (
-                      <div key={gid} className="flex items-center justify-between p-3 rounded-lg border border-border bg-secondary/20">
-                        <div className="font-body">
-                          <p className="text-sm text-foreground font-medium">vs {game.opponent}</p>
-                          <p className="text-[10px] text-muted-foreground">{game.date}</p>
-                        </div>
-                        <Button size="sm" variant="ghost" className="h-8 px-2 text-primary font-body text-xs" onClick={() => exportMatchStats(gid)}>
-                          <Download className="w-3 h-3 mr-1" /> Export
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })()}
-
-        {/* ===== PERFORMANCE ANALYSIS (Manager Only) ===== */}
-        {isManager && (() => {
-          const stats = members.filter(m => m.role === 'player' || m.role === 'captain');
-          if (stats.length === 0) return null;
+          const perfByGame: Record<string, typeof matchPerformances> = {};
+          matchPerformances.forEach(p => {
+            if (!perfByGame[p.gameId]) perfByGame[p.gameId] = [];
+            perfByGame[p.gameId].push(p);
+          });
+          const gameIds = Object.keys(perfByGame);
+          if (gameIds.length < 2) return null;
           
-          const topScorer = [...stats].sort((a,b) => (b.goals || 0) - (a.goals || 0))[0];
-          const topAssister = [...stats].sort((a,b) => (b.assists || 0) - (a.assists || 0))[0];
+          // Find latest game
+          const sortedGames = gameIds
+            .map(gid => ({ gid, game: gameScores.find(g => g.id === gid) }))
+            .filter(x => x.game)
+            .sort((a, b) => new Date(b.game!.date).getTime() - new Date(a.game!.date).getTime());
           
-          // Improved player: comparison of current stats vs previous week or similar
-          // This is a mockup of the 'logic' requested. In a real app we'd use the weekly logs.
-          const mostImproved = { name: topScorer.name, delta: 12, prev: 42, curr: 54 };
-          const dropped = stats.filter(m => (m.gamesPlayed || 0) > 2).slice(0, 2).map(m => ({ player: m, prev: 7.2, curr: 6.8, delta: -0.4 }));
-
+          if (sortedGames.length < 2) return null;
+          const latestGameId = sortedGames[0].gid;
+          const prevGameId = sortedGames[1].gid;
+          const latestPerfs = perfByGame[latestGameId] || [];
+          const prevPerfs = perfByGame[prevGameId] || [];
+          
+          const deltas = latestPerfs.map(lp => {
+            const prevP = prevPerfs.find(pp => pp.playerId === lp.playerId);
+            if (!prevP) return null;
+            const player = members.find(m => m.id === lp.playerId);
+            const currTotal = lp.goals + lp.assists + lp.saves + lp.tackles + lp.interceptions;
+            const prevTotal = prevP.goals + prevP.assists + prevP.saves + prevP.tackles + prevP.interceptions;
+            return { player, delta: currTotal - prevTotal, curr: currTotal, prev: prevTotal };
+          }).filter(Boolean) as { player: any; delta: number; curr: number; prev: number }[];
+          
+          if (deltas.length === 0) return null;
+          deltas.sort((a, b) => b.delta - a.delta);
+          const mostImproved = deltas[0];
+          const dropped = deltas.filter(d => d.delta < 0);
+          
           return (
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" /> Tactical Insights</CardTitle></CardHeader>
-              <CardContent className="space-y-6">
-                {mostImproved && (
-                  <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 navy-accent">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Award className="w-5 h-5 text-primary" />
-                      <p className="text-xs font-heading text-primary uppercase tracking-wider">Most Improved This Week</p>
-                    </div>
-                    <p className="font-heading text-lg text-foreground mb-1">{mostImproved.name}</p>
+            <Card className="bg-card border-border card-glow border-primary/20">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary" /> Post-Match Analytics
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {mostImproved && mostImproved.delta > 0 && (
+                  <div className="p-3 rounded-lg bg-primary/10 border border-primary/30">
+                    <p className="text-xs text-primary font-heading tracking-wider mb-1">🔥 MOST IMPROVED</p>
+                    <p className="font-body text-foreground font-medium">{mostImproved.player?.name}</p>
                     <p className="text-xs text-muted-foreground font-body">
                       Previous: {mostImproved.prev} pts → Current: {mostImproved.curr} pts
                       <span className="text-primary ml-2">+{mostImproved.delta}</span>
@@ -1717,7 +1861,7 @@ const OfficialProfile = () => {
 
         {/* Financial Overview with Export */}
         {canManageFinance && (
-          <Card id="finance-section" className="bg-card border-border card-glow">
+          <Card className="bg-card border-border card-glow">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="font-heading text-lg text-foreground">Financial Overview</CardTitle>
               <Button size="sm" variant="outline" onClick={exportFinancialPdf} className="font-body text-xs border-primary/30 text-primary">
@@ -1760,7 +1904,7 @@ const OfficialProfile = () => {
 
         {/* Weekly Attendance — Manager + Ethan + Assistant Coach */}
         {canManageAttendance && (
-          <Card id="attendance-section" className="bg-card border-border card-glow">
+          <Card className="bg-card border-border card-glow">
             <CardHeader>
               <CardTitle className="font-heading text-lg text-foreground">Weekly Attendance — {currentWeekStart}</CardTitle>
               <div className="flex flex-wrap gap-2 mt-2">
@@ -1970,7 +2114,6 @@ const OfficialProfile = () => {
             </Collapsible>
           </Card>
         )}
-
 
         {/* ===== FAN MANAGEMENT — Coach & Manager ===== */}
         {(isCoach || isManager) && (() => {
