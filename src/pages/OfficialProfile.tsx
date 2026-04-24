@@ -20,14 +20,15 @@ import { format } from "date-fns";
 import {
   Trophy, Calendar as CalendarIcon, Image, DollarSign, Users, CheckCircle, XCircle, Plus,
   TrendingUp, TrendingDown, Upload, Target, Save, Trash2, Download, UserMinus, Star, BarChart3, Edit,
-  UserPlus, MessageCircle, Send, Mail, Footprints, Gamepad2, Shield, Hand, Crosshair, Award,
+  UserPlus, MessageCircle, Send, Mail, Footprints, Gamepad2, Shield, Hand, Crosshair, Award, Flame,
+  FolderOpen, ChevronRight, ChevronDown,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { contributionMonths, getContribMonthsForMember } from "@/data/team-data";
-import { generateBrandedDocx, type DocxTableData } from "@/lib/docx-export";
+import { generateBrandedDocx, generatePlayerProfileDocx, type DocxTableData } from "@/lib/docx-export";
 import { getPositionGroup, getFullPositionName } from "@/data/team-data";
 import { supabase } from "@/integrations/supabase/client";
 import { getStatsForPosition, getPerfFieldsForPosition, calculatePotmScore } from "@/lib/position-stats";
@@ -67,37 +68,47 @@ interface LeagueTeam {
   division: string;
 }
 
-// Fan Management Row Component
-const FanRow = ({ fan, profilePic, badgePresets }: { fan: any; profilePic?: string; badgePresets: string[] }) => {
-  const { updateFanBadge, updateFanPoints } = useTeamData();
-  const { toast } = useToast();
-  const [badge, setBadge] = useState(fan.fanBadge || "");
-  const [points, setPoints] = useState(String(fan.fanPoints || 0));
+const EditTeamForm = ({ team, onSave, onCancel }: { team: LeagueTeam, onSave: (id: string, data: any) => void, onCancel: () => void }) => {
+  const [data, setData] = useState({
+    played: team.played,
+    won: team.won,
+    drawn: team.drawn,
+    lost: team.lost,
+    gd: team.goal_difference,
+    pts: team.points
+  });
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg border border-border">
-      <Avatar className="w-10 h-10 border border-primary/20">
-        {profilePic && <AvatarImage src={profilePic} className="aspect-square object-cover object-center" />}
-        <AvatarFallback className="bg-secondary text-primary font-heading text-sm">{fan.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-      </Avatar>
-      <div className="flex-1 space-y-2">
-        <p className="font-body text-sm text-foreground font-medium">{fan.name} <span className="text-xs text-muted-foreground">({fan.id})</span></p>
-        <div className="flex gap-2">
-          <select value={badge} onChange={(e) => setBadge(e.target.value)}
-            className="flex-1 h-8 rounded-md border border-input bg-secondary px-2 text-foreground font-body text-xs">
-            <option value="">No badge</option>
-            {badgePresets.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <Input type="number" value={points} onChange={(e) => setPoints(e.target.value)}
-            onFocus={(e) => { if (e.target.value === "0") setPoints(""); }}
-            onBlur={(e) => { if (e.target.value === "") setPoints("0"); }}
-            className="w-20 h-8 text-xs bg-secondary border-border font-body" placeholder="Points" />
-          <Button size="sm" className="h-8 text-xs font-body" onClick={async () => {
-            await updateFanBadge(fan.id, badge);
-            await updateFanPoints(fan.id, parseInt(points) || 0);
-            toast({ title: "Fan Updated", description: `${fan.name} — ${badge || "No badge"}, ${points} pts` });
-          }}><Save className="w-3 h-3 mr-1" /> Save</Button>
+    <div className="bg-secondary/30 p-3 rounded-lg border border-border mt-2 space-y-3">
+      <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground uppercase">Played</label>
+          <Input type="number" value={data.played} onChange={e => setData({ ...data, played: parseInt(e.target.value) || 0 })} className="h-8 text-xs" />
         </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground uppercase">Won</label>
+          <Input type="number" value={data.won} onChange={e => setData({ ...data, won: parseInt(e.target.value) || 0 })} className="h-8 text-xs" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground uppercase">Drawn</label>
+          <Input type="number" value={data.drawn} onChange={e => setData({ ...data, drawn: parseInt(e.target.value) || 0 })} className="h-8 text-xs" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground uppercase">Lost</label>
+          <Input type="number" value={data.lost} onChange={e => setData({ ...data, lost: parseInt(e.target.value) || 0 })} className="h-8 text-xs" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground uppercase">GD</label>
+          <Input type="number" value={data.gd} onChange={e => setData({ ...data, gd: parseInt(e.target.value) || 0 })} className="h-8 text-xs" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground uppercase">Pts</label>
+          <Input type="number" value={data.pts} onChange={e => setData({ ...data, pts: parseInt(e.target.value) || 0 })} className="h-8 text-xs" />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={() => onSave(team.id, data)}><Save className="w-3 h-3 mr-1" /> Save</Button>
       </div>
     </div>
   );
@@ -115,11 +126,66 @@ const OfficialProfile = () => {
     requestContribution, deleteMediaItem, removePlayer, addPlayer,
     uploadHomepageImages, deleteHomepageImage, updatePlayerStats,
     addMatchPerformance, messages, sendMessage, markMessageRead, matchPerformances,
-    updateMemberRole, recordTrainingMatch, refreshData
+    updateMemberRole, recordTrainingMatch, refreshData, trainingMatches, trainingPerformances
   } = useTeamData();
 
   const [isCustomRole, setIsCustomRole] = useState(false);
   const [customRoleName, setCustomRoleName] = useState("");
+  const [showGalleryGroups, setShowGalleryGroups] = useState(false);
+  const [selectedGalleryGroup, setSelectedGalleryGroup] = useState<any[]>([]);
+  const [showGalleryDialog, setShowGalleryDialog] = useState(false);
+  const [showInboxDialog, setShowInboxDialog] = useState(false);
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState<any>(null);
+
+  const isCoach = user?.role === "coach" || user?.role === "assistant_coach";
+  const isFadhir = user?.id === "SCF-002";
+  const isManager = user?.role === "manager";
+  const isFabian = user?.id === "SCF-001";
+  const isCaptain = user?.role === "captain";
+  const isVictor = user?.id === "SCF-006";
+
+  const maskId = (id: string) => (isManager || isCoach) ? id : "SCF-***";
+
+  const handleExportProfile = async (targetMember: any, detailed = false) => {
+    // If targeted member is Captain, Fadhir, or Victor, use detailed export logic
+    const isSpecialRole = targetMember.role === "captain" || targetMember.id === "SCF-002" || targetMember.id === "SCF-006";
+    
+    const stats = getStatsForPosition(targetMember.position).map(sf => ({
+      label: sf.label,
+      value: (targetMember as any)?.[sf.key] || 0
+    }));
+    
+    const attDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(day => {
+      const record = attendance.filter(a => a.playerId === targetMember.id).find(a => a.day === day);
+      return { day, status: record?.status || "absent" };
+    });
+
+    const mContribMonths = getContribMonthsForMember(targetMember.id);
+    const contribs = mContribMonths.map(m => ({
+      month: m.label,
+      status: targetMember.contributions[m.key] || "unpaid",
+    }));
+
+    if (isSpecialRole || detailed) {
+      // Add match performances if available
+      const { data: perfs } = await supabase.from("match_performances").select("*").eq("player_id", targetMember.id).order("created_at", { ascending: false });
+      const { data: awards } = await supabase.from("match_awards" as any).select("*").eq("player_id", targetMember.id).order("created_at", { ascending: false });
+      
+      await generatePlayerProfileDocx(
+        targetMember.name, targetMember.id, getFullPositionName(targetMember.position),
+        stats, attDays, [], contribs, profilePics[targetMember.id], 
+        undefined, perfs as any, awards as any
+      );
+    } else {
+      await generatePlayerProfileDocx(
+        targetMember.name, targetMember.id, getFullPositionName(targetMember.position),
+        stats, attDays, [], contribs, profilePics[targetMember.id]
+      );
+    }
+    toast({ title: `📄 ${targetMember.name} Profile Exported` });
+  };
+
   const [trainingTeams, setTrainingTeams] = useState<{ teamA: string[], teamB: string[] }>({ teamA: [], teamB: [] });
   const [trainingScores, setTrainingScores] = useState({ teamA: 0, teamB: 0 });
   const [trainingPerfs, setTrainingPerfs] = useState<Record<string, any>>({});
@@ -127,7 +193,6 @@ const OfficialProfile = () => {
   
   // --- VICTOR'S JERSEY WASHING SYSTEM ---
   const [jerseyVolunteers, setJerseyVolunteers] = useState<string[]>([]);
-  const isVictor = user.id === "SCF-006";
 
   // --- MEMBER ID REGISTRY VISIBILITY ---
   const [showRegistry, setShowRegistry] = useState(false);
@@ -369,18 +434,13 @@ const OfficialProfile = () => {
     }
   }, [perfGameId, gameScores]);
 
-  const isCoach = user.role === "coach" || user.role === "assistant_coach";
-  const isFadhir = user.id === "SCF-002";
-  const isManager = user.role === "manager";
-  const isFabian = user.id === "SCF-001";
-  const isCaptain = user.role === "captain";
-  const canUploadMedia = ["coach", "manager", "captain", "assistant_coach"].includes(user.role);
+  const canUploadMedia = ["coach", "manager", "captain", "assistant_coach"].includes(user?.role || "");
   const canManageFinance = isFadhir || isCoach;
   const canApproveContributions = isFadhir || isCoach;
   const canDeletePhotos = isManager;
   const canManageContribEvents = isFadhir || isCaptain;
   const showContributions = !isCoach;
-  const canManageAttendance = isManager || user.id === "SCF-004" || isCoach;
+  const canManageAttendance = isManager || user?.id === "SCF-004" || isCoach;
   const canAddScoresEvents = isManager || isCaptain;
   const canReceiveMessages = true; // All officials can receive messages now
 
@@ -980,10 +1040,15 @@ const OfficialProfile = () => {
           {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
         </motion.div>
 
-        {/* ===== CAPTAIN PERSONAL STATS ===== */}
-        {(isCaptain || isFadhir) && (
+        {/* ===== CAPTAIN/OFFICIAL PERSONAL STATS ===== */}
+        {(isCaptain || isFadhir || isVictor) && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-            <Card className="bg-card border-border card-glow">
+            <Card className="bg-card border-border card-glow relative overflow-hidden">
+              <div className="absolute top-3 right-3">
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-primary/10 rounded-full" onClick={() => handleExportProfile(liveMember, true)}>
+                  <Download className="w-4 h-4 text-primary" />
+                </Button>
+              </div>
               <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> My Stats</CardTitle></CardHeader>
               <CardContent>
                 <div className={`grid gap-4 ${getCaptainStatCards().length === 4 ? "grid-cols-4" : getCaptainStatCards().length === 5 ? "grid-cols-5" : "grid-cols-3"}`}>
@@ -1050,52 +1115,61 @@ const OfficialProfile = () => {
                       </div>
                     </div>
 
-                    {/* Scores */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2 text-center">
-                        <label className="text-xs font-heading text-primary">TEAM A SCORE</label>
-                        <Input type="number" value={trainingScores.teamA} onChange={(e) => setTrainingScores(prev => ({ ...prev, teamA: +e.target.value }))} className="bg-secondary border-border font-body text-center text-xl" />
+                    {/* Score Input */}
+                    <div className="flex items-center justify-center gap-6 py-2 bg-secondary/10 rounded-lg">
+                      <div className="text-center">
+                        <p className="text-[10px] font-heading text-primary uppercase mb-1">TEAM A</p>
+                        <Input type="number" value={trainingScores.teamA} 
+                          onChange={e => setTrainingScores(prev => ({ ...prev, teamA: parseInt(e.target.value) || 0 }))}
+                          className="w-16 h-12 text-center text-2xl font-heading" />
                       </div>
-                      <div className="space-y-2 text-center">
-                        <label className="text-xs font-heading text-primary">TEAM B SCORE</label>
-                        <Input type="number" value={trainingScores.teamB} onChange={(e) => setTrainingScores(prev => ({ ...prev, teamB: +e.target.value }))} className="bg-secondary border-border font-body text-center text-xl" />
+                      <div className="text-2xl font-heading text-muted-foreground mt-4">VS</div>
+                      <div className="text-center">
+                        <p className="text-[10px] font-heading text-primary uppercase mb-1">TEAM B</p>
+                        <Input type="number" value={trainingScores.teamB} 
+                          onChange={e => setTrainingScores(prev => ({ ...prev, teamB: parseInt(e.target.value) || 0 }))}
+                          className="w-16 h-12 text-center text-2xl font-heading" />
                       </div>
                     </div>
 
-                    {/* Players Stats */}
-                    <div className="space-y-4">
-                      <p className="text-xs font-heading text-primary uppercase tracking-wider">Record Player Performances</p>
-                      <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                        {[...trainingTeams.teamA, ...trainingTeams.teamB].map(pid => {
-                          const m = members.find(member => member.id === pid);
+                    {/* Performance Recording for selected players */}
+                    <div className="space-y-3">
+                      <label className="text-xs font-heading text-primary uppercase">Player Performance (Selected Players Only)</label>
+                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        {[...trainingTeams.teamA, ...trainingTeams.teamB].map(id => {
+                          const m = members.find(mem => mem.id === id);
                           if (!m) return null;
-                          const isTeamA = trainingTeams.teamA.includes(pid);
-                          const stats = trainingPerfs[pid] || { goals: 0, assists: 0, rating: 5.0, isPotm: false };
-                          
                           return (
-                            <div key={pid} className={cn("p-3 rounded-lg border flex flex-col gap-3 transition-colors", isTeamA ? "border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10" : "border-red-500/20 bg-red-500/5 hover:bg-red-500/10")}>
+                            <div key={id} className="p-3 rounded-lg border border-border bg-secondary/5 space-y-2">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className={isTeamA ? "border-blue-500/40 text-blue-600" : "border-red-500/40 text-red-600"}>{isTeamA ? "Team A" : "Team B"}</Badge>
-                                  <span className="font-body text-sm font-medium text-foreground">{m.name}</span>
+                                  <Badge variant={trainingTeams.teamA.includes(id) ? "default" : "secondary"}>{trainingTeams.teamA.includes(id) ? 'A' : 'B'}</Badge>
+                                  <span className="font-heading text-sm">{m.name}</span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <label className="text-[10px] text-muted-foreground font-body">POTM?</label>
-                                  <Switch checked={stats.isPotm} onCheckedChange={(val) => setTrainingPerfs(prev => ({ ...prev, [pid]: { ...stats, isPotm: val } }))} />
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-3 gap-2">
-                                <div>
-                                  <label className="text-[10px] text-muted-foreground font-body">Goals</label>
-                                  <Input type="number" value={stats.goals} onChange={(e) => setTrainingPerfs(prev => ({ ...prev, [pid]: { ...stats, goals: +e.target.value } }))} className="h-8 text-xs bg-secondary border-border" />
-                                </div>
-                                <div>
-                                  <label className="text-[10px] text-muted-foreground font-body">Assists</label>
-                                  <Input type="number" value={stats.assists} onChange={(e) => setTrainingPerfs(prev => ({ ...prev, [pid]: { ...stats, assists: +e.target.value } }))} className="h-8 text-xs bg-secondary border-border" />
-                                </div>
-                                <div>
-                                  <label className="text-[10px] text-muted-foreground font-body">Rating (1-10)</label>
-                                  <Input type="number" step="0.1" value={stats.rating} onChange={(e) => setTrainingPerfs(prev => ({ ...prev, [pid]: { ...stats, rating: +e.target.value } }))} className="h-8 text-xs bg-secondary border-border" />
+                                <div className="flex items-center gap-4">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[10px] text-muted-foreground">Goals</span>
+                                    <Input type="number" value={trainingPerfs[id]?.goals || 0}
+                                      onChange={e => setTrainingPerfs(prev => ({ ...prev, [id]: { ...(prev[id] || {}), goals: parseInt(e.target.value) || 0 } }))}
+                                      className="w-10 h-7 p-1 text-center text-xs" />
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[10px] text-muted-foreground">Assists</span>
+                                    <Input type="number" value={trainingPerfs[id]?.assists || 0}
+                                      onChange={e => setTrainingPerfs(prev => ({ ...prev, [id]: { ...(prev[id] || {}), assists: parseInt(e.target.value) || 0 } }))}
+                                      className="w-10 h-7 p-1 text-center text-xs" />
+                                  </div>
+                                  <div className="flex items-center gap-2 border-l border-border pl-2">
+                                    <span className="text-[10px] text-muted-foreground">POTM?</span>
+                                    <Checkbox checked={trainingPerfs[id]?.isPotm || false}
+                                      onCheckedChange={(val) => {
+                                        // Reset other POTMs
+                                        const newPerfs = { ...trainingPerfs };
+                                        Object.keys(newPerfs).forEach(k => newPerfs[k].isPotm = false);
+                                        newPerfs[id] = { ...(newPerfs[id] || {}), isPotm: !!val };
+                                        setTrainingPerfs(newPerfs);
+                                      }} />
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -1104,9 +1178,10 @@ const OfficialProfile = () => {
                       </div>
                     </div>
 
-                    <Button onClick={handleRecordTraining} className="w-full font-heading bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg h-12">
-                      <Save className="w-5 h-5 mr-2" /> Save Training Results
-                    </Button>
+                    <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                      <Button variant="ghost" onClick={() => setShowTrainingRecorder(false)}>Cancel</Button>
+                      <Button onClick={handleRecordTraining} className="bg-green-600 hover:bg-green-700">Save Training Results</Button>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -1114,896 +1189,491 @@ const OfficialProfile = () => {
           </motion.div>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Game Scores — MANAGER & CAPTAINS ONLY */}
-          {canAddScoresEvents && (
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Add Recent Results</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <Input placeholder="Opponent name" value={newOpponent} onChange={(e) => setNewOpponent(e.target.value)} className="bg-secondary border-border font-body" />
-                <div className="grid grid-cols-2 gap-2">
-                  <Input placeholder="Our score" type="number" value={newOurScore} onChange={(e) => { setNewOurScore(e.target.value); setScorers([]); }} className="bg-secondary border-border font-body" />
-                  <Input placeholder="Their score" type="number" value={newTheirScore} onChange={(e) => setNewTheirScore(e.target.value)} className="bg-secondary border-border font-body" />
-                </div>
-                <Input type="date" value={newScoreDate} onChange={(e) => setNewScoreDate(e.target.value)} className="bg-secondary border-border font-body" placeholder="Date played" />
-                <select value={newGameType} onChange={(e) => setNewGameType(e.target.value)}
-                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  <option value="friendly">Friendly</option>
-                  <option value="league">League (Kanjuri)</option>
-                  <option value="amateur">Amateur</option>
-                </select>
-                <select value={newVenue} onChange={(e) => setNewVenue(e.target.value)}
-                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  <option value="">Select venue</option>
-                  <option value="Kanjuri Grounds">Kanjuri Grounds</option>
-                  <option value="G-Town">G-Town</option>
-                  <option value="School Field">School Field</option>
-                </select>
-                {ourScoreNum > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground font-body">Who scored? ({ourScoreNum} goal{ourScoreNum > 1 ? "s" : ""})</p>
-                    {Array.from({ length: ourScoreNum }).map((_, i) => (
-                      <select key={i} value={scorers[i] || ""}
-                        onChange={(e) => { const ns = [...scorers]; ns[i] = e.target.value; setScorers(ns); }}
-                        className="w-full h-9 rounded-md border border-input bg-secondary px-3 text-foreground font-body text-sm">
-                        <option value="">Select scorer {i + 1}</option>
-                        {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Member Registry (Admin Only) */}
+          {(isManager || isCoach) && (
+            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
+              <Card className="bg-card border-border card-glow h-full">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Member Registry</CardTitle>
+                  <Button variant="ghost" size="sm" onClick={() => setShowRegistry(!showRegistry)} className="text-xs font-body">{showRegistry ? "Hide" : "Show All"}</Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex gap-2">
+                    <Input placeholder="Name" value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} className="bg-secondary/50 font-body" />
+                    <Button onClick={handleAddPlayer} className="font-body shrink-0"><Plus className="w-4 h-4 mr-1" /> Add</Button>
                   </div>
-                )}
-                <Button onClick={addScore} className="w-full font-body"><Plus className="w-4 h-4 mr-1" /> Add Score</Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Game Stats Form — appears after adding a score */}
-          {lastAddedGameId && canAddScoresEvents && (
-            <Card className="bg-card border-border card-glow border-primary/30">
-              <CardHeader>
-                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-primary" /> Match Stats — vs {lastAddedOpponent}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="overflow-x-auto">
-                  <table className="w-full font-body text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-muted-foreground">
-                        <th className="text-left py-2 px-2">Stat</th>
-                        <th className="text-center py-2 px-2">1st Half</th>
-                        <th className="text-center py-2 px-2">2nd Half</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {([
-                        ["Shots", "shots"],
-                        ["Shots on Target", "shotsOnTarget"],
-                        ["Penalties", "penalties"],
-                        ["Freekicks", "freekicks"],
-                        ["Corner Kicks", "cornerKicks"],
-                        ["Fouls", "fouls"],
-                        ["Offsides", "offsides"],
-                        ["Yellow Cards", "yellowCards"],
-                        ["Red Cards", "redCards"],
-                      ] as [string, keyof typeof firstHalfStats][]).map(([label, key]) => (
-                        <tr key={key} className="border-b border-border">
-                          <td className="py-2 px-2 text-foreground">{label}</td>
-                          <td className="py-1 px-1">
-                            <Input type="number" min={0} value={firstHalfStats[key]}
-                              onChange={(e) => setFirstHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
-                              onFocus={(e) => { if (e.target.value === "0") setFirstHalfStats(p => ({ ...p, [key]: "" as any })); }}
-                              onBlur={(e) => { if (e.target.value === "") setFirstHalfStats(p => ({ ...p, [key]: 0 })); }}
-                              className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
-                          </td>
-                          <td className="py-1 px-1">
-                            <Input type="number" min={0} value={secondHalfStats[key]}
-                              onChange={(e) => setSecondHalfStats(p => ({ ...p, [key]: parseInt(e.target.value) || 0 }))}
-                              onFocus={(e) => { if (e.target.value === "0") setSecondHalfStats(p => ({ ...p, [key]: "" as any })); }}
-                              onBlur={(e) => { if (e.target.value === "") setSecondHalfStats(p => ({ ...p, [key]: 0 })); }}
-                              className="bg-secondary border-border text-center h-8 w-16 mx-auto font-body" />
-                          </td>
-                        </tr>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={newMemberType === "player" ? "default" : "outline"} className="cursor-pointer" onClick={() => setNewMemberType("player")}>Player</Badge>
+                    <Badge variant={newMemberType === "fan" ? "default" : "outline"} className="cursor-pointer" onClick={() => setNewMemberType("fan")}>Fan</Badge>
+                    <select value={newPlayerPos} onChange={(e) => setNewPlayerPos(e.target.value)} className="bg-secondary/50 rounded-md px-2 py-1 text-xs border border-border focus:outline-none">
+                      <option value="">Position</option>
+                      <option value="GK">GK</option>
+                      <option value="LB">LB</option>
+                      <option value="CB">CB</option>
+                      <option value="RB">RB</option>
+                      <option value="CDM">CDM</option>
+                      <option value="CM">CM</option>
+                      <option value="CAM">CAM</option>
+                      <option value="LW">LW</option>
+                      <option value="RW">RW</option>
+                      <option value="ST">ST</option>
+                    </select>
+                  </div>
+                  
+                  {showRegistry && (
+                    <div className="space-y-2 mt-4 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                      {members.sort((a,b) => a.name.localeCompare(b.name)).map((m) => (
+                        <div key={m.id} className="flex items-center justify-between p-2 rounded-lg bg-secondary/20 border border-border group">
+                          <div className="flex flex-col">
+                            <span className="font-heading text-sm text-foreground">{m.name}</span>
+                            <span className="text-[10px] text-muted-foreground font-body">{m.id} • {m.role}</span>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleExportProfile(m)}>
+                              <Download className="w-3 h-3" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => { setRemovePlayerId(m.id); setShowRemoveConfirm(true); }}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={handleSaveGameStats} className="flex-1 font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
-                  <Button variant="outline" onClick={() => setLastAddedGameId(null)} className="font-body">Skip</Button>
-                </div>
-              </CardContent>
-            </Card>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
           )}
 
-          {canAddScoresEvents && (
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-primary" /> Add Event</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <Input placeholder="Event title" value={newEventTitle} onChange={(e) => setNewEventTitle(e.target.value)} className="bg-secondary border-border font-body" />
-                <Input type="date" value={newEventDate} onChange={(e) => setNewEventDate(e.target.value)} className="bg-secondary border-border font-body" />
-                <Textarea placeholder="Description" value={newEventDesc} onChange={(e) => setNewEventDesc(e.target.value)} className="bg-secondary border-border font-body" />
-                <Button onClick={addEvent} className="w-full font-body"><Plus className="w-4 h-4 mr-1" /> Add Event</Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Media Upload */}
-          {canUploadMedia && (
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Image className="w-5 h-5 text-primary" /> Upload Media</CardTitle></CardHeader>
-              <CardContent>
-                <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors">
-                  <Upload className="w-8 h-8 text-muted-foreground mb-2" />
-                  <span className="text-sm text-muted-foreground font-body">Click to select photos</span>
-                  <input ref={mediaInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} />
-                </label>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Record Transaction — Finance only (Fadhir) */}
-          {canManageFinance && !isCoach && (
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><DollarSign className="w-5 h-5 text-primary" /> Record Transaction</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant={finType === "in" ? "default" : "outline"} onClick={() => setFinType("in")} className="font-body"><TrendingUp className="w-4 h-4 mr-1" /> Money In</Button>
-                  <Button variant={finType === "out" ? "default" : "outline"} onClick={() => setFinType("out")} className="font-body"><TrendingDown className="w-4 h-4 mr-1" /> Money Out</Button>
+          {/* Inbox (Messages) */}
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }}>
+            <Card className="bg-card border-border card-glow h-full relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4">
+                {myMessages.some(m => !m.read) && <Badge className="bg-primary animate-pulse text-[10px]">NEW</Badge>}
+              </div>
+              <CardHeader>
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Mail className="w-5 h-5 text-primary" /> Official Inbox</CardTitle>
+                <p className="text-xs text-muted-foreground font-body">Messages from members and other officials.</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                  {myMessages.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8 font-body italic">No messages yet.</p>
+                  ) : (
+                    myMessages.map((m) => (
+                      <div key={m.id} className={`p-3 rounded-lg border transition-all ${m.read ? "bg-secondary/10 border-border" : "bg-primary/5 border-primary/30 card-glow"}`} onClick={() => markMessageRead(m.id)}>
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="font-heading text-xs text-primary">{members.find(mem => mem.id === m.fromId)?.name || m.fromId}</span>
+                          <span className="text-[10px] text-muted-foreground">{format(new Date(m.createdAt), "MMM d, HH:mm")}</span>
+                        </div>
+                        <p className="text-sm text-foreground font-body leading-relaxed">{m.content}</p>
+                        <div className="mt-2 flex justify-end">
+                          <Button size="sm" variant="ghost" className="h-7 text-[10px] font-body" onClick={(e) => { e.stopPropagation(); setReplyTo(m.fromId); setReplyContent(""); }}>Reply</Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
-                <select value={finMonth} onChange={(e) => setFinMonth(e.target.value)} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  {contributionMonths.map((m) => <option key={m.key} value={m.label}>{m.label}</option>)}
-                </select>
-                <Input placeholder="Amount (KSh)" type="number" value={finAmount} onChange={(e) => setFinAmount(e.target.value)} className="bg-secondary border-border font-body" />
-                <Input placeholder="Description" value={finDesc} onChange={(e) => setFinDesc(e.target.value)} className="bg-secondary border-border font-body" />
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-full justify-start text-left font-body", !finDate && "text-muted-foreground")}>
-                      <CalendarIcon className="w-4 h-4 mr-2" />
-                      {finDate ? format(finDate, "PPP") : "Select date"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
-                    <Calendar mode="single" selected={finDate} onSelect={setFinDate} initialFocus className="p-3 pointer-events-auto" />
-                  </PopoverContent>
-                </Popover>
-                <Button onClick={handleRecordTransaction} className="w-full font-body"><Plus className="w-4 h-4 mr-1" /> Record</Button>
+                <div className="pt-2 border-t border-border flex gap-2">
+                  <Input placeholder="Compose message..." className="bg-secondary/50 text-sm h-9" value={sendMsgContent} onChange={(e) => setSendMsgContent(e.target.value)} />
+                  <Popover>
+                    <PopoverTrigger asChild><Button size="sm" variant="outline" className="h-9 px-3"><UserPlus className="w-4 h-4" /></Button></PopoverTrigger>
+                    <PopoverContent className="w-64 p-2 bg-card border-border">
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {members.filter(m => m.id !== user.id).sort((a,b) => a.name.localeCompare(b.name)).map(m => (
+                          <div key={m.id} className={`p-2 text-xs font-body rounded cursor-pointer transition-colors ${sendMsgTo === m.id ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`} onClick={() => setSendMsgTo(m.id)}>{m.name}</div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <Button size="sm" onClick={handleSendMsg} disabled={!sendMsgTo || !sendMsgContent.trim()} className="h-9"><Send className="w-4 h-4" /></Button>
+                </div>
               </CardContent>
             </Card>
-          )}
+          </motion.div>
         </div>
 
-        {/* ===== MANAGER: Manage Recent Results (Edit/Delete) ===== */}
-        {isManager && gameScores.length > 0 && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Manage Recent Results</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {gameScores.slice(0, 10).map((game) => (
-                <div key={game.id} className="border border-border rounded-lg p-3">
-                  {editingScoreId === game.id ? (
-                    <div className="space-y-2">
-                      <Input value={editScoreData.opponent} onChange={(e) => setEditScoreData(p => ({ ...p, opponent: e.target.value }))} className="bg-secondary border-border font-body" placeholder="Opponent" />
-                      <div className="grid grid-cols-2 gap-2">
-                        <Input type="number" value={editScoreData.ourScore} onChange={(e) => setEditScoreData(p => ({ ...p, ourScore: +e.target.value }))} className="bg-secondary border-border font-body" />
-                        <Input type="number" value={editScoreData.theirScore} onChange={(e) => setEditScoreData(p => ({ ...p, theirScore: +e.target.value }))} className="bg-secondary border-border font-body" />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={handleSaveEditScore} className="font-body text-xs"><Save className="w-3 h-3 mr-1" /> Save</Button>
-                        <Button size="sm" variant="outline" onClick={() => setEditingScoreId(null)} className="font-body text-xs">Cancel</Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="font-body text-sm text-foreground">vs {game.opponent}</span>
-                        <span className="ml-2 font-heading text-primary text-sm">{game.ourScore} - {game.theirScore}</span>
-                        <span className="ml-2 text-xs text-muted-foreground">{game.date}</span>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-primary" onClick={() => exportMatchStats(game.id)}>
-                          <Download className="w-3 h-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
-                          setEditingScoreId(game.id);
-                          setEditScoreData({ opponent: game.opponent, ourScore: game.ourScore, theirScore: game.theirScore });
-                        }}><Edit className="w-3 h-3" /></Button>
-                        {deleteConfirmId === game.id ? (
-                          <div className="flex gap-1">
-                            <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" onClick={() => handleDeleteScore(game.id)}>Confirm</Button>
-                            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setDeleteConfirmId(null)}>No</Button>
-                          </div>
-                        ) : (
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => setDeleteConfirmId(game.id)}><Trash2 className="w-3 h-3" /></Button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ===== COACH & MANAGER: Add New Player / Fan ===== */}
-        {(isCoach || isManager) && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><UserPlus className="w-5 h-5 text-primary" /> Add New Member</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant={newMemberType === "player" ? "default" : "outline"} onClick={() => setNewMemberType("player")} className="font-body">Player</Button>
-                <Button variant={newMemberType === "fan" ? "default" : "outline"} onClick={() => setNewMemberType("fan")} className="font-body">Fan</Button>
-              </div>
-              <Input placeholder={newMemberType === "fan" ? "Fan name" : "Player name"} value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} className="bg-secondary border-border font-body" />
-              {newMemberType === "player" && (
-                <select value={newPlayerPos} onChange={(e) => setNewPlayerPos(e.target.value)} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  <option value="">Select position</option>
-                  <option value="GK">Goalkeeper</option>
-                  <option value="DEF">Defender</option>
-                  <option value="DEF (LB)">Defender (LB)</option>
-                  <option value="DEF (CB)">Defender (CB)</option>
-                  <option value="DEF (RB)">Defender (RB)</option>
-                  <option value="MID">Midfielder</option>
-                  <option value="ATT">Attacker</option>
-                </select>
-              )}
-              <Button onClick={handleAddPlayer} disabled={!newPlayerName} className="w-full font-body"><UserPlus className="w-4 h-4 mr-1" /> Add {newMemberType === "fan" ? "Fan" : "Player"}</Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ===== MANAGER: Team Stats Editor (Position-Specific) ===== */}
-        {isManager && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Team Stats Editor</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <select value={statsPlayerId} onChange={(e) => setStatsPlayerId(e.target.value)}
-                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                <option value="">Select player</option>
-                {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name} ({getFullPositionName(m.position)})</option>)}
-              </select>
-              {statsPlayerId && selectedStatsPlayer && (() => {
-                const fields = getStatsForPosition(selectedStatsPlayer.position);
-                const stateSetters: Record<string, [string, (v: string) => void]> = {
-                  saves: [statsSaves, setStatsSaves],
-                  cleanSheets: [statsCleanSheets, setStatsCleanSheets],
-                  aerialDuels: [statsAerialDuels, setStatsAerialDuels],
-                  interceptions: [statsInterceptions, setStatsInterceptions],
-                  assists: [statsAssists, setStatsAssists],
-                  goals: [statsGoals, setStatsGoals],
-                  directShots: [statsDirectShots, setStatsDirectShots],
-                  successfulTackles: [statsSuccessfulTackles, setStatsSuccessfulTackles],
-                  // gamesPlayed excluded - auto-tracked from match recordings
-                };
-                return (
-                  <>
-                    <p className="text-xs text-muted-foreground font-body">Showing stats for: <span className="text-primary font-medium">{getFullPositionName(selectedStatsPlayer.position)}</span></p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {fields.map(f => {
-                        const [val, setter] = stateSetters[f.key] || ["0", () => {}];
-                        return (
-                          <div key={f.key}>
-                            <label className="text-xs text-primary font-body">{f.label}</label>
-                            <Input type="number" value={val} onChange={(e) => setter(e.target.value)} onFocus={(e) => { if (e.target.value === "0") setter(""); }} onBlur={(e) => { if (e.target.value === "") setter("0"); }} className="bg-secondary border-border font-body" />
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <Button onClick={handleUpdateStats} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Save Stats</Button>
-                  </>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ===== MANAGER: Match Day Performance Recorder (Position-Specific, Auto POTM) ===== */}
-        {isManager && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Star className="w-5 h-5 text-primary" /> Record Match Day Stats</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <select value={perfGameId} onChange={(e) => setPerfGameId(e.target.value)}
-                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                <option value="">Select match</option>
-                {gameScores.map(g => <option key={g.id} value={g.id}>{g.date} — vs {g.opponent} ({g.ourScore}-{g.theirScore})</option>)}
-              </select>
-              {perfGameId && (() => {
-                // Smart player selector: filter out already-recorded, prioritize last match
-                const availableForPerf = useMemo(() => {
-                  return playerMembers
-                    .filter(m => !recordedPlayerIds.includes(m.id))
-                    .sort((a, b) => {
-                      const aLast = lastMatchPlayerIds.includes(a.id) ? 1 : 0;
-                      const bLast = lastMatchPlayerIds.includes(b.id) ? 1 : 0;
-                      return bLast - aLast;
-                    });
-                }, [playerMembers, recordedPlayerIds, lastMatchPlayerIds]);
-                const recordedCount = recordedPlayerIds.length;
-                return (
-                <>
-                  {recordedCount > 0 && (
-                    <p className="text-xs text-primary font-body">✅ {recordedCount} player{recordedCount > 1 ? "s" : ""} already recorded for this match</p>
-                  )}
-                  <select value={perfPlayerId} onChange={(e) => setPerfPlayerId(e.target.value)}
-                    className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                    <option value="">Select player ({availableForPerf.length} remaining)</option>
-                    {availableForPerf.map(m => (
-                      <option key={m.id} value={m.id}>
-                        {lastMatchPlayerIds.includes(m.id) ? "⭐ " : ""}{m.name} ({getFullPositionName(m.position)})
-                      </option>
-                    ))}
-                  </select>
-                  {perfPlayerId && (() => {
-                    const perfPlayer = members.find(m => m.id === perfPlayerId);
-                    const perfPosGroup = getPositionGroup(perfPlayer?.position);
-                    const perfFields = getPerfFieldsForPosition(perfPlayer?.position);
-                    const perfStateMap: Record<string, [string, (v: string) => void]> = {
-                      goals: [perfGoals, setPerfGoals],
-                      assists: [perfAssists, setPerfAssists],
-                      saves: [perfSaves, setPerfSaves],
-                      successfulTackles: [perfTackles, setPerfTackles],
-                      interceptions: [perfInterceptions, setPerfInterceptions],
-                      aerialDuels: [perfAerialDuels, setPerfAerialDuels],
-                      directShots: [perfDirectShots, setPerfDirectShots],
-                    };
-                    return (
-                      <>
-                        <p className="text-xs text-muted-foreground font-body">Position: <span className="text-primary font-medium">{getFullPositionName(perfPlayer?.position)}</span></p>
-                        <div className="grid grid-cols-3 gap-2">
-                          {perfFields.filter(f => f.key !== "cleanSheet").map(f => {
-                            const [val, setter] = perfStateMap[f.key] || ["0", () => {}];
-                            return (
-                              <div key={f.key}>
-                                <label className="text-xs text-muted-foreground font-body">{f.label}</label>
-                                <Input type="number" value={val} onChange={(e) => setter(e.target.value)} onFocus={(e) => { if (e.target.value === "0") setter(""); }} onBlur={(e) => { if (e.target.value === "") setter("0"); }} className="bg-secondary border-border font-body" />
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {perfPosGroup === "GK" && (
-                          <label className="flex items-center gap-2 text-sm font-body text-foreground">
-                            <Checkbox checked={perfCleanSheet} onCheckedChange={(c) => setPerfCleanSheet(!!c)} /> Clean Sheet
-                          </label>
-                        )}
-                        <p className="text-xs text-muted-foreground font-body italic">⭐ Player of the Match is auto-determined by the system</p>
-                        <Button onClick={handleAddMatchPerf} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Record Performance</Button>
-                      </>
-                    );
-                  })()}
-                </>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ===== VICTOR'S JERSEY WASHING SYSTEM ===== */}
-        {isVictor && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        {/* Financial Management (Fadhir/Coach Only) */}
+        {canManageFinance && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <Card className="bg-card border-border card-glow">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Flame className="w-5 h-5 text-primary" /> Jersey Washing System</CardTitle>
-                <Badge className="bg-primary/20 text-primary border-primary/30">Captain Victor</Badge>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-xs text-muted-foreground font-body leading-relaxed">Find 6 volunteers (3 pairs) for the week. Players are pulled from those who played in the last 2 matches.</p>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><DollarSign className="w-5 h-5 text-primary" /> Financial Management</CardTitle>
                 <div className="flex gap-2">
-                  <Button onClick={handleFindJerseyVolunteers} className="flex-1 font-heading h-11 bg-primary text-primary-foreground"><Gamepad2 className="w-4 h-4 mr-2" /> Find Volunteers</Button>
-                  {jerseyVolunteers.length > 0 && <Button variant="outline" onClick={handleExportJerseyData} className="h-11"><Download className="w-4 h-4" /></Button>}
+                  <Button variant="outline" size="sm" onClick={exportFinancialPdf} className="text-xs font-body h-8"><Download className="w-3 h-3 mr-1" /> Export Details</Button>
                 </div>
-
-                {jerseyVolunteers.length > 0 && (
-                  <div className="grid gap-3 pt-4 border-t border-border mt-2">
-                    {[0, 1, 2].map(i => (
-                      <div key={i} className="p-3 bg-secondary/30 rounded-lg border border-border group hover:border-primary/40 transition-colors">
-                        <div className="flex justify-between items-center mb-2">
-                          <p className="text-[10px] text-primary font-heading tracking-widest uppercase">Pair {i + 1}</p>
-                          <Users className="w-3 h-3 text-muted-foreground" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Input value={jerseyVolunteers[i * 2]} onChange={(e) => {
-                            const n = [...jerseyVolunteers]; n[i * 2] = e.target.value; setJerseyVolunteers(n);
-                          }} className="h-8 text-xs bg-card border-border focus:ring-1 focus:ring-primary" />
-                          <Input value={jerseyVolunteers[i * 2 + 1]} onChange={(e) => {
-                            const n = [...jerseyVolunteers]; n[i * 2 + 1] = e.target.value; setJerseyVolunteers(n);
-                          }} className="h-8 text-xs bg-card border-border focus:ring-1 focus:ring-primary" />
-                        </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-heading text-primary uppercase">Record Transaction</h4>
+                    <div className="space-y-3 p-4 rounded-xl bg-secondary/10 border border-border">
+                      <div className="flex gap-2 mb-2">
+                        <Button variant={finType === "in" ? "default" : "outline"} size="sm" className="flex-1 h-8 text-[10px]" onClick={() => setFinType("in")}>Income</Button>
+                        <Button variant={finType === "out" ? "default" : "outline"} size="sm" className="flex-1 h-8 text-[10px]" onClick={() => setFinType("out")}>Expense</Button>
                       </div>
-                    ))}
+                      <div className="space-y-2">
+                        <Input placeholder="Amount (KSh)" value={finAmount} onChange={(e) => setFinAmount(e.target.value)} className="bg-secondary/50 font-body text-sm h-9" />
+                        <Input placeholder="Description" value={finDesc} onChange={(e) => setFinDesc(e.target.value)} className="bg-secondary/50 font-body text-sm h-9" />
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className={cn("w-full h-9 justify-start text-left font-body text-sm bg-secondary/50 border-border", !finDate && "text-muted-foreground")}>
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {finDate ? format(finDate, "PPP") : <span>Pick a date</span>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar mode="single" selected={finDate} onSelect={setFinDate} initialFocus className="bg-card border-border" />
+                          </PopoverContent>
+                        </Popover>
+                        <Button onClick={handleRecordTransaction} className="w-full font-body h-9" disabled={!finAmount || !finDesc || !finDate}><Plus className="w-4 h-4 mr-1" /> Add Record</Button>
+                      </div>
+                    </div>
                   </div>
-                )}
+
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-heading text-primary uppercase">Member Contribution Quick-Update</h4>
+                    <div className="p-4 rounded-xl bg-secondary/10 border border-border space-y-4">
+                      <div className="flex gap-2">
+                        <select className="bg-secondary/50 border border-border rounded-md px-3 py-1.5 text-sm flex-1 font-body focus:outline-none" value={finMonth} onChange={(e) => setFinMonth(e.target.value)}>
+                          {contributionMonths.map(m => <option key={m.key} value={m.label}>{m.label}</option>)}
+                        </select>
+                        <Button variant="outline" size="sm" className="font-body text-xs" onClick={() => requestContribution(finMonth)}>Request All</Button>
+                      </div>
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                        {playerMembers.sort((a,b) => a.name.localeCompare(b.name)).map(m => (
+                          <div key={m.id} className="flex items-center justify-between text-xs p-2 rounded bg-secondary/20">
+                            <span className="font-body truncate mr-2">{m.name}</span>
+                            <div className="flex items-center gap-1">
+                              <Badge className={`text-[10px] cursor-pointer ${m.contributions[contributionMonths.find(mon => mon.label === finMonth)?.key || ""] === "paid" ? "bg-green-600" : "bg-red-600/30"}`}
+                                onClick={() => {
+                                  const monthKey = contributionMonths.find(mon => mon.label === finMonth)?.key;
+                                  if (monthKey) updateContributionDirect(m.id, monthKey, m.contributions[monthKey] === "paid" ? "unpaid" : "paid");
+                                }}>
+                                {m.contributions[contributionMonths.find(mon => mon.label === finMonth)?.key || ""] === "paid" ? "Paid" : "Unpaid"}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </motion.div>
         )}
-        {isManager && matchPerformances.length > 0 && (() => {
-          // Group performances by game
-          const perfByGame: Record<string, typeof matchPerformances> = {};
-          matchPerformances.forEach(p => {
-            if (!perfByGame[p.gameId]) perfByGame[p.gameId] = [];
-            perfByGame[p.gameId].push(p);
-          });
-          const gameIds = Object.keys(perfByGame);
-          if (gameIds.length < 2) return null;
-          
-          // Find latest game
-          const sortedGames = gameIds
-            .map(gid => ({ gid, game: gameScores.find(g => g.id === gid) }))
-            .filter(x => x.game)
-            .sort((a, b) => new Date(b.game!.date).getTime() - new Date(a.game!.date).getTime());
-          
-          if (sortedGames.length < 2) return null;
-          const latestGameId = sortedGames[0].gid;
-          const prevGameId = sortedGames[1].gid;
-          const latestPerfs = perfByGame[latestGameId] || [];
-          const prevPerfs = perfByGame[prevGameId] || [];
-          
-          const deltas = latestPerfs.map(lp => {
-            const prevP = prevPerfs.find(pp => pp.playerId === lp.playerId);
-            if (!prevP) return null;
-            const player = members.find(m => m.id === lp.playerId);
-            const currTotal = lp.goals + lp.assists + lp.saves + lp.tackles + lp.interceptions;
-            const prevTotal = prevP.goals + prevP.assists + prevP.saves + prevP.tackles + prevP.interceptions;
-            return { player, delta: currTotal - prevTotal, curr: currTotal, prev: prevTotal };
-          }).filter(Boolean) as { player: any; delta: number; curr: number; prev: number }[];
-          
-          if (deltas.length === 0) return null;
-          deltas.sort((a, b) => b.delta - a.delta);
-          const mostImproved = deltas[0];
-          const dropped = deltas.filter(d => d.delta < 0);
-          
-          return (
-            <Card className="bg-card border-border card-glow border-primary/20">
-              <CardHeader>
-                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" /> Post-Match Analytics
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {mostImproved && mostImproved.delta > 0 && (
-                  <div className="p-3 rounded-lg bg-primary/10 border border-primary/30">
-                    <p className="text-xs text-primary font-heading tracking-wider mb-1">🔥 MOST IMPROVED</p>
-                    <p className="font-body text-foreground font-medium">{mostImproved.player?.name}</p>
-                    <p className="text-xs text-muted-foreground font-body">
-                      Previous: {mostImproved.prev} pts → Current: {mostImproved.curr} pts
-                      <span className="text-primary ml-2">+{mostImproved.delta}</span>
-                    </p>
-                  </div>
-                )}
-                {dropped.length > 0 && (
-                  <div>
-                    <p className="text-xs text-destructive font-heading tracking-wider mb-2">📉 PERFORMANCE DROP</p>
-                    {dropped.map((d, i) => (
-                      <div key={i} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
-                        <span className="font-body text-sm text-foreground">{d.player?.name}</span>
-                        <span className="text-xs text-destructive font-body">{d.prev} → {d.curr} ({d.delta})</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })()}
 
-        {/* ===== MANAGER: Export Toggle for Player Detailed Profiles ===== */}
+        {/* Registry & Permissions (Manager Only) */}
         {isManager && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Download className="w-5 h-5 text-primary" /> Player Export Access</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground font-body">Toggle detailed profile export availability for all players. When enabled, players can download their detailed profile document any day.</p>
-              <div className="flex items-center gap-3">
-                <Switch
-                  checked={exportEnabled}
-                  onCheckedChange={async (checked) => {
-                    setExportEnabled(checked);
-                    const { data: existing } = await supabase.from("season_config").select("id").limit(1);
-                    if (existing && existing.length > 0) {
-                      await supabase.from("season_config").update({ export_enabled: checked } as any).eq("id", existing[0].id);
-                    }
-                    toast({ title: checked ? "Export Enabled ✅" : "Export Disabled", description: checked ? "Players can now download detailed profiles" : "Detailed export locked to weekends only" });
-                  }}
-                />
-                <span className="font-body text-sm text-foreground">{exportEnabled ? "✅ Export Enabled" : "🔒 Weekend Only"}</span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+            <Card className="bg-card border-border card-glow">
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Lock className="w-5 h-5 text-primary" /> Management Tools</CardTitle></CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Gallery & Homepage Control */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-heading text-primary uppercase tracking-wider">Visual Assets</h4>
+                    <div className="grid grid-cols-1 gap-2">
+                      <Button variant="outline" className="justify-start font-body text-sm h-10 border-border hover:bg-secondary/50" onClick={() => mediaInputRef.current?.click()}><Image className="w-4 h-4 mr-2 text-primary" /> Upload Photos</Button>
+                      <input ref={mediaInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleMediaUpload} />
+                      <Button variant="outline" className="justify-start font-body text-sm h-10 border-border hover:bg-secondary/50" onClick={() => homepageInputRef.current?.click()}><Star className="w-4 h-4 mr-2 text-primary" /> Set Homepage Highlights (Max 4)</Button>
+                      <input ref={homepageInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleHomepageUpload} />
+                    </div>
+                  </div>
 
-        {/* ===== MANAGER: League Standings Editor ===== */}
-        {isManager && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> League Standings Editor</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input placeholder="Team name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} className="bg-secondary border-border font-body" />
-                <Button onClick={() => handleAddLeagueTeam("league")} disabled={!newTeamName} className="font-body"><Plus className="w-4 h-4 mr-1" /> Add</Button>
-              </div>
-              <div className="space-y-2">
-                {leagueTeamsMain.map((team, i) => (
-                  <div key={team.id} className={`border rounded-lg p-3 ${team.is_own_team ? "border-primary/40 bg-primary/5" : "border-border"}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className={`font-body font-medium text-sm ${team.is_own_team ? "text-primary" : "text-foreground"}`}>
-                        {i + 1}. {team.team_name} {team.is_own_team && "⭐"}
-                      </span>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
-                          setEditingTeamId(team.id);
-                          setEditTeamData({ played: team.played, won: team.won, drawn: team.drawn, lost: team.lost, gd: team.goal_difference, pts: team.points });
-                        }}><Edit className="w-3 h-3" /></Button>
-                        {!team.is_own_team && <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => handleDeleteLeagueTeam(team.id)}><Trash2 className="w-3 h-3" /></Button>}
+                  {/* Role & Name Management */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-heading text-primary uppercase tracking-wider">Access Control</h4>
+                    <div className="space-y-3 p-4 rounded-xl bg-secondary/10 border border-border">
+                      <select className="w-full bg-secondary/50 border border-border rounded-md px-3 py-1.5 text-sm font-body focus:outline-none mb-2" value={rolePlayerId} onChange={(e) => setRolePlayerId(e.target.value)}>
+                        <option value="">Select Member</option>
+                        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                      <div className="flex gap-2">
+                        <select className="flex-1 bg-secondary/50 border border-border rounded-md px-3 py-1.5 text-xs font-body focus:outline-none" value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+                          <option value="">Select Role</option>
+                          <option value="player">Player</option>
+                          <option value="captain">Captain</option>
+                          <option value="coach">Coach</option>
+                          <option value="assistant_coach">Asst Coach</option>
+                          <option value="manager">Manager</option>
+                          <option value="finance">Finance</option>
+                          <option value="fan">Fan</option>
+                        </select>
+                        <Button size="sm" className="font-body text-xs" disabled={!rolePlayerId || !newRole} onClick={async () => { await updateMemberRole(rolePlayerId, newRole); toast({ title: "Role Updated" }); setNewRole(""); setRolePlayerId(""); }}>Apply</Button>
                       </div>
                     </div>
-                    {editingTeamId === team.id ? (
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-6 gap-1">
-                          {[["P", "played"], ["W", "won"], ["D", "drawn"], ["L", "lost"], ["GD", "gd"], ["Pts", "pts"]].map(([label, key]) => (
-                            <div key={key}>
-                              <label className="text-[10px] text-muted-foreground">{label}</label>
-                              <Input type="number" value={(editTeamData as any)[key]} onChange={(e) => setEditTeamData(prev => ({ ...prev, [key]: +e.target.value }))} className="h-8 text-xs bg-secondary border-border" />
+                  </div>
+
+                  {/* Player Stats Tuning */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-heading text-primary uppercase tracking-wider">Career Stats Tuning</h4>
+                    <div className="p-4 rounded-xl bg-secondary/10 border border-border">
+                      <select className="w-full bg-secondary/50 border border-border rounded-md px-3 py-1.5 text-sm font-body focus:outline-none mb-3" value={statsPlayerId} onChange={(e) => setStatsPlayerId(e.target.value)}>
+                        <option value="">Select Player</option>
+                        {playerMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                      {statsPlayerId && (
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          {getStatsForPosition(selectedStatsPlayer?.position).map(f => (
+                            <div key={f.key} className="space-y-1">
+                              <label className="text-[10px] text-muted-foreground uppercase">{f.label}</label>
+                              <Input type="number" className="h-8 text-xs bg-card" value={
+                                f.key === "goals" ? statsGoals : f.key === "assists" ? statsAssists : 
+                                f.key === "saves" ? statsSaves : f.key === "cleanSheets" ? statsCleanSheets :
+                                f.key === "aerialDuels" ? statsAerialDuels : f.key === "tackles" ? statsTackles :
+                                f.key === "interceptions" ? statsInterceptions : f.key === "directShots" ? statsDirectShots :
+                                statsSuccessfulTackles
+                              } onChange={(e) => {
+                                const v = e.target.value;
+                                if (f.key === "goals") setStatsGoals(v); else if (f.key === "assists") setStatsAssists(v);
+                                else if (f.key === "saves") setStatsSaves(v); else if (f.key === "cleanSheets") setStatsCleanSheets(v);
+                                else if (f.key === "aerialDuels") setStatsAerialDuels(v); else if (f.key === "tackles") setStatsTackles(v);
+                                else if (f.key === "interceptions") setStatsInterceptions(v); else if (f.key === "directShots") setStatsDirectShots(v);
+                                else setStatsSuccessfulTackles(v);
+                              }} />
                             </div>
                           ))}
                         </div>
-                        <Button size="sm" onClick={() => handleSaveLeagueTeam(team.id)} className="font-body text-xs"><Save className="w-3 h-3 mr-1" /> Save</Button>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-6 gap-2 text-xs text-muted-foreground font-body">
-                        <span>P: {team.played}</span>
-                        <span className="text-green-600">W: {team.won}</span>
-                        <span>D: {team.drawn}</span>
-                        <span className="text-destructive">L: {team.lost}</span>
-                        <span>GD: {team.goal_difference}</span>
-                        <span className="text-primary font-bold">Pts: {team.points}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ===== MANAGER: Amateur Standings Editor ===== */}
-        {isManager && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Amateur Standings Editor</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input placeholder="Amateur team name" value={newAmateurTeamName} onChange={(e) => setNewAmateurTeamName(e.target.value)} className="bg-secondary border-border font-body" />
-                <Button onClick={() => handleAddLeagueTeam("amateur")} disabled={!newAmateurTeamName} className="font-body"><Plus className="w-4 h-4 mr-1" /> Add</Button>
-              </div>
-              <div className="space-y-2">
-                {leagueTeamsAmateur.map((team, i) => (
-                  <div key={team.id} className={`border rounded-lg p-3 ${team.is_own_team ? "border-primary/40 bg-primary/5" : "border-border"}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className={`font-body font-medium text-sm ${team.is_own_team ? "text-primary" : "text-foreground"}`}>
-                        {i + 1}. {team.team_name} {team.is_own_team && "⭐"}
-                      </span>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
-                          setEditingAmateurTeamId(team.id);
-                          setEditAmateurTeamData({ played: team.played, won: team.won, drawn: team.drawn, lost: team.lost, gd: team.goal_difference, pts: team.points });
-                        }}><Edit className="w-3 h-3" /></Button>
-                        {!team.is_own_team && <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => handleDeleteLeagueTeam(team.id)}><Trash2 className="w-3 h-3" /></Button>}
-                      </div>
+                      )}
+                      <Button className="w-full h-8 text-xs font-body" disabled={!statsPlayerId} onClick={handleUpdateStats}><Save className="w-3 h-3 mr-1" /> Update Statistics</Button>
                     </div>
-                    {editingAmateurTeamId === team.id ? (
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-6 gap-1">
-                          {[["P", "played"], ["W", "won"], ["D", "drawn"], ["L", "lost"], ["GD", "gd"], ["Pts", "pts"]].map(([label, key]) => (
-                            <div key={key}>
-                              <label className="text-[10px] text-muted-foreground">{label}</label>
-                              <Input type="number" value={(editAmateurTeamData as any)[key]} onChange={(e) => setEditAmateurTeamData(prev => ({ ...prev, [key]: +e.target.value }))} className="h-8 text-xs bg-secondary border-border" />
-                            </div>
-                          ))}
-                        </div>
-                        <Button size="sm" onClick={() => handleSaveAmateurTeam(team.id)} className="font-body text-xs"><Save className="w-3 h-3 mr-1" /> Save</Button>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-6 gap-2 text-xs text-muted-foreground font-body">
-                        <span>P: {team.played}</span>
-                        <span className="text-green-600">W: {team.won}</span>
-                        <span>D: {team.drawn}</span>
-                        <span className="text-destructive">L: {team.lost}</span>
-                        <span>GD: {team.goal_difference}</span>
-                        <span className="text-primary font-bold">Pts: {team.points}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {leagueTeamsAmateur.length === 0 && <p className="text-xs text-muted-foreground font-body">No amateur teams added yet</p>}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Official's contribution section */}
-        {showContributions && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground">My Monthly Contributions</CardTitle></CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-3">
-                {contributionMonths.map(({ key, label }) => {
-                  const status = liveMember.contributions[key] || "unpaid";
-                  const isPaid = status === "paid";
-                  return (
-                    <div key={key} className={`px-4 py-3 rounded-xl border-2 text-center ${isPaid ? "border-primary/40 bg-primary/10" : "border-border bg-muted/30"}`}>
-                      <p className="text-xs font-body text-muted-foreground">{label}</p>
-                      {isPaid ? <span className="text-green-600">✅</span> : <span className="text-muted-foreground">⬜</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Contribution Approvals */}
-        {canApproveContributions && pendingApprovals.length > 0 && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Pending Approvals</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {pendingApprovals.map((req) => (
-                <div key={req.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                  <div className="font-body">
-                    <p className="text-foreground">{req.playerName}</p>
-                    <p className="text-xs text-muted-foreground">{req.monthLabel}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => { approveContribution(req.id); toast({ title: "Approved" }); }}
-                      className="font-body text-xs bg-green-600 hover:bg-green-700"><CheckCircle className="w-3 h-3 mr-1" /> Accept</Button>
-                    <Button size="sm" variant="outline" onClick={() => { rejectContribution(req.id); toast({ title: "Rejected", variant: "destructive" }); }}
-                      className="font-body text-xs border-destructive/30 text-destructive"><XCircle className="w-3 h-3 mr-1" /> Reject</Button>
                   </div>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </motion.div>
         )}
 
-        {/* Fadhir's Contribution Grid */}
-        {isFadhir && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader>
-              <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><CheckCircle className="w-5 h-5 text-primary" /> Contribution Management</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full font-body text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-muted-foreground">
-                      <th className="text-left py-2 sticky left-0 bg-card">Player</th>
-                      {contributionMonths.map((m) => <th key={m.key} className="text-center py-2 px-2 whitespace-nowrap">{m.label}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {members.filter((m) => m.id !== "SCF-001" && m.role !== "fan" && m.id !== "SCF-P40").map((m) => {
-                      const memberMonths = getContribMonthsForMember(m.id);
-                      return (
-                        <tr key={m.id} className="border-b border-border">
-                          <td className="py-2 text-foreground sticky left-0 bg-card font-medium whitespace-nowrap text-xs">{m.name}</td>
-                          {contributionMonths.map((month) => {
-                            if (!memberMonths.some(mm => mm.key === month.key)) {
-                              return <td key={month.key} className="py-2 text-center text-muted-foreground">—</td>;
-                            }
-                            const status = m.contributions[month.key] || "unpaid";
-                            return (
-                              <td key={month.key} className="py-2 text-center">
-                                <Checkbox checked={status === "paid"}
-                                  onCheckedChange={(checked) => updateContributionDirect(m.id, month.key, checked ? "paid" : "unpaid")} />
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Jersey Washing (Victor Only) */}
+        {isVictor && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+            <Card className="bg-card border-border card-glow relative overflow-hidden">
+               <div className="absolute -top-4 -right-4 w-24 h-24 bg-primary/5 rounded-full blur-xl" />
+               <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Flame className="w-5 h-5 text-primary" /> Jersey Washing System</CardTitle></CardHeader>
+               <CardContent className="space-y-4">
+                 <div className="flex gap-2">
+                   <Button onClick={handleFindJerseyVolunteers} className="flex-1 font-body">Auto-Pick Volunteers</Button>
+                   {jerseyVolunteers.length > 0 && <Button variant="outline" onClick={handleExportJerseyData} className="h-10 px-3"><Download className="w-4 h-4" /></Button>}
+                 </div>
+                 {jerseyVolunteers.length > 0 && (
+                   <div className="grid grid-cols-3 gap-3">
+                     {[0, 1, 2].map(i => (
+                       <div key={i} className="p-3 rounded-lg bg-secondary/10 border border-border text-center">
+                         <p className="text-[10px] font-heading text-primary uppercase mb-2">Pair {i+1}</p>
+                         <div className="space-y-1">
+                           <p className="text-sm font-heading text-foreground">{jerseyVolunteers[i*2]}</p>
+                           <p className="text-xs text-muted-foreground">&</p>
+                           <p className="text-sm font-heading text-foreground">{jerseyVolunteers[i*2+1]}</p>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 )}
+               </CardContent>
+            </Card>
+          </motion.div>
         )}
 
-        {/* Contribution Events — Fadhir & Captains */}
-        {canManageContribEvents && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Target className="w-5 h-5 text-primary" /> Contribution Events</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-2">
-                <Input placeholder="Event title" value={ceTitle} onChange={(e) => setCeTitle(e.target.value)} className="bg-secondary border-border font-body" />
-                <Input placeholder="Target amount" type="number" value={ceTarget} onChange={(e) => setCeTarget(e.target.value)} className="bg-secondary border-border font-body" />
+        {/* Global Match History & Performance Recording */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+          <Card className="bg-card border-border card-glow overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-border/50 bg-secondary/5">
+              <div>
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Match Results & Stats</CardTitle>
+                <p className="text-xs text-muted-foreground font-body mt-1">Record game scores and individual player performances.</p>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Input placeholder="Amount per person" type="number" value={ceAmountPer} onChange={(e) => setCeAmountPer(e.target.value)} className="bg-secondary border-border font-body" />
-                <Input placeholder="Description" value={ceDesc} onChange={(e) => setCeDesc(e.target.value)} className="bg-secondary border-border font-body" />
-              </div>
-              <Button onClick={handleAddContribEvent} className="w-full font-body" disabled={!ceTitle || !ceAmountPer || !ceTarget}>
-                <Plus className="w-4 h-4 mr-1" /> Add Event
-              </Button>
-
-              {contribEvents.map((event: any) => {
-                const eventPayments = contribPayments.filter((p: any) => p.event_id === event.id && p.paid);
-                const collected = eventPayments.length * (event.amount_per_person || 0);
-                const progress = event.target_amount > 0 ? Math.min((collected / event.target_amount) * 100, 100) : 0;
-                return (
-                  <div key={event.id} className="border border-border rounded-lg p-4 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h4 className="font-heading text-sm text-foreground">{event.title}</h4>
-                        {event.goal_description && <p className="text-xs text-muted-foreground">{event.goal_description}</p>}
-                      </div>
-                      {progress >= 100 && (
-                        <Button size="sm" variant="destructive" onClick={() => deleteContribEvent(event.id)}>
-                          <Trash2 className="w-3 h-3 mr-1" /> Delete
-                        </Button>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground font-body">
-                      KSh {collected.toLocaleString()} / {Number(event.target_amount).toLocaleString()} ({eventPayments.length} contributors @ KSh {Number(event.amount_per_person).toLocaleString()} each)
-                    </div>
-                    <Progress value={progress} className="h-2" />
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-                      {playerMembers.map(m => {
-                        const paid = contribPayments.some((p: any) => p.event_id === event.id && p.member_id === m.id && p.paid);
-                        return (
-                          <label key={m.id} className="flex items-center gap-1.5 text-xs font-body text-foreground">
-                            <Checkbox checked={paid} onCheckedChange={() => toggleContribPayment(event.id, m.id)} />
-                            {m.name}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Financial Overview with Export */}
-        {canManageFinance && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="font-heading text-lg text-foreground">Financial Overview</CardTitle>
-              <Button size="sm" variant="outline" onClick={exportFinancialPdf} className="font-body text-xs border-primary/30 text-primary">
-                <Download className="w-3 h-3 mr-1" /> Export
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {financialRecords.map((f) => {
-                const totalExpenses = f.expenses.reduce((sum, e) => sum + e.amount, 0);
-                return (
-                  <div key={f.month} className="border border-border rounded-lg p-4 navy-accent">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-heading text-sm text-primary tracking-wider">{f.month}</h4>
-                      <Badge variant="outline" className="font-body text-xs border-primary/30 text-primary">{f.contributors} contributors</Badge>
-                    </div>
-                    {f.contributorNote && <p className="text-xs text-muted-foreground font-body mb-3 italic">{f.contributorNote}</p>}
-                    <div className="space-y-2 font-body text-sm">
-                      <div className="flex justify-between text-muted-foreground"><span>Opening Balance</span><span>KSh {f.openingBalance.toLocaleString()}</span></div>
-                      <div className="flex justify-between text-green-600"><span>Contributions</span><span>+KSh {f.contributions.toLocaleString()}</span></div>
-                      {f.expenses.length > 0 && f.expenses.map((exp, i) => {
-                        const isIncome = exp.amount < 0;
-                        const displayAmount = Math.abs(exp.amount);
-                        return (
-                          <div key={i} className={`flex justify-between ${isIncome ? "text-green-600/80" : "text-destructive/80"}`}>
-                            <span className="text-xs">{exp.date} — {exp.description}</span>
-                            <span>{isIncome ? "+" : "-"}KSh {displayAmount.toLocaleString()}</span>
-                          </div>
-                        );
-                      })}
-                      <div className={`flex justify-between font-heading text-sm pt-2 border-t border-border ${f.closingBalance >= 0 ? "text-primary" : "text-destructive"}`}>
-                        <span>Closing Balance</span><span>KSh {f.closingBalance.toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Weekly Attendance — Manager + Ethan + Assistant Coach */}
-        {canManageAttendance && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader>
-              <CardTitle className="font-heading text-lg text-foreground">Weekly Attendance — {currentWeekStart}</CardTitle>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {DAYS.map((day) => (
-                  <Button key={day} size="sm" variant="outline" onClick={() => { markDayNoActivity(day); toast({ title: `${day}: No Activity` }); }}
-                    className="font-body text-xs">{day.slice(0, 3)} — No Activity</Button>
-                ))}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full font-body text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-muted-foreground">
-                      <th className="text-left py-2 sticky left-0 bg-card">Player</th>
-                      {DAYS.map((d) => <th key={d} className="text-center py-2 px-2">{d.slice(0, 3)}</th>)}
-                      <th className="text-center py-2 px-2">%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {playerMembersForGrids.map((m) => {
-                      const playerAtt = attendance.filter((a) => a.playerId === m.id);
-                      const pct = calcAttendancePct(playerAtt);
-
-                      return (
-                        <tr key={m.id} className="border-b border-border">
-                          <td className="py-2 text-foreground sticky left-0 bg-card whitespace-nowrap text-xs">{m.name}</td>
-                          {DAYS.map((day) => {
-                            const record = playerAtt.find((a) => a.day === day);
-                            const status = record?.status || "";
-                            const isNoActivity = status === "no_activity";
-                            const handleClick = () => {
-                              if (isNoActivity) return;
-                              if (status === "present") updateAttendance(m.id, day, "excused");
-                              else if (status === "excused") updateAttendance(m.id, day, "absent");
-                              else updateAttendance(m.id, day, "present");
-                            };
-                            const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : "⬜";
-                            const colors = status === "present" ? "bg-green-500/20 border-green-500/40"
-                              : status === "excused" ? "bg-blue-500/20 border-blue-500/40"
-                              : status === "no_activity" ? "bg-muted border-border"
-                              : "bg-muted/30 border-border";
-                            return (
-                              <td key={day} className="py-2 text-center">
-                                <button onClick={handleClick} disabled={isNoActivity}
-                                  className={`w-8 h-8 rounded-md border-2 text-xs transition-all ${colors} ${isNoActivity ? "cursor-not-allowed" : "cursor-pointer hover:opacity-80"}`}>
-                                  {display}
-                                </button>
-                              </td>
-                            );
-                          })}
-                          <td className="py-2 text-center font-heading text-primary text-xs">{playerAtt.filter(a => a.status !== "no_activity").length > 0 ? `${pct}%` : "—"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-xs text-muted-foreground font-body mt-2">Click to toggle: ✅ Present → 🔵 Excused → ⬜ Absent</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Manager: Delete Gallery Photos */}
-        {canDeletePhotos && mediaItems.length > 0 && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trash2 className="w-5 h-5 text-destructive" /> Manage Gallery</CardTitle></CardHeader>
-            <CardContent>
-              <div className="grid gap-4">
-                {Object.entries(
-                  mediaItems.reduce((acc, item) => {
-                    const date = item.date.split("T")[0];
-                    if (!acc[date]) acc[date] = [];
-                    acc[date].push(item);
-                    return acc;
-                  }, {} as Record<string, typeof mediaItems>)
-                ).sort(([a], [b]) => b.localeCompare(a)).map(([date, items]) => (
-                  <Collapsible key={date} className="border border-border rounded-xl overflow-hidden">
-                    <CollapsibleTrigger className="w-full flex items-center justify-between p-4 bg-secondary/30 hover:bg-secondary/50 transition-all group">
-                      <div className="flex items-center gap-3">
-                        <CalendarIcon className="w-5 h-5 text-primary" />
-                        <div className="text-left">
-                          <p className="font-heading text-sm text-foreground">{new Date(date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
-                          <p className="font-body text-xs text-muted-foreground">{items.length} Photos</p>
+              {canAddScoresEvents && (
+                <Dialog>
+                  <DialogTrigger asChild><Button size="sm" className="font-body"><Plus className="w-4 h-4 mr-1" /> New Game Result</Button></DialogTrigger>
+                  <DialogContent className="bg-card border-border max-w-lg">
+                    <DialogHeader><DialogTitle className="font-heading text-primary">Record New Game Score</DialogTitle></DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-heading text-muted-foreground uppercase">Opponent Name</label>
+                          <Input placeholder="e.g. AFC Leopards" value={newOpponent} onChange={(e) => setNewOpponent(e.target.value)} className="bg-secondary/50" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-heading text-muted-foreground uppercase">Game Type</label>
+                          <select className="w-full bg-secondary/50 border border-border rounded-md px-3 py-2 text-sm focus:outline-none" value={newGameType} onChange={(e) => setNewGameType(e.target.value)}>
+                            <option value="league">League Match</option>
+                            <option value="friendly">Friendly</option>
+                            <option value="tournament">Tournament</option>
+                          </select>
                         </div>
                       </div>
-                      <Plus className="w-4 h-4 text-primary group-data-[state=open]:rotate-45 transition-transform" />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="p-4 bg-card border-t border-border">
-                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                        {items.map((item) => (
-                          <div key={item.id} className="relative group">
-                            <img src={item.url} alt={item.caption || "Photo"} className="w-full aspect-square object-cover rounded-lg border border-border" />
-                            <button onClick={() => { deleteMediaItem(item.id, item.url); toast({ title: "Deleted" }); }}
-                              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-destructive flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
-                              <Trash2 className="w-3 h-3 text-white" />
-                            </button>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-heading text-muted-foreground uppercase">Our Score</label>
+                          <Input type="number" placeholder="0" value={newOurScore} onChange={(e) => setNewOurScore(e.target.value)} className="bg-secondary/50 text-center text-lg font-heading" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-heading text-muted-foreground uppercase">Their Score</label>
+                          <Input type="number" placeholder="0" value={newTheirScore} onChange={(e) => setNewTheirScore(e.target.value)} className="bg-secondary/50 text-center text-lg font-heading" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-heading text-muted-foreground uppercase">Venue</label>
+                          <Input placeholder="e.g. Hope Centre" value={newVenue} onChange={(e) => setNewVenue(e.target.value)} className="bg-secondary/50" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-heading text-muted-foreground uppercase">Match Date</label>
+                          <Input type="date" value={newScoreDate} onChange={(e) => setNewScoreDate(e.target.value)} className="bg-secondary/50" />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-heading text-muted-foreground uppercase">SunCity Scorers ({ourScoreNum})</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Array.from({ length: ourScoreNum }).map((_, i) => (
+                            <select key={i} className="bg-secondary/50 border border-border rounded-md px-2 py-1.5 text-xs focus:outline-none" value={scorers[i] || ""} onChange={(e) => { const newScorers = [...scorers]; newScorers[i] = e.target.value; setScorers(newScorers); }}>
+                              <option value="">Scorer {i+1}</option>
+                              {playerMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                            </select>
+                          ))}
+                        </div>
+                      </div>
+                      <DialogFooter className="pt-4"><Button onClick={addScore} className="w-full font-heading" disabled={!newOpponent || !newOurScore || !newTheirScore}>Save Game Result</Button></DialogFooter>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-border">
+                {gameScores.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((game) => (
+                  <Collapsible key={game.id} className="w-full">
+                    <div className="p-4 flex items-center justify-between hover:bg-secondary/5 transition-colors group">
+                      <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-center justify-center bg-secondary/30 rounded-lg w-12 h-12 border border-border">
+                          <span className="text-[10px] font-heading text-primary uppercase leading-none">{format(new Date(game.date), "MMM")}</span>
+                          <span className="text-lg font-heading text-foreground leading-tight">{format(new Date(game.date), "dd")}</span>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-heading text-sm text-foreground">vs {game.opponent}</h4>
+                            <Badge variant="outline" className="text-[9px] h-4 py-0 font-body uppercase">{game.gameType}</Badge>
                           </div>
-                        ))}
+                          <p className="text-[10px] text-muted-foreground font-body mt-0.5"><MapPin className="w-3 h-3 inline mr-1" /> {game.venue || "Venue N/A"}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-secondary/20 border border-border font-heading">
+                          <span className={game.ourScore > game.theirScore ? "text-green-500" : game.ourScore < game.theirScore ? "text-red-500" : "text-yellow-500"}>{game.ourScore}</span>
+                          <span className="text-muted-foreground/50 text-xs">-</span>
+                          <span className={game.theirScore > game.ourScore ? "text-green-500" : game.theirScore < game.ourScore ? "text-red-500" : "text-yellow-500"}>{game.theirScore}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" variant="ghost" className="h-8 px-2 font-body text-xs" onClick={() => exportMatchStats(game.id)}><Download className="w-3 h-3 mr-1" /> Report</Button>
+                          <CollapsibleTrigger asChild><Button size="sm" variant="ghost" className="h-8 w-8 p-0"><ChevronDown className="w-4 h-4" /></Button></CollapsibleTrigger>
+                        </div>
+                      </div>
+                    </div>
+                    <CollapsibleContent className="px-4 pb-4 border-t border-border/30 bg-secondary/5">
+                      <div className="pt-4 space-y-6">
+                        {/* Scorers */}
+                        {game.scorers && game.scorers.length > 0 && (
+                          <div className="space-y-2">
+                            <h5 className="text-[10px] font-heading text-primary uppercase flex items-center gap-1"><Target className="w-3 h-3" /> SunCity Scorers</h5>
+                            <div className="flex flex-wrap gap-2">
+                              {game.scorers.map((s, i) => <Badge key={i} variant="secondary" className="font-body text-[10px]">{s}</Badge>)}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Record Performance Stats */}
+                        {isCaptain || isManager || isCoach ? (
+                          <div className="space-y-3 p-4 rounded-xl bg-card border border-border shadow-sm">
+                            <h5 className="text-[10px] font-heading text-primary uppercase flex items-center gap-1"><Plus className="w-3 h-3" /> Record Player Performance</h5>
+                            <div className="flex flex-wrap gap-2 items-end">
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-muted-foreground uppercase">Player</label>
+                                <select className="bg-secondary/50 border border-border rounded-md px-2 py-1 text-xs focus:outline-none w-32" value={perfPlayerId} onChange={(e) => setPerfPlayerId(e.target.value)}>
+                                  <option value="">Select</option>
+                                  {playerMembers.sort((a,b) => a.name.localeCompare(b.name)).map(m => {
+                                    const isRecorded = recordedPlayerIds.includes(m.id);
+                                    const wasInLastMatch = lastMatchPlayerIds.includes(m.id);
+                                    return (
+                                      <option key={m.id} value={m.id} className={isRecorded ? "text-muted-foreground opacity-50" : ""}>
+                                        {m.name} {isRecorded ? " (Done)" : wasInLastMatch ? " ⭐" : ""}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
+
+                              {perfPlayerId && (
+                                <>
+                                  {getPositionGroup(members.find(m => m.id === perfPlayerId)?.position) === "GK" ? (
+                                    <>
+                                      <div className="space-y-1">
+                                        <label className="text-[9px] text-muted-foreground uppercase">Saves</label>
+                                        <Input type="number" className="w-12 h-7 text-xs p-1" value={perfSaves} onChange={(e) => setPerfSaves(e.target.value)} />
+                                      </div>
+                                      <div className="flex items-center gap-1 h-7 mb-1 bg-secondary/30 px-2 rounded">
+                                        <Checkbox checked={perfCleanSheet} onCheckedChange={(val) => setPerfCleanSheet(!!val)} />
+                                        <label className="text-[9px] text-muted-foreground uppercase">Clean Sheet</label>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div className="space-y-1">
+                                        <label className="text-[9px] text-muted-foreground uppercase">Goals</label>
+                                        <Input type="number" className="w-12 h-7 text-xs p-1" value={perfGoals} onChange={(e) => setPerfGoals(e.target.value)} />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="text-[9px] text-muted-foreground uppercase">Assists</label>
+                                        <Input type="number" className="w-12 h-7 text-xs p-1" value={perfAssists} onChange={(e) => setPerfAssists(e.target.value)} />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="text-[9px] text-muted-foreground uppercase">Tackles</label>
+                                        <Input type="number" className="w-12 h-7 text-xs p-1" value={perfTackles} onChange={(e) => setPerfTackles(e.target.value)} />
+                                      </div>
+                                    </>
+                                  )}
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] text-muted-foreground uppercase">Rating</label>
+                                    <select className="bg-secondary/50 border border-border rounded-md px-2 py-1 text-xs focus:outline-none h-7" value={perfRating} onChange={(e) => setPerfRating(e.target.value)}>
+                                      {[10, 9.5, 9, 8.5, 8, 7.5, 7, 6.5, 6, 5.5, 5, 4.5, 4, 3, 2, 1].map(v => <option key={v} value={v}>{v}</option>)}
+                                    </select>
+                                  </div>
+                                  <Button size="sm" className="h-7 text-[10px]" onClick={() => { setPerfGameId(game.id); handleAddMatchPerf(); }}>Record Stats</Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3 rounded-lg bg-secondary/5 border border-dashed border-border text-center">
+                            <p className="text-[10px] text-muted-foreground font-body italic">Performance stat recording is limited to Officials & Captains.</p>
+                          </div>
+                        )}
+
+                        {/* Player Stats Grid */}
+                        <div className="space-y-3 pt-2">
+                           <h5 className="text-[10px] font-heading text-primary uppercase flex items-center gap-1"><BarChart3 className="w-3 h-3" /> Player Performances</h5>
+                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                              {matchPerformances.filter(p => p.gameId === game.id).map(perf => {
+                                const m = members.find(mem => mem.id === perf.playerId);
+                                return (
+                                  <div key={perf.id} className={`p-2 rounded-lg border flex flex-col relative ${perf.is_potm ? "bg-primary/5 border-primary/40 shadow-[0_0_10px_rgba(25,55,105,0.1)]" : "bg-card border-border/60"}`}>
+                                    {perf.is_potm && <Badge className="absolute -top-2 -right-2 bg-primary text-[8px] h-4">POTM</Badge>}
+                                    <span className="font-heading text-[11px] text-foreground truncate mb-1">{m?.name || "Player"}</span>
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex gap-1.5 items-center">
+                                        {(perf.goals > 0) && <span className="text-[9px] text-muted-foreground flex items-center gap-0.5"><Target className="w-2.5 h-2.5 text-primary" /> {perf.goals}</span>}
+                                        {(perf.assists > 0) && <span className="text-[9px] text-muted-foreground flex items-center gap-0.5"><Footprints className="w-2.5 h-2.5 text-primary" /> {perf.assists}</span>}
+                                        {(perf.saves > 0) && <span className="text-[9px] text-muted-foreground flex items-center gap-0.5"><Hand className="w-2.5 h-2.5 text-primary" /> {perf.saves}</span>}
+                                      </div>
+                                      <span className="text-[10px] font-heading text-primary">{perf.rating.toFixed(1)}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                           </div>
+                        </div>
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
@@ -2011,385 +1681,435 @@ const OfficialProfile = () => {
               </div>
             </CardContent>
           </Card>
-        )}
+        </motion.div>
 
-        {/* Homepage Photos — Manager only */}
-        {isManager && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Image className="w-5 h-5 text-primary" /> Homepage Photos</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              {homepageImages.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {homepageImages.map((img) => (
-                    <div key={img.id} className="relative group">
-                      <img src={img.url} alt="Homepage photo" className="w-full h-24 object-cover rounded-lg border border-border" />
-                      <button onClick={() => { deleteHomepageImage(img.id, img.url); toast({ title: "Removed" }); }}
-                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-destructive flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Trash2 className="w-3 h-3 text-white" />
-                      </button>
-                    </div>
-                  ))}
+        {/* Attendance Grid (Officials/Captains) */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+          <Card className="bg-card border-border card-glow overflow-hidden">
+            <CardHeader className="bg-secondary/5 border-b border-border/50 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><CheckCircle className="w-5 h-5 text-primary" /> Attendance Registry</CardTitle>
+                <p className="text-xs text-muted-foreground font-body mt-1 italic">Week starting: {currentWeekStart}</p>
+              </div>
+              {canManageAttendance && (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="h-8 text-[10px]" onClick={() => markDayNoActivity("Monday")}>No Session Mon</Button>
+                  <Button variant="outline" size="sm" className="h-8 text-[10px]" onClick={() => markDayNoActivity("Wednesday")}>No Session Wed</Button>
                 </div>
               )}
-              <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50">
-                <Upload className="w-6 h-6 text-muted-foreground mb-1" />
-                <span className="text-xs text-muted-foreground font-body">Upload up to 4 homepage photos</span>
-                <input ref={homepageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleHomepageUpload} />
-              </label>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Coach: Edit Player Positions */}
-        {isCoach && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Edit className="w-5 h-5 text-primary" /> Edit Player Positions</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <select value={posPlayerId} onChange={(e) => setPosPlayerId(e.target.value)}
-                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                <option value="">Select player</option>
-                {playerMembers.map((m) => <option key={m.id} value={m.id}>{m.name} ({getFullPositionName(m.position)})</option>)}
-              </select>
-              {posPlayerId && (
-                <>
-                  <select value={posValue} onChange={(e) => setPosValue(e.target.value)}
-                    className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                    <option value="">Select position</option>
-                    <option value="GK">Goalkeeper</option>
-                    <option value="DEF">Defender</option>
-                    <option value="DEF (LB)">Defender (LB)</option>
-                    <option value="DEF (CB)">Defender (CB)</option>
-                    <option value="DEF (RB)">Defender (RB)</option>
-                    <option value="MID">Midfielder</option>
-                    <option value="ATT">Attacker</option>
-                  </select>
-                  <Button onClick={handleUpdatePosition} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Update Position</Button>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Lineup Builder — Coach only */}
-        {isCoach && <LineupBuilder onFirst11Change={(ids) => setSelectedFirst11(ids.slice(0, 11))} />}
-
-        {/* ===== MANAGER: Member ID Registry ===== */}
-        {(isManager || isCoach) && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" /> 📋 Member ID Registry
-              </CardTitle>
-              <Button variant="outline" size="sm" onClick={() => setShowRegistry(!showRegistry)} className="font-body text-xs">
-                {showRegistry ? "Hide Registry" : "Show Registry"}
-              </Button>
             </CardHeader>
-            <Collapsible open={showRegistry}>
-              <CollapsibleContent>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full font-body text-sm">
-                      <thead>
-                        <tr className="border-b border-border text-muted-foreground">
-                          <th className="text-left py-2 px-2">ID</th>
-                          <th className="text-left py-2 px-2">Name</th>
-                          <th className="text-left py-2 px-2">Role</th>
-                          <th className="text-left py-2 px-2">Position</th>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-xs">
+                  <thead className="bg-secondary/20 border-b border-border">
+                    <tr>
+                      <th className="p-3 text-left font-heading text-primary uppercase tracking-wider sticky left-0 bg-card z-10 w-40">Member Name</th>
+                      {DAYS.map(day => (
+                        <th key={day} className="p-3 text-center font-heading text-muted-foreground uppercase tracking-tight w-24 border-l border-border/50">
+                          {day.slice(0, 3)}
+                        </th>
+                      ))}
+                      <th className="p-3 text-center font-heading text-primary w-16 border-l border-border/50 bg-secondary/10">%</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {playerMembersForGrids.sort((a,b) => a.name.localeCompare(b.name)).map((m) => {
+                      const mAtt = attendance.filter(a => a.playerId === m.id);
+                      const pct = calcAttendancePct(mAtt);
+                      return (
+                        <tr key={m.id} className="hover:bg-secondary/5 transition-colors group">
+                          <td className="p-3 font-heading text-foreground sticky left-0 bg-card/95 z-10 backdrop-blur-sm shadow-[5px_0_10px_-5px_rgba(0,0,0,0.1)]">
+                            <div className="flex flex-col">
+                              <span className="truncate">{m.name}</span>
+                              <span className="text-[9px] text-muted-foreground font-body">{maskId(m.id)}</span>
+                            </div>
+                          </td>
+                          {DAYS.map(day => {
+                            const record = mAtt.find(a => a.day === day);
+                            const status = record?.status || "absent";
+                            return (
+                              <td key={day} className="p-2 text-center border-l border-border/30">
+                                {canManageAttendance ? (
+                                  <div className="flex justify-center">
+                                    <button
+                                      onClick={() => updateAttendance(m.id, day, status === "present" ? "absent" : status === "absent" ? "excused" : "present")}
+                                      disabled={status === "no_activity"}
+                                      className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                                        status === "present" ? "bg-green-600 text-white shadow-lg shadow-green-900/20" :
+                                        status === "excused" ? "bg-yellow-600 text-white shadow-lg shadow-yellow-900/20" :
+                                        status === "no_activity" ? "bg-muted text-muted-foreground/50" :
+                                        "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+                                      }`}>
+                                      {status === "present" ? <CheckCircle className="w-4 h-4" /> :
+                                       status === "excused" ? <Flame className="w-4 h-4" /> :
+                                       status === "no_activity" ? <XCircle className="w-4 h-4" /> :
+                                       <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex justify-center">
+                                    {status === "present" ? <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]" /> :
+                                     status === "excused" ? <div className="w-2 h-2 rounded-full bg-yellow-500" /> :
+                                     status === "no_activity" ? <XCircle className="w-3 h-3 text-muted-foreground/30" /> :
+                                     <div className="w-2 h-2 rounded-full bg-secondary/50" />}
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="p-3 text-center border-l border-border/30 bg-secondary/10">
+                            <span className={`font-heading ${pct >= 80 ? "text-green-500" : pct >= 50 ? "text-yellow-500" : "text-red-500"}`}>{pct}%</span>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {[...members].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
-                          <tr key={m.id} className="border-b border-border">
-                            <td className="py-1.5 px-2 text-primary font-heading text-xs">{m.id}</td>
-                            <td className="py-1.5 px-2 text-foreground">{m.name}</td>
-                            <td className="py-1.5 px-2 text-muted-foreground capitalize">{m.role}</td>
-                            <td className="py-1.5 px-2 text-muted-foreground">{getFullPositionName(m.position)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-4 bg-secondary/5 border-t border-border flex items-center justify-center gap-6 text-[10px] text-muted-foreground font-body">
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-600" /> Present</div>
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-yellow-600" /> Excused</div>
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-secondary/50" /> Absent</div>
+                <div className="flex items-center gap-1.5"><XCircle className="w-3 h-3 text-muted-foreground/30" /> No Session</div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Contribution Grid (Fadhir/Admin) */}
+        {showContributions && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}>
+            <Card className="bg-card border-border card-glow overflow-hidden">
+               <CardHeader className="bg-secondary/5 border-b border-border/50">
+                 <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><DollarSign className="w-5 h-5 text-primary" /> Monthly Contributions Tracking</CardTitle>
+                 <p className="text-xs text-muted-foreground font-body mt-1 italic">Click status badges to toggle payment records.</p>
+               </CardHeader>
+               <CardContent className="p-0">
+                  <div className="overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-xs">
+                       <thead className="bg-secondary/20 border-b border-border">
+                         <tr>
+                            <th className="p-3 text-left font-heading text-primary uppercase tracking-wider sticky left-0 bg-card z-10 w-40">Member Name</th>
+                            {contributionMonths.map(m => (
+                              <th key={m.key} className="p-3 text-center font-heading text-muted-foreground uppercase tracking-tight w-24 border-l border-border/50">{m.label}</th>
+                            ))}
+                         </tr>
+                       </thead>
+                       <tbody className="divide-y divide-border">
+                         {playerMembers.sort((a,b) => a.name.localeCompare(b.name)).map((m) => (
+                           <tr key={m.id} className="hover:bg-secondary/5 transition-colors group">
+                             <td className="p-3 font-heading text-foreground sticky left-0 bg-card/95 z-10 backdrop-blur-sm shadow-[5px_0_10px_-5px_rgba(0,0,0,0.1)]">
+                               <div className="flex flex-col">
+                                 <span className="truncate">{m.name}</span>
+                                 <span className="text-[9px] text-muted-foreground font-body">{maskId(m.id)}</span>
+                               </div>
+                             </td>
+                             {contributionMonths.map(month => {
+                               const status = m.contributions[month.key] || "unpaid";
+                               return (
+                                 <td key={month.key} className="p-2 text-center border-l border-border/30">
+                                   <Badge
+                                     onClick={() => canApproveContributions && updateContributionDirect(m.id, month.key, status === "paid" ? "unpaid" : "paid")}
+                                     className={`text-[9px] h-5 min-w-14 cursor-pointer transition-all ${
+                                       status === "paid" ? "bg-green-600 hover:bg-green-700 text-white shadow-[0_2px_10px_rgba(22,163,74,0.2)]" :
+                                       status === "pending" ? "bg-yellow-600/30 text-yellow-600 animate-pulse" :
+                                       "bg-red-600/10 text-red-600/50 hover:text-red-600"
+                                     }`}>
+                                     {status.toUpperCase()}
+                                   </Badge>
+                                 </td>
+                               );
+                             })}
+                           </tr>
+                         ))}
+                       </tbody>
                     </table>
                   </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </Card>
-        )}
-
-        {/* ===== FAN MANAGEMENT — Coach & Manager ===== */}
-        {(isCoach || isManager) && (() => {
-          const fans = members.filter(m => m.role === "fan");
-          if (fans.length === 0) return null;
-          const BADGE_PRESETS = ["Super Fan", "Legend", "MVP Fan", "Rising Star", "OG Supporter"];
-          return (
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Star className="w-5 h-5 text-primary" /> Fan Management</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                {fans.map(fan => (
-                  <FanRow key={fan.id} fan={fan} profilePic={profilePics[fan.id]} badgePresets={BADGE_PRESETS} />
-                ))}
-              </CardContent>
+               </CardContent>
             </Card>
-          );
-        })()}
-
-        {/* Coach: First 11 Selector */}
-        {isCoach && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader>
-              <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Star className="w-5 h-5 text-primary" /> First 11 Selector</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-xs text-muted-foreground font-body">Players ranked by training attendance, goals & assists</p>
-              <div className="space-y-2">
-                {playerAnalytics.map((m, i) => {
-                  const isStarter = selectedFirst11.includes(m.id);
-                  const isSub = selectedSubs.includes(m.id);
-                  return (
-                    <div key={m.id} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-5">{i + 1}</span>
-                        <span className="text-sm font-body text-foreground">{m.name}</span>
-                        <span className="text-xs text-muted-foreground">({getFullPositionName(m.position)})</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground font-body">Att: {m.attPct}%</span>
-                        <span className="text-xs text-primary font-body">G:{m.goals || 0} A:{m.assists || 0}</span>
-                        <Button size="sm" variant={isStarter ? "default" : "outline"} className="text-xs h-7 px-2"
-                          onClick={() => setSelectedFirst11(prev => isStarter ? prev.filter(id => id !== m.id) : prev.length < 11 ? [...prev, m.id] : prev)}>
-                          {isStarter ? "Starting" : "Start"}
-                        </Button>
-                        <Button size="sm" variant={isSub ? "secondary" : "outline"} className="text-xs h-7 px-2"
-                          onClick={() => setSelectedSubs(prev => isSub ? prev.filter(id => id !== m.id) : [...prev, m.id])}>
-                          Sub
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={exportFirst11Pdf} variant="outline" className="font-body text-xs" disabled={selectedFirst11.length === 0}>
-                  <Download className="w-3 h-3 mr-1" /> Export Squad
-                </Button>
-                <span className="text-xs text-muted-foreground font-body self-center">{selectedFirst11.length}/11 starters, {selectedSubs.length} subs</span>
-              </div>
-            </CardContent>
-          </Card>
+          </motion.div>
         )}
 
-        {/* Coach: Remove Player */}
-        {isCoach && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><UserMinus className="w-5 h-5 text-destructive" /> Remove Player</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <select value={removePlayerId} onChange={(e) => setRemovePlayerId(e.target.value)}
-                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                <option value="">Select player to remove</option>
-                {members.filter(m => m.role === "player" || m.role === "fan").map((m) => <option key={m.id} value={m.id}>{m.name} ({m.role})</option>)}
-              </select>
-              {removePlayerId && !showRemoveConfirm && (
-                <Button variant="destructive" onClick={() => setShowRemoveConfirm(true)} className="w-full font-body"><Trash2 className="w-4 h-4 mr-1" /> Remove Player</Button>
-              )}
-              {showRemoveConfirm && (
-                <div className="flex gap-2">
-                  <Button variant="destructive" onClick={handleRemovePlayer} className="flex-1 font-body">Confirm Remove</Button>
-                  <Button variant="outline" onClick={() => setShowRemoveConfirm(false)} className="flex-1 font-body">Cancel</Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        {/* Additional Management Tabs (Manager/Fadhir) */}
+        {(isManager || isFadhir || isCaptain) && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+            <Tabs defaultValue="events" className="w-full">
+              <TabsList className="bg-secondary/30 border border-border w-full justify-start overflow-x-auto p-1 h-auto flex flex-wrap">
+                <TabsTrigger value="events" className="font-heading text-xs uppercase data-[state=active]:bg-card data-[state=active]:card-glow h-10 px-6">Special Events</TabsTrigger>
+                <TabsTrigger value="lineup" className="font-heading text-xs uppercase data-[state=active]:bg-card data-[state=active]:card-glow h-10 px-6">Lineup Builder</TabsTrigger>
+                <TabsTrigger value="league" className="font-heading text-xs uppercase data-[state=active]:bg-card data-[state=active]:card-glow h-10 px-6">League Standings</TabsTrigger>
+                <TabsTrigger value="amateur" className="font-heading text-xs uppercase data-[state=active]:bg-card data-[state=active]:card-glow h-10 px-6">Amateur League</TabsTrigger>
+              </TabsList>
 
-        {/* Coach: Season End Date */}
-        {isCoach && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground">Season Configuration</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("w-full justify-start text-left font-body", !seasonEndDate && "text-muted-foreground")}>
-                    <CalendarIcon className="w-4 h-4 mr-2" />
-                    {seasonEndDate ? format(seasonEndDate, "PPP") : "Set season end date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
-                  <Calendar mode="single" selected={seasonEndDate} onSelect={setSeasonEndDate} initialFocus className="p-3 pointer-events-auto" />
-                </PopoverContent>
-              </Popover>
-              <Button onClick={async () => {
-                if (!seasonEndDate) return;
-                await supabase.from("season_config").insert({ end_date: format(seasonEndDate, "yyyy-MM-dd"), created_by: user.id } as any);
-                toast({ title: "Season End Date Set" });
-              }} disabled={!seasonEndDate} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Save Season Config</Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ===== MANAGER: Role Management ===== */}
-        {isManager && (
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> 👔 Member Management</CardTitle></CardHeader>
-            <CardContent className="space-y-6">
-              
-              {/* Role Update */}
-              <div className="space-y-3">
-                <p className="text-sm font-heading text-primary">Update Role</p>
-                <p className="text-xs text-muted-foreground font-body">Promote or demote members. Cannot change your own role.</p>
-                <select value={rolePlayerId} onChange={(e) => setRolePlayerId(e.target.value)}
-                  className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  <option value="">Select member</option>
-                  {members.filter(m => m.id !== user.id).map(m => (
-                    <option key={m.id} value={m.id}>{m.name} — {m.role}</option>
-                  ))}
-                </select>
-                {rolePlayerId && (
-                  <div className="space-y-3">
-                    <select value={isCustomRole ? "custom" : newRole} onChange={(e) => {
-                      if (e.target.value === "custom") {
-                        setIsCustomRole(true);
-                        setNewRole("");
-                      } else {
-                        setIsCustomRole(false);
-                        setNewRole(e.target.value);
-                      }
-                    }}
-                      className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                      <option value="">Select new role</option>
-                      <option value="player">Player</option>
-                      <option value="captain">Captain</option>
-                      <option value="coach">Coach</option>
-                      <option value="manager">Manager</option>
-                      <option value="finance">Finance</option>
-                      <option value="assistant_coach">Assistant Coach</option>
-                      <option value="fan">Fan</option>
-                      <option value="custom">+ Add Custom Role</option>
-                    </select>
-
-                    {isCustomRole && (
-                      <Input 
-                        placeholder="Enter custom role name" 
-                        value={customRoleName} 
-                        onChange={(e) => {
-                          setCustomRoleName(e.target.value);
-                          setNewRole(e.target.value);
-                        }}
-                        className="bg-secondary border-border font-body"
-                      />
-                    )}
-
-                    <Button disabled={!newRole} onClick={async () => {
-                      await updateMemberRole(rolePlayerId, newRole);
-                      const memberName = members.find(m => m.id === rolePlayerId)?.name;
-                      toast({ title: "Role Updated", description: `${memberName} is now ${newRole}` });
-                      setRolePlayerId(""); setNewRole(""); setIsCustomRole(false); setCustomRoleName("");
-                    }} className="w-full font-body"><Save className="w-4 h-4 mr-1" /> Update Role</Button>
-                  </div>
-                )}
-              </div>
-
-              {/* Name Update */}
-              <div className="space-y-3 pt-3 border-t border-border">
-                <p className="text-sm font-heading text-primary">Edit Name</p>
-                <select value={editNamePlayerId} onChange={(e) => {
-                  setEditNamePlayerId(e.target.value);
-                  const mem = members.find(m => m.id === e.target.value);
-                  if (mem) setEditNewName(mem.name);
-                }} className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                  <option value="">Select member to rename</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </select>
-                {editNamePlayerId && (
-                  <>
-                    <Input placeholder="New Name" value={editNewName} onChange={(e) => setEditNewName(e.target.value)} className="bg-secondary border-border font-body" />
-                    <Button disabled={!editNewName.trim()} onClick={async () => {
-                      await supabase.from("members").update({ name: editNewName.trim() } as any).eq("id", editNamePlayerId);
-                      toast({ title: "Name Updated", description: `Updated name to ${editNewName.trim()}` });
-                      setEditNamePlayerId(""); setEditNewName("");
-                      window.location.reload();
-                    }} className="w-full font-body"><Edit className="w-4 h-4 mr-1" /> Save Name</Button>
-                  </>
-                )}
-              </div>
-
-            </CardContent>
-          </Card>
-        )}
-
-
-        {/* ===== SEND MESSAGE (All officials) ===== */}
-        <Card className="bg-card border-border card-glow">
-          <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><MessageCircle className="w-5 h-5 text-primary" /> Send Message</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <select value={sendMsgTo} onChange={(e) => setSendMsgTo(e.target.value)}
-              className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-              <option value="">Select recipient</option>
-              {members.filter(m => m.id !== user.id).map(m => (
-                <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
-              ))}
-            </select>
-            <Textarea placeholder="Type your message..." value={sendMsgContent} onChange={(e) => setSendMsgContent(e.target.value)}
-              className="bg-secondary border-border font-body" />
-            <Button onClick={handleSendMsg} disabled={!sendMsgTo || !sendMsgContent.trim()} className="w-full font-body">
-              <Send className="w-4 h-4 mr-1" /> Send Message
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* ===== MESSAGE INBOX (Collapsible Box) ===== */}
-        <Card className="bg-card border-border card-glow">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-              <Mail className="w-5 h-5 text-primary" /> Message Inbox
-            </CardTitle>
-            <Badge variant="secondary" className="font-body">{myMessages.filter(m => !m.read).length} New</Badge>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {myMessages.length === 0 ? (
-              <p className="text-muted-foreground text-sm font-body italic text-center py-4">Your inbox is empty</p>
-            ) : (
-              <Accordion type="single" collapsible className="w-full space-y-2">
-                {myMessages.map(msg => {
-                  const sender = members.find(m => m.id === msg.fromId);
-                  return (
-                    <AccordionItem key={msg.id} value={msg.id} className={`border border-border rounded-lg px-3 ${!msg.read ? 'bg-primary/5 border-primary/30' : 'bg-secondary/30'}`}>
-                      <AccordionTrigger onClick={() => !msg.read && markMessageRead(msg.id)} className="hover:no-underline py-3">
-                        <div className="flex items-center gap-3 text-left w-full pr-2">
-                          {!msg.read && <div className="w-2 h-2 rounded-full bg-primary animate-pulse shrink-0" />}
-                          <div className="min-w-0 flex-1">
-                            <p className="font-heading text-xs text-primary truncate">{sender?.name || 'Unknown'}</p>
-                            <p className="text-[10px] text-muted-foreground">{new Date(msg.createdAt).toLocaleString()}</p>
+              <TabsContent value="events" className="mt-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Contribution Events (Funding) */}
+                  <Card className="bg-card border-border card-glow h-fit">
+                    <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><DollarSign className="w-5 h-5 text-primary" /> Special Funding Tracks</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      {canManageContribEvents && (
+                        <div className="space-y-3 p-4 rounded-xl bg-secondary/10 border border-border">
+                          <Input placeholder="Event Title (e.g. New Jersey Fund)" value={ceTitle} onChange={(e) => setCeTitle(e.target.value)} className="bg-secondary/50 font-body text-sm h-9" />
+                          <Input placeholder="Description" value={ceDesc} onChange={(e) => setCeDesc(e.target.value)} className="bg-secondary/50 font-body text-sm h-9" />
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input placeholder="Amount/Person" value={ceAmountPer} onChange={(e) => setCeAmountPer(e.target.value)} className="bg-secondary/50 font-body text-sm h-9" />
+                            <Input placeholder="Goal Target" value={ceTarget} onChange={(e) => setCeTarget(e.target.value)} className="bg-secondary/50 font-body text-sm h-9" />
                           </div>
+                          <Button onClick={handleAddContribEvent} className="w-full font-body h-9" disabled={!ceTitle || !ceAmountPer || !ceTarget}><Plus className="w-4 h-4 mr-1" /> Create Event</Button>
                         </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="pt-1 pb-4">
-                        <div className="p-3 bg-card border border-border rounded-lg shadow-inner">
-                          <p className="font-body text-sm text-foreground whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                          <div className="flex gap-2 mt-4">
-                            <Button size="sm" variant="default" className="text-xs h-8" onClick={() => setReplyTo(msg.fromId)}>
-                              <Send className="w-3 h-3 mr-1" /> Reply
-                            </Button>
-                          </div>
-                          {replyTo === msg.fromId && (
-                            <div className="pt-3 space-y-2 border-t border-border mt-3">
-                              <Textarea value={replyContent} onChange={(e) => setReplyContent(e.target.value)} placeholder="Type reply..." className="bg-secondary border-border font-body text-sm min-h-[80px]" />
-                              <div className="flex gap-2">
-                                <Button size="sm" onClick={handleReply} className="font-body text-xs"><Send className="w-3 h-3 mr-1" /> Send Reply</Button>
-                                <Button size="sm" variant="ghost" onClick={() => { setReplyTo(null); setReplyContent(""); }} className="font-body text-xs">Cancel</Button>
+                      )}
+
+                      <div className="space-y-6">
+                        {contribEvents.map(e => {
+                          const payments = contribPayments.filter(p => p.event_id === e.id && p.paid);
+                          const totalRaised = payments.length * (e.amount_per_person || 0);
+                          const progress = Math.min((totalRaised / (e.target_amount || 1)) * 100, 100);
+                          return (
+                            <div key={e.id} className="space-y-3 p-4 rounded-xl bg-secondary/5 border border-border relative group">
+                              {canManageContribEvents && <Button variant="ghost" size="sm" className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-destructive" onClick={() => deleteContribEvent(e.id)}><Trash2 className="w-3 h-3" /></Button>}
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h4 className="font-heading text-sm text-foreground">{e.title}</h4>
+                                  <p className="text-[10px] text-muted-foreground font-body">{e.goal_description}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs font-heading text-primary">KSh {totalRaised.toLocaleString()} / {e.target_amount.toLocaleString()}</p>
+                                  <p className="text-[10px] text-muted-foreground font-body">{payments.length} paid so far</p>
+                                </div>
                               </div>
+                              <Progress value={progress} className="h-2 bg-secondary" />
+                              <Accordion type="single" collapsible>
+                                <AccordionItem value="members" className="border-none">
+                                  <AccordionTrigger className="text-[10px] font-heading text-primary uppercase h-6 py-0 hover:no-underline">Manage Member Payments</AccordionTrigger>
+                                  <AccordionContent>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
+                                      {playerMembers.sort((a,b) => a.name.localeCompare(b.name)).map(m => {
+                                        const isPaid = contribPayments.some(p => p.event_id === e.id && p.member_id === m.id && p.paid);
+                                        return (
+                                          <div key={m.id} className={`p-2 rounded-lg border text-center cursor-pointer transition-all ${isPaid ? "bg-green-600/20 border-green-600/40" : "bg-secondary/20 border-border"}`} onClick={() => canManageContribEvents && toggleContribPayment(e.id, m.id)}>
+                                            <p className="text-[10px] font-heading truncate text-foreground">{m.name}</p>
+                                            <p className={`text-[8px] font-body ${isPaid ? "text-green-500" : "text-muted-foreground"}`}>{isPaid ? "PAID" : "UNPAID"}</p>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </AccordionContent>
+                                </AccordionItem>
+                              </Accordion>
                             </div>
-                          )}
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Calendar Events */}
+                  <Card className="bg-card border-border card-glow h-fit">
+                    <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-primary" /> Management Calendar</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      {isManager && (
+                        <div className="space-y-3 p-4 rounded-xl bg-secondary/10 border border-border">
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input placeholder="Event Title" value={newEventTitle} onChange={(e) => setNewEventTitle(e.target.value)} className="bg-secondary/50 font-body text-sm h-9" />
+                            <Input type="date" value={newEventDate} onChange={(e) => setNewEventDate(e.target.value)} className="bg-secondary/50 font-body text-sm h-9" />
+                          </div>
+                          <Input placeholder="Description (optional)" value={newEventDesc} onChange={(e) => setNewEventDesc(e.target.value)} className="bg-secondary/50 font-body text-sm h-9" />
+                          <Button onClick={addEvent} className="w-full font-body h-9" disabled={!newEventTitle || !newEventDate}><Plus className="w-4 h-4 mr-1" /> Schedule Event</Button>
                         </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
-            )}
-          </CardContent>
-        </Card>
+                      )}
+                      <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                        {calendarEvents.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(e => (
+                          <div key={e.id} className="p-3 rounded-lg bg-secondary/5 border border-border flex justify-between items-center group">
+                            <div>
+                              <p className="text-xs font-heading text-foreground">{e.title}</p>
+                              <p className="text-[10px] text-muted-foreground font-body">{format(new Date(e.date), "EEE, MMM d")}</p>
+                            </div>
+                            <CalendarIcon className="w-4 h-4 text-primary opacity-20" />
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="lineup" className="mt-6">
+                <Card className="bg-card border-border card-glow overflow-hidden">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Gamepad2 className="w-5 h-5 text-primary" /> Tactical Lineup Builder</CardTitle>
+                      <p className="text-xs text-muted-foreground font-body">Drag and drop players to set the formation for next match.</p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={exportFirst11Pdf} className="h-8 text-xs font-body"><Download className="w-3 h-3 mr-1" /> Export Lineup</Button>
+                  </CardHeader>
+                  <CardContent className="p-0 border-t border-border/50 bg-secondary/5">
+                    <div className="p-4 md:p-8">
+                       <LineupBuilder players={playerMembers} selectedStarters={selectedFirst11} onStartersChange={setSelectedFirst11} selectedSubs={selectedSubs} onSubsChange={setSelectedSubs} />
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="league" className="mt-6">
+                <Card className="bg-card border-border card-glow">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> League Standings</CardTitle>
+                      <p className="text-xs text-muted-foreground font-body mt-1 italic">Real-time table synchronization.</p>
+                    </div>
+                    {isManager && (
+                      <Dialog>
+                        <DialogTrigger asChild><Button size="sm" className="font-body"><Plus className="w-3 h-3 mr-1" /> Add Team</Button></DialogTrigger>
+                        <DialogContent className="bg-card border-border">
+                          <DialogHeader><DialogTitle className="font-heading text-primary">Add New League Rival</DialogTitle></DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <Input placeholder="Team Name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} className="bg-secondary/50 font-body" />
+                            <Button onClick={() => handleAddLeagueTeam("league")} className="w-full font-heading" disabled={!newTeamName}>Add to Standings</Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto custom-scrollbar">
+                      <table className="w-full text-xs font-body">
+                        <thead className="bg-secondary/20 border-b border-border">
+                          <tr className="text-muted-foreground font-heading uppercase tracking-tighter">
+                            <th className="p-3 text-left w-8">#</th>
+                            <th className="p-3 text-left">Team Name</th>
+                            <th className="p-3 text-center">P</th>
+                            <th className="p-3 text-center">W</th>
+                            <th className="p-3 text-center">D</th>
+                            <th className="p-3 text-center">L</th>
+                            <th className="p-3 text-center">GD</th>
+                            <th className="p-3 text-center font-heading text-primary">PTS</th>
+                            {isManager && <th className="p-3 text-right">Actions</th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/50">
+                          {leagueTeamsMain.map((t, i) => (
+                            <React.Fragment key={t.id}>
+                              <tr className={`transition-colors ${t.is_own_team ? "bg-primary/5 font-bold" : "hover:bg-secondary/10"}`}>
+                                <td className="p-3 text-muted-foreground">{i + 1}</td>
+                                <td className="p-3 flex items-center gap-2">
+                                  {t.team_name}
+                                  {t.is_own_team && <Badge variant="secondary" className="bg-primary/20 text-[8px] h-4 py-0 uppercase">Our Club</Badge>}
+                                </td>
+                                <td className="p-3 text-center">{t.played}</td>
+                                <td className="p-3 text-center">{t.won}</td>
+                                <td className="p-3 text-center">{t.drawn}</td>
+                                <td className="p-3 text-center">{t.lost}</td>
+                                <td className="p-3 text-center font-heading">{t.goal_difference > 0 ? `+${t.goal_difference}` : t.goal_difference}</td>
+                                <td className="p-3 text-center font-heading text-primary text-sm">{t.points}</td>
+                                {isManager && (
+                                  <td className="p-3 text-right space-x-1">
+                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditingTeamId(editingTeamId === t.id ? null : t.id); setEditTeamData({ played: t.played, won: t.won, drawn: t.drawn, lost: t.lost, gd: t.goal_difference, pts: t.points }); }}><Edit className="w-3 h-3" /></Button>
+                                    {!t.is_own_team && <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDeleteLeagueTeam(t.id)}><Trash2 className="w-3 h-3" /></Button>}
+                                  </td>
+                                )}
+                              </tr>
+                              {editingTeamId === t.id && (
+                                <tr><td colSpan={isManager ? 9 : 8} className="p-0 px-3 pb-3 border-none"><EditTeamForm team={t} onSave={handleSaveLeagueTeam} onCancel={() => setEditingTeamId(null)} /></td></tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="amateur" className="mt-6">
+                <Card className="bg-card border-border card-glow">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-500" /> Amateur Standings</CardTitle>
+                      <p className="text-xs text-muted-foreground font-body mt-1 italic">Managing amateur league rivalries.</p>
+                    </div>
+                    {isManager && (
+                      <Dialog>
+                        <DialogTrigger asChild><Button size="sm" className="font-body border-yellow-500/50 text-yellow-500" variant="outline"><Plus className="w-3 h-3 mr-1" /> Add Amateur Team</Button></DialogTrigger>
+                        <DialogContent className="bg-card border-border">
+                          <DialogHeader><DialogTitle className="font-heading text-yellow-500">Add Amateur Team</DialogTitle></DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <Input placeholder="Team Name" value={newAmateurTeamName} onChange={(e) => setNewAmateurTeamName(e.target.value)} className="bg-secondary/50 font-body" />
+                            <Button onClick={() => handleAddLeagueTeam("amateur")} className="w-full font-heading bg-yellow-600 hover:bg-yellow-700" disabled={!newAmateurTeamName}>Add Team</Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto custom-scrollbar">
+                      <table className="w-full text-xs font-body">
+                        <thead className="bg-secondary/20 border-b border-border">
+                          <tr className="text-muted-foreground font-heading uppercase tracking-tighter">
+                            <th className="p-3 text-left w-8">#</th>
+                            <th className="p-3 text-left">Team Name</th>
+                            <th className="p-3 text-center">P</th>
+                            <th className="p-3 text-center">W</th>
+                            <th className="p-3 text-center">D</th>
+                            <th className="p-3 text-center">L</th>
+                            <th className="p-3 text-center">GD</th>
+                            <th className="p-3 text-center font-heading text-yellow-500">PTS</th>
+                            {isManager && <th className="p-3 text-right">Actions</th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/50">
+                          {leagueTeamsAmateur.map((t, i) => (
+                            <React.Fragment key={t.id}>
+                              <tr className={`transition-colors ${t.is_own_team ? "bg-yellow-500/5 font-bold border-l-2 border-yellow-500" : "hover:bg-secondary/10"}`}>
+                                <td className="p-3 text-muted-foreground">{i + 1}</td>
+                                <td className="p-3 flex items-center gap-2">{t.team_name} {t.is_own_team && <Badge variant="outline" className="text-[8px] h-4 border-yellow-500/50 text-yellow-500 uppercase">Amateur Team</Badge>}</td>
+                                <td className="p-3 text-center">{t.played}</td>
+                                <td className="p-3 text-center">{t.won}</td>
+                                <td className="p-3 text-center">{t.drawn}</td>
+                                <td className="p-3 text-center">{t.lost}</td>
+                                <td className="p-3 text-center font-heading">{t.goal_difference > 0 ? `+${t.goal_difference}` : t.goal_difference}</td>
+                                <td className="p-3 text-center font-heading text-yellow-500 text-sm">{t.points}</td>
+                                {isManager && (
+                                  <td className="p-3 text-right space-x-1">
+                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditingAmateurTeamId(editingAmateurTeamId === t.id ? null : t.id); setEditAmateurTeamData({ played: t.played, won: t.won, drawn: t.drawn, lost: t.lost, gd: t.goal_difference, pts: t.points }); }}><Edit className="w-3 h-3" /></Button>
+                                    {!t.is_own_team && <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDeleteLeagueTeam(t.id)}><Trash2 className="w-3 h-3" /></Button>}
+                                  </td>
+                                )}
+                              </tr>
+                              {editingAmateurTeamId === t.id && (
+                                <tr><td colSpan={isManager ? 9 : 8} className="p-0 px-3 pb-3 border-none"><EditTeamForm team={t} onSave={handleSaveAmateurTeam} onCancel={() => setEditingAmateurTeamId(null)} /></td></tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </motion.div>
+        )}
       </main>
+
+      {/* Global Dialogs */}
+      <Dialog open={showRemoveConfirm} onOpenChange={setShowRemoveConfirm}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader><DialogTitle className="font-heading text-destructive uppercase">Confirm Member Removal</DialogTitle></DialogHeader>
+          <div className="py-4 font-body text-sm text-foreground">Are you sure you want to remove this member from the club database? This action is permanent.</div>
+          <DialogFooter><Button variant="ghost" onClick={() => setShowRemoveConfirm(false)}>Cancel</Button><Button variant="destructive" onClick={handleRemovePlayer}>Confirm Removal</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reply Dialog */}
+      <Dialog open={!!replyTo} onOpenChange={() => setReplyTo(null)}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader><DialogTitle className="font-heading text-primary">Reply to Message</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <Textarea placeholder="Type your reply..." value={replyContent} onChange={(e) => setReplyContent(e.target.value)} className="bg-secondary/50 font-body min-h-[120px]" />
+            <Button onClick={handleReply} className="w-full font-heading" disabled={!replyContent.trim()}><Send className="w-4 h-4 mr-2" /> Send Reply</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

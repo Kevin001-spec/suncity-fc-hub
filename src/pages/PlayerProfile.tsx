@@ -18,151 +18,100 @@ import { getContribMonthsForMember, getFullPositionName, getPositionGroup, type 
 import { generatePlayerProfileDocx } from "@/lib/docx-export";
 import { getStatsForPosition } from "@/lib/position-stats";
 import { supabase } from "@/integrations/supabase/client";
-import LottieAnimation from "@/components/LottieAnimation";
-import LottieCarousel from "@/components/LottieCarousel";
-import allmembersProfile from "@/assets/animations/allmembers_profile.json";
-import everyoneprofilecarrousel1 from "@/assets/animations/everyoneprofilecarrousel1.json";
-import everyoneprofilecarrousel2 from "@/assets/animations/everyoneprofilecarrousel2.json";
-import everyoneprofilecarrousel3 from "@/assets/animations/everyoneprofilecarrousel3.json";
-import everyoneprofilecarrousel5 from "@/assets/animations/everyoneprofilecarrousel5.json";
-import { getAwardAnimation } from "@/lib/award-animations";
-
-const profileCarousel = [allmembersProfile, everyoneprofilecarrousel1, everyoneprofilecarrousel2, everyoneprofilecarrousel3, everyoneprofilecarrousel5];
-
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-
-const iconMap: Record<string, any> = {
-  saves: Hand, cleanSheets: Shield, aerialDuels: Crosshair,
-  interceptions: Crosshair, assists: Footprints,
-  goals: Target, directShots: Target, successfulTackles: Shield,
-  gamesPlayed: Gamepad2,
-};
 
 const PlayerProfile = () => {
-  const { user } = useAuth();
-  const { members, profilePics, uploadProfilePicToStorage, uploadMediaToStorage, attendance, currentWeekStart, gameScores, sendMessage, updateFavouriteMoment, loadWeeklyStatsLogs, loadPlayerGameLogs } = useTeamData();
+  const { user, sendMessage } = useAuth();
+  const { 
+    members, profilePics, attendance, uploadProfilePicToStorage, 
+    gameScores, matchPerformances, currentWeekStart, messages, markMessageRead,
+    refreshData
+  } = useTeamData();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const mediaInputRef = useRef<HTMLInputElement>(null);
-  const [msgRecipient, setMsgRecipient] = useState("");
+  
+  const [showExport, setShowExport] = useState(true);
+  const [msgTarget, setMsgTarget] = useState("");
   const [msgContent, setMsgContent] = useState("");
-  const [weeklyLogs, setWeeklyLogs] = useState<WeeklyStatsLog[]>([]);
-  const [momentText, setMomentText] = useState("");
-  const [playerGameLogs, setPlayerGameLogs] = useState<PlayerGameLog[]>([]);
-  const [recentAward, setRecentAward] = useState<any>(null);
-  const [historicalAwards, setHistoricalAwards] = useState<any[]>([]);
-  const [trophyCabinetOpen, setTrophyCabinetOpen] = useState(false);
+  const [showInbox, setShowInbox] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [selectedGame, setSelectedGame] = useState<any>(null);
 
-  const liveMember = members.find((m) => m.id === user?.id) || user;
-  const isFan = user?.role === "fan";
-  const isFabianExempt = user?.id === "SCF-001";
-  const posGroup = getPositionGroup(liveMember?.position);
-  const dayOfWeek = new Date().getDay();
-  const showExport = dayOfWeek >= 5 || dayOfWeek === 0;
-  const [detailedExportEnabled, setDetailedExportEnabled] = useState(false);
-  const [matchPerfsForExport, setMatchPerfsForExport] = useState<any[]>([]);
-  const [matchAwardsForExport, setMatchAwardsForExport] = useState<any[]>([]);
-  const showDetailedExport = showExport || detailedExportEnabled;
-
-  // Load weekly stats logs, export_enabled, match perfs & awards
+  // Auto-refresh data on mount
   useEffect(() => {
-    if (user?.id && !isFan) {
-      loadWeeklyStatsLogs(user.id).then(setWeeklyLogs);
-      loadPlayerGameLogs(user.id).then(setPlayerGameLogs);
-      supabase.from("season_config").select("*").order("created_at", { ascending: false }).limit(1).then(({ data }) => {
-        if (data && data.length > 0 && (data[0] as any).export_enabled) setDetailedExportEnabled(true);
-      });
-      supabase.from("match_performances").select("*").eq("player_id", user.id).order("created_at", { ascending: false }).then(({ data }) => {
-        if (data) setMatchPerfsForExport(data);
-      });
-      supabase.from("match_awards" as any).select("*").eq("player_id", user.id).order("created_at", { ascending: false }).then(({ data }: any) => {
-        if (data) {
-          setMatchAwardsForExport(data);
-          if (data.length > 0) {
-            setRecentAward(data[0]);
-            setHistoricalAwards(data.slice(1));
-          }
-        }
-      });
-    }
-  }, [user?.id, isFan]);
+    refreshData();
+  }, []);
 
-  // Init moment text
-  useEffect(() => {
-    if (isFan && liveMember?.favouriteMoment) {
-      setMomentText(liveMember.favouriteMoment);
-    }
-  }, [isFan, liveMember?.favouriteMoment]);
+  if (!user) return <Navigate to="/" />;
+  
+  const maskId = (id: string) => {
+    const isManager = user.role === "manager";
+    const isCoach = user.role === "coach" || user.role === "assistant_coach";
+    return (isManager || isCoach) ? id : "SCF-***";
+  };
 
-  if (!user) return <Navigate to="/" replace />;
+  const liveMember = members.find((m) => m.id === user.id) || user;
+  const isManager = user.role === "manager";
+  const isCoach = user.role === "coach" || user.role === "assistant_coach";
 
   const handleProfilePicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    toast({ title: "Compressing & uploading...", description: "Processing your photo..." });
+    toast({ title: "Compressing & uploading..." });
     const url = await uploadProfilePicToStorage(user.id, file);
-    if (url) toast({ title: "Profile Updated", description: "Your profile picture has been saved permanently." });
-    else toast({ title: "Upload Failed", description: "Could not upload profile picture.", variant: "destructive" });
+    if (url) toast({ title: "Profile Updated" });
     e.target.value = "";
   };
 
-  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files?.length) return;
-    toast({ title: "Compressing & uploading...", description: `Processing ${files.length} photo(s)...` });
-    await uploadMediaToStorage(Array.from(files), user.name);
-    toast({ title: "Media Uploaded", description: `${files.length} photo(s) uploaded to gallery.` });
-    e.target.value = "";
+  const handleSendMsg = async () => {
+    if (!msgTarget || !msgContent.trim()) return;
+    await sendMessage(user.id, msgTarget, msgContent.trim());
+    toast({ title: "Message Sent", description: `Sent to ${members.find(m => m.id === msgTarget)?.name || msgTarget}` });
+    setMsgContent("");
   };
-
-  const myAttendance = attendance.filter((a) => a.playerId === user.id);
-
-  const opponentsPlayed = gameScores
-    .filter(game => game.scorers?.includes(user.id))
-    .map(game => ({ opponent: game.opponent, date: game.date, result: `${game.ourScore}-${game.theirScore}` }));
-
-  // Position-specific stats using centralized definition
-  const statFields = getStatsForPosition(liveMember?.position);
-  const statCards = isFan ? [] : statFields.map(sf => ({
-    icon: iconMap[sf.key] || Target,
-    label: sf.label,
-    value: (liveMember as any)?.[sf.key] || 0,
-  }));
-
-  const memberContribMonths = getContribMonthsForMember(user.id);
 
   const handleExportProfile = async (detailed = false) => {
-    const stats = statCards.map(s => ({ label: s.label, value: s.value }));
-    const attDays = DAYS.map(day => {
-      const record = myAttendance.find(a => a.day === day);
-      return { day, status: record?.status || "absent" };
-    });
-    const contribs = memberContribMonths.map(m => ({
-      month: m.label, status: liveMember.contributions[m.key] || "unpaid",
+    const stats = getStatsForPosition(liveMember.position).map(sf => ({
+      label: sf.label,
+      value: (liveMember as any)?.[sf.key] || 0
     }));
 
-    let logsForExport: { weekStart: string; stats: { label: string; value: number }[] }[] | undefined;
-    if (detailed && weeklyLogs.length > 0) {
-      logsForExport = weeklyLogs.map(log => ({
-        weekStart: log.weekStart,
-        stats: statFields.map(sf => ({
-          label: sf.label,
-          value: (log as any)[sf.key] || 0,
-        })),
-      }));
-    }
-
-    // Build match history with detailed performance data
-    const detailedMatchHistory = matchHistory.map(m => {
-      const game = gameScores.find(g => g.opponent === m.opponent && new Date(g.date).toLocaleDateString() === m.date);
-      const perf = game ? matchPerfsForExport.find((p: any) => p.game_id === game.id) : null;
-      return { ...m, performance: perf };
+    const attDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(day => {
+      const record = attendance.filter(a => a.playerId === user.id).find(a => a.day === day);
+      return { day, status: record?.status || "absent" };
     });
 
-    // Build awards list
-    const awardsForDoc = matchAwardsForExport.map((a: any) => ({
+    const mContribMonths = getContribMonthsForMember(user.id);
+    const contribs = mContribMonths.map(m => ({
+      month: m.label,
+      status: liveMember.contributions[m.key] || "unpaid",
+    }));
+
+    const logsForExport = (members.find(m => m.id === user.id) as any)?.weeklyStatsLog || [];
+    
+    // Fetch detailed match history and awards from Supabase
+    const { data: detailedMatchHistory } = await supabase
+      .from("match_performances")
+      .select(`
+        *,
+        game_scores (*)
+      `)
+      .eq("player_id", user.id)
+      .order("created_at", { ascending: false });
+
+    const { data: awardsData } = await supabase
+      .from("match_awards" as any)
+      .select("*")
+      .eq("player_id", user.id);
+
+    const awardsForDoc = (awardsData || []).map((a: any) => ({
       label: a.award_label,
-      reason: a.reason,
+      reason: a.reason
+    }));
+
+    const opponentsPlayed = gameScores.map(g => ({
+      opponent: g.opponent,
+      date: g.date,
+      result: `${g.ourScore}-${g.theirScore}`
     }));
 
     await generatePlayerProfileDocx(
@@ -172,316 +121,311 @@ const PlayerProfile = () => {
       detailedMatchHistory.length > 0 ? detailedMatchHistory as any : undefined,
       awardsForDoc.length > 0 ? awardsForDoc : undefined,
     );
-    toast({ title: detailed ? "📄 Detailed Profile Exported" : "📄 Weekly Profile Exported" });
+    toast({ title: "Profile Exported", description: "Your branded docx is ready." });
   };
 
-  const handleSendMessage = async () => {
-    if (!msgRecipient || !msgContent.trim()) return;
-    await sendMessage(user.id, msgRecipient, msgContent.trim());
-    toast({ title: "Message Sent" });
-    setMsgRecipient("");
-    setMsgContent("");
+  // Stats logic
+  const statFields = getStatsForPosition(liveMember.position);
+  const iconMap: Record<string, any> = {
+    saves: Hand, cleanSheets: Shield, aerialDuels: Crosshair,
+    tackles: Shield, interceptions: Crosshair, assists: Footprints,
+    goals: Target, directShots: Crosshair, successfulTackles: Shield,
   };
 
-  const matchHistory = playerGameLogs.map(log => {
-    const game = gameScores.find(g => g.id === log.gameId);
-    if (!game) return null;
-    return {
-      opponent: game.opponent,
-      date: new Date(game.date).toLocaleDateString(),
-      result: `${game.ourScore}-${game.theirScore}`,
-      gameType: game.gameType || "friendly",
-      venue: game.venue || "—",
-    };
-  }).filter(Boolean) as { opponent: string; date: string; result: string; gameType: string; venue: string }[];
+  const getStatCards = () => {
+    return statFields.map(sf => ({
+      icon: iconMap[sf.key] || Target,
+      label: sf.label,
+      value: (liveMember as any)[sf.key] || 0,
+    }));
+  };
+
+  const myMessages = messages.filter(m => m.toId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const unreadCount = myMessages.filter(m => !m.read).length;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background text-foreground font-body">
       <Helmet>
-        <title>{liveMember.name} — SunCity FC Profile</title>
-        <meta name="description" content={`${liveMember.name}'s player profile on SunCity FC. View stats, match history, and contributions.`} />
+        <title>{liveMember.name} | SunCity FC Profile</title>
+        <meta name="description" content={`View ${liveMember.name}'s football stats, performance history, and match records at SunCity FC.`} />
       </Helmet>
       <Navbar />
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+
+      <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
         {/* Profile Header */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-          <div className="flex flex-row items-center justify-center gap-3">
-            <div className="relative">
-              <Avatar className="w-20 h-20 border-2 border-primary">
-                {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
-                <AvatarFallback className="bg-secondary text-primary font-heading text-2xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <button onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-colors">
-                <Upload className="w-4 h-4" />
-              </button>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
-            </div>
-            <LottieCarousel animations={profileCarousel} className="w-16 h-16 md:w-24 md:h-24" />
-          </div>
-          <h2 className="font-heading text-2xl text-foreground mt-4">{liveMember.name}</h2>
-          <div className="flex items-center justify-center gap-2 mt-1">
-            <Badge className="bg-primary text-primary-foreground font-body capitalize">{user.role}</Badge>
-          </div>
-          {liveMember.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(liveMember.position)}</p>}
-        </motion.div>
-
-        {/* Stats */}
-        {!isFan && statCards.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground">Performance Stats</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.min(statCards.length, 5)}, 1fr)` }}>
-                  {statCards.map(({ icon: Icon, label, value }) => (
-                    <div key={label} className="text-center">
-                      <Icon className="w-5 h-5 text-primary mx-auto mb-1" />
-                      <p className="text-xl font-heading text-foreground">{value}</p>
-                      <p className="text-[10px] text-muted-foreground font-body">{label}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+        <section className="text-center space-y-4">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="relative inline-block">
+            <Avatar className="w-24 h-24 md:w-32 md:h-32 border-4 border-primary shadow-2xl mx-auto">
+              {profilePics[user.id] && <AvatarImage src={profilePics[user.id]} className="aspect-square object-cover object-center" />}
+              <AvatarFallback className="bg-secondary text-primary font-heading text-3xl">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute bottom-0 right-0 w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-all shadow-lg">
+              <Upload className="w-5 h-5" />
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
           </motion.div>
-        )}
+          
+          <div className="space-y-2">
+            <h2 className="font-heading text-3xl md:text-4xl text-foreground">{liveMember.name}</h2>
+            <div className="flex items-center justify-center gap-3">
+              <Badge variant="secondary" className="bg-secondary/50 font-body text-xs px-3">{maskId(user.id)}</Badge>
+              <Badge className="bg-primary text-primary-foreground font-body capitalize px-3">{user.role.replace("_", " ")}</Badge>
+            </div>
+            {liveMember.position && <p className="text-muted-foreground font-body text-sm md:text-base">{getFullPositionName(liveMember.position)}</p>}
+          </div>
+          
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <Button size="sm" variant="outline" className="font-body border-primary/20 hover:bg-primary/10" onClick={() => setShowInbox(true)}>
+              <MessageCircle className="w-4 h-4 mr-2" /> Inbox {unreadCount > 0 && <span className="ml-1.5 px-1.5 py-0.5 bg-primary text-[10px] rounded-full text-white">{unreadCount}</span>}
+            </Button>
+            {showExport && (
+              <Button size="sm" className="font-body card-glow" onClick={() => handleExportProfile(true)}>
+                <Download className="w-4 h-4 mr-2" /> Export Branded Profile
+              </Button>
+            )}
+          </div>
+        </section>
 
-        {/* Recent Honour */}
-        {!isFan && recentAward && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }}>
-            <div className="border-2 border-yellow-500 rounded-lg p-4 bg-card">
-              <div className="flex items-center gap-3">
-                <LottieAnimation animationData={getAwardAnimation(recentAward.award_type)} className="w-16 h-16" />
-                <div>
-                  <p className="font-heading text-sm text-foreground">{recentAward.award_label}</p>
-                  <p className="text-xs text-muted-foreground font-body italic">{recentAward.reason}</p>
-                  {(() => {
-                    const game = gameScores.find(g => g.id === recentAward.game_id);
-                    return game ? <p className="text-xs text-primary/80 font-heading mt-1">vs {game.opponent} ({new Date(game.date).toLocaleDateString()})</p> : null;
-                  })()}
+        {/* Stats Grid */}
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {getStatCards().map(({ icon: Icon, label, value }, idx) => (
+            <motion.div key={label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }}>
+              <Card className="bg-card border-border hover:border-primary/40 transition-all card-glow h-full overflow-hidden relative group">
+                <div className="absolute top-0 right-0 w-12 h-12 bg-primary/5 rounded-bl-full group-hover:bg-primary/10 transition-all" />
+                <CardHeader className="pb-2">
+                  <Icon className="w-5 h-5 text-primary mb-1" />
+                  <CardTitle className="text-[10px] font-heading text-muted-foreground uppercase tracking-widest">{label}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-heading text-foreground">{value}</p>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </section>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Recent Match Performance */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-heading text-lg text-primary flex items-center gap-2"><Trophy className="w-5 h-5" /> Recent Match Stats</h3>
+              <Button variant="link" className="text-xs font-body" onClick={() => setShowHistory(true)}>Full History</Button>
+            </div>
+            <div className="space-y-3">
+              {matchPerformances.filter(p => p.playerId === user.id).slice(0, 3).map((perf, idx) => {
+                const game = gameScores.find(g => g.id === perf.gameId);
+                if (!game) return null;
+                return (
+                  <motion.div key={perf.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + (idx * 0.1) }}
+                    className="p-4 rounded-xl bg-card border border-border flex items-center justify-between card-glow relative overflow-hidden group">
+                    {perf.is_potm && <div className="absolute top-0 right-0 px-2 py-0.5 bg-primary text-[8px] font-heading text-white rounded-bl-lg">POTM</div>}
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-secondary/50 flex items-center justify-center font-heading text-primary border border-primary/20">
+                        {game.ourScore}-{game.theirScore}
+                      </div>
+                      <div>
+                        <h4 className="font-heading text-sm">vs {game.opponent}</h4>
+                        <p className="text-[10px] text-muted-foreground font-body uppercase">{format(new Date(game.date), "MMM d, yyyy")}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-heading text-primary">{perf.rating.toFixed(1)} <span className="text-[10px] text-muted-foreground uppercase">Rating</span></p>
+                      <div className="flex gap-1.5 justify-end mt-1">
+                        {perf.goals > 0 && <Badge variant="outline" className="text-[8px] h-4 py-0 font-body">⚽ {perf.goals}</Badge>}
+                        {perf.assists > 0 && <Badge variant="outline" className="text-[8px] h-4 py-0 font-body">🅰️ {perf.assists}</Badge>}
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+              {matchPerformances.filter(p => p.playerId === user.id).length === 0 && (
+                <div className="p-8 rounded-xl border border-dashed border-border text-center">
+                  <p className="text-sm text-muted-foreground font-body italic">No matches recorded yet. Keep training!</p>
                 </div>
-              </div>
-              {historicalAwards.length > 0 && (
-                <Button size="sm" variant="outline" onClick={() => setTrophyCabinetOpen(true)} className="mt-3 font-body text-xs w-full border-primary/30 text-primary">
-                  <Award className="w-3 h-3 mr-1" /> View Award History ({historicalAwards.length})
-                </Button>
               )}
             </div>
-          </motion.div>
-        )}
+          </section>
 
-        {/* Trophy Cabinet Modal */}
-        <Dialog open={trophyCabinetOpen} onOpenChange={setTrophyCabinetOpen}>
-          <DialogContent className="max-w-md bg-card border-border">
-            <DialogHeader><DialogTitle className="font-heading text-primary">🏆 Trophy Cabinet</DialogTitle></DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto">
-              {historicalAwards.map((award: any, i: number) => (
-                <div key={i} className="border border-border rounded-lg p-3 text-center">
-                  <LottieAnimation animationData={getAwardAnimation(award.award_type)} className="h-20 w-20 mx-auto" />
-                  <p className="font-heading text-xs text-foreground mt-2">{award.award_label}</p>
-                  <p className="text-[10px] text-muted-foreground font-body italic">{award.reason}</p>
-                  {(() => {
-                    const game = gameScores.find(g => g.id === award.game_id);
-                    return game ? (
-                      <p className="text-[10px] text-primary/80 font-heading mt-1">
-                        vs {game.opponent} <br/> ({new Date(game.date).toLocaleDateString()})
-                      </p>
-                    ) : null;
-                  })()}
-                </div>
-              ))}
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {isFan && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Heart className="w-5 h-5 text-primary" /> Fan Profile</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                {liveMember.fanBadge && (
-                  <div className="flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-primary" />
-                    <Badge className="bg-primary text-primary-foreground">{liveMember.fanBadge}</Badge>
-                  </div>
-                )}
-                <div className="flex gap-4">
-                  <div className="text-center flex-1 p-3 bg-secondary/50 rounded-lg">
-                    <Star className="w-5 h-5 text-primary mx-auto mb-1" />
-                    <p className="text-2xl font-heading text-primary">{liveMember.fanPoints || 0}</p>
-                    <p className="text-xs text-muted-foreground font-body">Fan Points</p>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-body text-muted-foreground">My Favourite Sun City Moment</label>
-                  <Textarea value={momentText} onChange={(e) => setMomentText(e.target.value)}
-                    placeholder="Share your favourite team moment..."
-                    className="bg-secondary border-border font-body" />
-                  <Button onClick={async () => {
-                    await updateFavouriteMoment(user.id, momentText);
-                    toast({ title: "Moment Saved!" });
-                  }} size="sm" className="font-body">Save Moment</Button>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Training Attendance */}
-        {!isFan && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Calendar className="w-5 h-5 text-primary" /> Training Attendance</CardTitle></CardHeader>
-              <CardContent>
-                <div className="flex gap-3 justify-center">
-                  {DAYS.map((day) => {
-                    const record = myAttendance.find((a) => a.day === day);
-                    const status = record?.status || "";
-                    const display = status === "present" ? "✅" : status === "excused" ? "🔵" : status === "no_activity" ? "➖" : "⬜";
-                    const colors = status === "present" ? "border-green-500/40 bg-green-500/10"
-                      : status === "excused" ? "border-blue-500/40 bg-blue-500/10"
-                      : status === "no_activity" ? "border-border bg-muted/30"
-                      : "border-border bg-muted/10";
-                    return (
-                      <div key={day} className={`flex flex-col items-center p-2 rounded-lg border-2 ${colors}`}>
-                        <span className="text-xs font-body text-muted-foreground mb-1">{day.slice(0, 3)}</span>
-                        <span className="text-lg">{display}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground font-body mt-2 text-center">Week of {currentWeekStart}</p>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Match History */}
-        {!isFan && matchHistory.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><MapPin className="w-5 h-5 text-primary" /> Match History</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {matchHistory.map((m, i) => (
-                    <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                      <div>
-                        <p className="font-body text-sm text-foreground">vs {m.opponent}</p>
-                        <p className="text-xs text-muted-foreground">{m.date} • {m.gameType} • {m.venue}</p>
-                      </div>
-                      <Badge variant="outline" className="border-primary/30 text-primary font-heading">{m.result}</Badge>
-                    </div>
+          {/* Quick Actions & Messaging */}
+          <section className="space-y-4">
+            <h3 className="font-heading text-lg text-primary flex items-center gap-2"><MessageCircle className="w-5 h-5" /> Quick Contact</h3>
+            <Card className="bg-card border-border card-glow h-fit overflow-hidden">
+              <CardHeader className="bg-secondary/5 border-b border-border/50 pb-3">
+                <CardTitle className="text-xs font-heading text-muted-foreground uppercase">Send Message to Official</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-3">
+                <select 
+                  className="w-full bg-secondary/50 border border-border rounded-md px-3 py-2 text-sm font-body focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
+                  value={msgTarget}
+                  onChange={(e) => setMsgTarget(e.target.value)}
+                >
+                  <option value="">Select Official</option>
+                  {members.filter(m => ["manager", "coach", "assistant_coach", "finance", "captain"].includes(m.role)).map(m => (
+                    <option key={m.id} value={m.id}>{m.name} ({m.role.replace("_", " ")})</option>
                   ))}
-                </div>
+                </select>
+                <Textarea 
+                  placeholder="Type your message here..."
+                  className="bg-secondary/50 border-border font-body text-sm min-h-[80px]"
+                  value={msgContent}
+                  onChange={(e) => setMsgContent(e.target.value)}
+                />
+                <Button onClick={handleSendMsg} className="w-full font-heading" disabled={!msgTarget || !msgContent.trim()}>
+                  <Send className="w-4 h-4 mr-2" /> Send Message
+                </Button>
               </CardContent>
             </Card>
-          </motion.div>
-        )}
+          </section>
+        </div>
 
-        {/* Contributions */}
-        {!isFan && !isFabianExempt && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground">My Contributions</CardTitle></CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-3">
-                  {memberContribMonths.map(({ key, label }) => {
-                    const status = liveMember.contributions[key] || "unpaid";
-                    const isPaid = status === "paid";
-                    const isPending = status === "pending";
-                    return (
-                      <div key={key} className={`px-4 py-3 rounded-xl border-2 text-center ${isPaid ? "border-primary/40 bg-primary/10" : isPending ? "border-yellow-500/40 bg-yellow-500/10" : "border-border bg-muted/30"}`}>
-                        <p className="text-xs font-body text-muted-foreground">{label}</p>
-                        {isPaid ? <span className="text-green-600">✅</span> : isPending ? <span>⏳</span> : <span className="text-muted-foreground">⬜</span>}
+        {/* Attendance Summary */}
+        <section className="space-y-4">
+          <h3 className="font-heading text-lg text-primary flex items-center gap-2"><Calendar className="w-5 h-5" /> Training Attendance</h3>
+          <Card className="bg-card border-border overflow-hidden card-glow">
+            <CardHeader className="bg-secondary/5 border-b border-border/50 pb-3 flex flex-row items-center justify-between">
+              <p className="text-[10px] font-heading text-muted-foreground uppercase italic">Current Week Registry: {currentWeekStart}</p>
+              <Badge variant="outline" className="text-[10px] border-primary/30 text-primary uppercase">This Week</Badge>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="grid grid-cols-5 divide-x divide-border">
+                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(day => {
+                  const record = attendance.filter(a => a.playerId === user.id).find(a => a.day === day);
+                  const status = record?.status || "absent";
+                  return (
+                    <div key={day} className="p-4 text-center space-y-2 bg-secondary/5">
+                      <p className="text-[10px] font-heading text-muted-foreground uppercase">{day.slice(0, 3)}</p>
+                      <div className="flex justify-center">
+                        {status === "present" ? (
+                          <div className="w-10 h-10 rounded-full bg-green-600/20 flex items-center justify-center text-green-500 shadow-[0_0_15px_rgba(22,163,74,0.1)] border border-green-500/30">
+                            <CheckCircle className="w-5 h-5" />
+                          </div>
+                        ) : status === "excused" ? (
+                          <div className="w-10 h-10 rounded-full bg-yellow-600/20 flex items-center justify-center text-yellow-500 border border-yellow-500/30">
+                            <Star className="w-5 h-5" />
+                          </div>
+                        ) : status === "no_activity" ? (
+                          <div className="w-10 h-10 rounded-full bg-muted/20 flex items-center justify-center text-muted-foreground/30 border border-border/20">
+                            <Hand className="w-5 h-5 opacity-20" />
+                          </div>
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-red-600/10 flex items-center justify-center text-red-600/30 border border-red-600/10">
+                            <XCircle className="w-5 h-5" />
+                          </div>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Export buttons */}
-        {!isFan && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
-            <div className="flex gap-3 flex-wrap">
-              <Button variant="outline" onClick={() => handleExportProfile(false)} className="font-body text-xs border-primary/30 text-primary" disabled={!showExport}>
-                <Download className="w-3 h-3 mr-1" /> Export Weekly Profile
-              </Button>
-              <Button variant="outline" onClick={() => handleExportProfile(true)} className="font-body text-xs border-primary/30 text-primary" disabled={!showDetailedExport}>
-                <Download className="w-3 h-3 mr-1" /> Export Detailed Profile
-              </Button>
-              {!showExport && <p className="text-xs text-muted-foreground font-body self-center">Available Fri-Sun</p>}
-            </div>
-          </motion.div>
-        )}
-
-        {/* Media Upload */}
-        {!isFan && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><Upload className="w-5 h-5 text-primary" /> Upload to Gallery</CardTitle></CardHeader>
-              <CardContent>
-                <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors">
-                  <Upload className="w-6 h-6 text-muted-foreground mb-1" />
-                  <span className="text-xs text-muted-foreground font-body">Click to upload photos</span>
-                  <input ref={mediaInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} />
-                </label>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Message */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
-          <Card className="bg-card border-border card-glow">
-            <CardHeader><CardTitle className="font-heading text-lg text-foreground flex items-center gap-2"><MessageCircle className="w-5 h-5 text-primary" /> Send Message</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <select value={msgRecipient} onChange={(e) => setMsgRecipient(e.target.value)}
-                className="w-full h-10 rounded-md border border-input bg-secondary px-3 text-foreground font-body">
-                <option value="">Select recipient</option>
-                {members.filter(m => m.id !== user.id).map(m => (
-                  <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
-                ))}
-              </select>
-              <Textarea placeholder="Type your message..." value={msgContent} onChange={(e) => setMsgContent(e.target.value)}
-                className="bg-secondary border-border font-body" />
-              <Button onClick={handleSendMessage} disabled={!msgRecipient || !msgContent.trim()} className="w-full font-body">
-                <Send className="w-4 h-4 mr-1" /> Send
-              </Button>
+                      <p className={`text-[9px] font-heading uppercase ${status === "present" ? "text-green-500" : status === "excused" ? "text-yellow-500" : "text-muted-foreground"}`}>
+                        {status === "no_activity" ? "Off" : status}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
             </CardContent>
           </Card>
-        </motion.div>
-
-        {/* Weekly Logs Accordion */}
-        {!isFan && weeklyLogs.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-            <Card className="bg-card border-border card-glow">
-              <CardHeader><CardTitle className="font-heading text-lg text-foreground">Weekly Activity Log</CardTitle></CardHeader>
-              <CardContent>
-                <Accordion type="single" collapsible>
-                  {weeklyLogs.slice(0, 8).map((log) => (
-                    <AccordionItem key={log.id} value={log.id}>
-                      <AccordionTrigger className="font-body text-sm text-foreground">Week of {log.weekStart}</AccordionTrigger>
-                      <AccordionContent>
-                        <div className="grid grid-cols-3 gap-3">
-                          {statFields.map(sf => (
-                            <div key={sf.key} className="text-center p-2 bg-secondary/50 rounded-lg">
-                              <p className="text-lg font-heading text-primary">{(log as any)[sf.key] || 0}</p>
-                              <p className="text-[10px] text-muted-foreground font-body">{sf.label}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
+        </section>
       </main>
+
+      {/* Inbox Dialog */}
+      <Dialog open={showInbox} onOpenChange={setShowInbox}>
+        <DialogContent className="bg-card border-border max-w-md">
+          <DialogHeader className="border-b border-border/50 pb-4">
+            <DialogTitle className="font-heading text-primary flex items-center gap-2">
+              <MessageCircle className="w-5 h-5" /> Personal Inbox
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            {myMessages.length === 0 ? (
+              <div className="text-center py-12 space-y-2 opacity-40">
+                <MessageCircle className="w-12 h-12 mx-auto" />
+                <p className="text-sm font-body italic">Your inbox is empty.</p>
+              </div>
+            ) : (
+              myMessages.map((m) => (
+                <div 
+                  key={m.id} 
+                  className={`p-4 rounded-xl border transition-all ${m.read ? "bg-secondary/10 border-border" : "bg-primary/5 border-primary/30 card-glow"}`}
+                  onClick={() => markMessageRead(m.id)}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="font-heading text-xs text-primary">{members.find(mem => mem.id === m.fromId)?.name || m.fromId}</span>
+                    <span className="text-[10px] text-muted-foreground font-body">{format(new Date(m.createdAt), "MMM d, HH:mm")}</span>
+                  </div>
+                  <p className="text-sm text-foreground font-body leading-relaxed">{m.content}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* History Dialog */}
+      <Dialog open={showHistory} onOpenChange={setShowHistory}>
+        <DialogContent className="bg-card border-border max-w-2xl">
+          <DialogHeader className="border-b border-border/50 pb-4">
+            <DialogTitle className="font-heading text-primary flex items-center gap-2">
+              <Trophy className="w-5 h-5" /> Complete Match History
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+            <Accordion type="single" collapsible className="w-full">
+              {matchPerformances.filter(p => p.playerId === user.id).map((perf) => {
+                const game = gameScores.find(g => g.id === perf.gameId);
+                if (!game) return null;
+                return (
+                  <AccordionItem key={perf.id} value={perf.id} className="border-border px-1">
+                    <AccordionTrigger className="hover:no-underline py-4">
+                      <div className="flex items-center gap-4 text-left w-full">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-heading text-xs ${game.ourScore > game.theirScore ? "bg-green-600/20 text-green-500" : "bg-red-600/20 text-red-500"}`}>
+                          {game.ourScore}-{game.theirScore}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-heading text-sm text-foreground">vs {game.opponent}</h4>
+                          <p className="text-[10px] text-muted-foreground font-body">{format(new Date(game.date), "MMMM d, yyyy")}</p>
+                        </div>
+                        <div className="pr-4 text-right">
+                          <p className="text-sm font-heading text-primary">{perf.rating.toFixed(1)}</p>
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pt-2 pb-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-secondary/10 rounded-xl p-4">
+                        {perf.goals > 0 && (
+                          <div className="text-center">
+                            <p className="text-[10px] text-muted-foreground uppercase font-heading">Goals</p>
+                            <p className="text-lg font-heading text-primary">{perf.goals}</p>
+                          </div>
+                        )}
+                        {perf.assists > 0 && (
+                          <div className="text-center">
+                            <p className="text-[10px] text-muted-foreground uppercase font-heading">Assists</p>
+                            <p className="text-lg font-heading text-primary">{perf.assists}</p>
+                          </div>
+                        )}
+                        {perf.saves > 0 && (
+                          <div className="text-center">
+                            <p className="text-[10px] text-muted-foreground uppercase font-heading">Saves</p>
+                            <p className="text-lg font-heading text-primary">{perf.saves}</p>
+                          </div>
+                        )}
+                        <div className="text-center">
+                          <p className="text-[10px] text-muted-foreground uppercase font-heading">Game Type</p>
+                          <p className="text-[10px] font-body text-foreground uppercase pt-1">{game.gameType}</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex justify-between items-center px-2">
+                        <p className="text-[10px] text-muted-foreground font-body italic">Recorded: {format(new Date(perf.created_at), "PPP")}</p>
+                        {perf.is_potm && <Badge className="bg-primary text-[10px] font-heading">Player of the Match</Badge>}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
