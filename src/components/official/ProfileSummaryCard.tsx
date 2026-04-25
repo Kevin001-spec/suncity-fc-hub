@@ -1,63 +1,53 @@
+import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Shield, MapPin } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { InboxDialog } from "./InboxDialog";
+import { useTeamData } from "@/contexts/TeamDataContext";
+import { Trophy, Mail, Settings, Edit3 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const ProfileSummaryCard = () => {
   const { profile } = useAuth();
+  const { profilePics } = useTeamData();
+
+  if (!profile) return null;
+  const pic = profilePics[profile.id];
 
   return (
-    <div className="relative group">
-      <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/50 to-blue-500/50 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200" />
-      <Card className="bg-card/80 backdrop-blur-xl border-border/50 relative overflow-hidden">
-        <CardContent className="p-6">
-          <div className="flex flex-col md:flex-row items-center gap-6">
-            <div className="relative">
-              <Avatar className="w-24 h-24 border-4 border-primary/20 p-1 bg-background">
-                <AvatarImage src={profile?.profile_pic} className="rounded-full object-cover" />
-                <AvatarFallback className="bg-primary/10 text-primary font-heading text-2xl">
-                  {profile?.name?.substring(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <div className="absolute -bottom-2 -right-2 bg-background p-1.5 rounded-full border border-border">
-                <Shield className="w-4 h-4 text-primary fill-primary/10" />
-              </div>
-            </div>
-            
-            <div className="flex-1 text-center md:text-left space-y-2">
-              <div className="flex flex-col md:flex-row items-center gap-3">
-                <h1 className="text-3xl font-heading font-bold text-foreground tracking-tight">
-                  Welcome back, {profile?.name}
-                </h1>
-                <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 px-3 py-1 animate-pulse font-heading text-[10px] uppercase tracking-widest">
-                  {profile?.role} Access
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+      <Card className="bg-card border-border card-glow overflow-hidden">
+        <div className="h-24 bg-gradient-to-r from-primary/20 via-primary/5 to-transparent w-full" />
+        <CardContent className="relative pt-0 pb-8 px-6 sm:px-8">
+          <div className="flex flex-col md:flex-row items-center md:items-end gap-6 -mt-12">
+            <Avatar className="w-32 h-32 border-4 border-card shadow-2xl">
+              {pic && <AvatarImage src={pic} className="aspect-square object-cover" />}
+              <AvatarFallback className="bg-secondary text-primary font-heading text-4xl">
+                {profile.name.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 text-center md:text-left pb-2">
+              <div className="flex flex-col md:flex-row md:items-center gap-3">
+                <h1 className="text-3xl font-heading font-bold text-foreground">{profile.name}</h1>
+                <Badge className="bg-primary text-primary-foreground font-body uppercase tracking-wider text-[10px] px-3 py-1 w-fit mx-auto md:mx-0">
+                  {profile.role}
                 </Badge>
               </div>
-              
-              <div className="flex flex-wrap justify-center md:justify-start gap-4 text-sm text-muted-foreground font-body">
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-primary/60" />
-                  <span>Joined {new Date().getFullYear()}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Shield className="w-4 h-4 text-primary/60" />
-                  <span className="capitalize">{profile?.role} Authority</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-primary/60" />
-                  <span>Nairobi, Kenya</span>
-                </div>
-              </div>
+              <p className="text-muted-foreground font-body mt-2 flex items-center justify-center md:justify-start gap-2">
+                <Trophy className="w-4 h-4 text-primary" /> SunCity FC Official Management
+              </p>
             </div>
-
-            <div className="flex flex-col gap-2 w-full md:w-auto">
-              <InboxDialog />
+            <div className="flex gap-2 pb-2">
+              <Button size="sm" variant="outline" className="font-heading text-xs border-primary/20 hover:bg-primary/5">
+                <Edit3 className="w-3.5 h-3.5 mr-2" /> Edit Profile
+              </Button>
+              <Button size="icon" variant="outline" className="h-9 w-9 border-primary/20">
+                <Mail className="w-4 h-4 text-primary" />
+              </Button>
             </div>
           </div>
         </CardContent>
       </Card>
-    </div>
+    </motion.div>
   );
 };
