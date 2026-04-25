@@ -1,6 +1,5 @@
 import React from "react";
 import Navbar from "@/components/Navbar";
-import WhatsAppFAB from "@/components/WhatsAppFAB";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -13,7 +12,6 @@ export const Layout = ({ children }: LayoutProps) => {
       <main className="flex-1">
         {children}
       </main>
-      <WhatsAppFAB />
     </div>
   );
 };
