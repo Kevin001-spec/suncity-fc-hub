@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { GeneralErrorBoundary } from "@/components/GeneralErrorBoundary";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 // Modularized Components
 import { ProfileSummaryCard } from "@/components/official/ProfileSummaryCard";
@@ -23,14 +26,15 @@ import { LeagueStandings } from "@/components/official/LeagueStandings";
 import { TrainingRecorder } from "@/components/official/TrainingRecorder";
 import { GalleryManagement } from "@/components/official/GalleryManagement";
 import { JerseyWashing } from "@/components/official/JerseyWashing";
+import { InboxDialog } from "@/components/official/InboxDialog";
 
 const OfficialProfile = () => {
   const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
 
-  const isManager = profile?.role === "manager" || profile?.id === "fadhir-id";
-  const isFadhir = profile?.id === "fadhir-id" || profile?.role === "manager";
-  const isVictor = profile?.id === "victor-id" || profile?.role === "manager";
+  const isManager = profile?.role === "manager" || profile?.id === "SCF-002";
+  const isFadhir = profile?.id === "SCF-002" || profile?.role === "manager";
+  const isVictor = profile?.id === "SCF-006" || profile?.role === "manager";
 
   return (
     <Layout>
