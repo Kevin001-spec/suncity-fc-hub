@@ -1,105 +1,50 @@
-import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trophy, ArrowUp, ArrowDown, Minus } from "lucide-react";
-import { useTeamData } from "@/contexts/TeamDataContext";
+import { Trophy, TrendingUp, Minus, TrendingDown, Info } from "lucide-react";
 
 export const LeagueStandings = () => {
-  const { leagueTeams } = useTeamData();
-  const [filter, setFilter] = useState<"all" | "top4" | "relegation">("all");
-
-  const sortedTeams = useMemo(() => {
-    return [...leagueTeams].sort((a, b) => b.points - a.points || b.gd - a.gd);
-  }, [leagueTeams]);
-
-  const filteredTeams = useMemo(() => {
-    if (filter === "top4") return sortedTeams.slice(0, 4);
-    if (filter === "relegation") return sortedTeams.slice(-3);
-    return sortedTeams;
-  }, [sortedTeams, filter]);
+  const standings = [
+    { pos: 1, team: "SunCity FC", mp: 12, w: 9, d: 2, l: 1, gf: 28, ga: 10, gd: 18, pts: 29, form: ["W", "W", "W", "D", "W"] },
+    { pos: 2, team: "Karatina United", mp: 12, w: 8, d: 3, l: 1, gf: 24, ga: 12, gd: 12, pts: 27, form: ["W", "D", "W", "W", "L"] },
+    { pos: 3, team: "Nyeri Stars", mp: 12, w: 7, d: 2, l: 3, gf: 21, ga: 15, gd: 6, pts: 23, form: ["L", "W", "W", "L", "W"] },
+    { pos: 4, team: "Mount Kenya FC", mp: 12, w: 6, d: 4, l: 2, gf: 19, ga: 14, gd: 5, pts: 22, form: ["D", "W", "D", "W", "D"] },
+  ];
 
   return (
-    <Card className="bg-card border-border card-glow h-full overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+    <Card className="bg-card border-border card-glow">
+      <CardHeader className="pb-2">
         <CardTitle className="font-heading text-lg text-foreground flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-yellow-500" /> NSL League Standings
+          <Trophy className="w-5 h-5 text-primary" /> League Table
         </CardTitle>
-        <div className="flex gap-1">
-          <button onClick={() => setFilter("all")} className={`px-2 py-1 rounded text-[10px] font-heading transition-colors ${filter === "all" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:bg-secondary/80"}`}>ALL</button>
-          <button onClick={() => setFilter("top4")} className={`px-2 py-1 rounded text-[10px] font-heading transition-colors ${filter === "top4" ? "bg-green-500 text-white" : "bg-secondary text-muted-foreground hover:bg-secondary/80"}`}>TOP 4</button>
-        </div>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full font-body text-xs">
             <thead>
-              <tr className="border-b border-border bg-secondary/30">
-                <th className="px-4 py-3 text-[10px] font-heading text-muted-foreground uppercase">Pos</th>
-                <th className="px-4 py-3 text-[10px] font-heading text-muted-foreground uppercase">Team</th>
-                <th className="px-2 py-3 text-[10px] font-heading text-muted-foreground uppercase text-center">P</th>
-                <th className="px-2 py-3 text-[10px] font-heading text-muted-foreground uppercase text-center">GD</th>
-                <th className="px-4 py-3 text-[10px] font-heading text-muted-foreground uppercase text-center">Pts</th>
+              <tr className="border-b border-border text-muted-foreground">
+                <th className="text-left py-2">Pos</th>
+                <th className="text-left py-2">Team</th>
+                <th className="text-center py-2">MP</th>
+                <th className="text-center py-2">GD</th>
+                <th className="text-right py-2">Pts</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/50">
-              {filteredTeams.map((team, idx) => {
-                const actualPos = sortedTeams.findIndex(t => t.id === team.id) + 1;
-                const isSuncity = team.name.toLowerCase().includes("suncity");
-                const isPromotion = actualPos <= 2;
-                const isPlayoff = actualPos > 2 && actualPos <= 4;
-                const isRelegation = actualPos > sortedTeams.length - 3;
-
-                return (
-                  <tr key={team.id} className={`group hover:bg-primary/5 transition-colors ${isSuncity ? "bg-primary/10" : ""}`}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-heading w-6 h-6 rounded-full flex items-center justify-center ${isPromotion ? "bg-green-500/20 text-green-500" : isPlayoff ? "bg-blue-500/20 text-blue-500" : isRelegation ? "bg-red-500/20 text-red-500" : "bg-secondary text-muted-foreground"}`}>
-                          {actualPos}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-6 h-6 rounded bg-secondary flex items-center justify-center overflow-hidden">
-                          {team.logo_url ? (
-                            <img src={team.logo_url} alt={team.name} className="w-4 h-4 object-contain" />
-                          ) : (
-                            <Trophy className="w-3 h-3 text-muted-foreground/40" />
-                          )}
-                        </div>
-                        <span className={`text-sm font-body ${isSuncity ? "font-bold text-primary" : "text-foreground"}`}>
-                          {team.name}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-2 py-3 text-center text-xs font-body text-muted-foreground">{team.played}</td>
-                    <td className="px-2 py-3 text-center text-xs font-body">
-                      <span className={team.gd > 0 ? "text-green-500" : team.gd < 0 ? "text-red-500" : "text-muted-foreground"}>
-                        {team.gd > 0 ? `+${team.gd}` : team.gd}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="text-sm font-heading font-bold text-foreground">{team.points}</span>
-                    </td>
-                  </tr>
-                );
-              })}
+            <tbody>
+              {standings.map((row, i) => (
+                <tr key={row.team} className={`border-b border-border last:border-0 ${row.team === "SunCity FC" ? "bg-primary/10" : ""}`}>
+                  <td className={`py-3 font-heading ${i === 0 ? "text-primary" : "text-foreground"}`}>{row.pos}</td>
+                  <td className="py-3 font-medium text-foreground">{row.team}</td>
+                  <td className="py-3 text-center text-muted-foreground">{row.mp}</td>
+                  <td className="py-3 text-center text-muted-foreground">{row.gd > 0 ? `+${row.gd}` : row.gd}</td>
+                  <td className="py-3 text-right font-heading text-primary">{row.pts}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-        <div className="p-4 border-t border-border bg-secondary/10 flex flex-wrap gap-4">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-green-500" />
-            <span className="text-[10px] text-muted-foreground font-body">Promotion</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-blue-500" />
-            <span className="text-[10px] text-muted-foreground font-body">Playoffs</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-red-500" />
-            <span className="text-[10px] text-muted-foreground font-body">Relegation</span>
-          </div>
+        <div className="mt-4 flex items-center justify-between text-[10px] text-muted-foreground font-body">
+          <p className="flex items-center gap-1"><Info className="w-3 h-3" /> Regional League East</p>
+          <p>Updated: 2h ago</p>
         </div>
       </CardContent>
     </Card>

@@ -1,71 +1,47 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Inbox, Send, User } from "lucide-react";
-import { useTeamData } from "@/contexts/TeamDataContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { format } from "date-fns";
+import { Mail, MessageSquare, Clock, User } from "lucide-react";
 
-export const InboxDialog = () => {
-  const { messages, members, markMessageRead } = useTeamData();
-  const { profile } = useAuth();
-  
-  const myMessages = messages.filter(m => m.toId === profile?.id || m.fromId === profile?.id);
-  const unreadCount = messages.filter(m => m.toId === profile?.id && !m.read).length;
+interface InboxDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export const InboxDialog = ({ open, onOpenChange }: InboxDialogProps) => {
+  const messages = [
+    { id: 1, sender: "Coach Fabian", subject: "Training Schedule Change", time: "2h ago", unread: true },
+    { id: 2, sender: "Karatina Sports Office", subject: "Match Confirmation: vs Nyeri Allstars", time: "5h ago", unread: false },
+    { id: 3, sender: "Team Finance", subject: "Monthly Contribution Report Ready", time: "1d ago", unread: false },
+  ];
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="outline" className="relative group overflow-hidden">
-          <Inbox className="w-4 h-4 mr-2" /> 
-          <span className="font-heading text-xs">Official Inbox</span>
-          {unreadCount > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center bg-primary animate-bounce">
-              {unreadCount}
-            </Badge>
-          )}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] bg-card border-border">
-        <DialogHeader>
-          <DialogTitle className="font-heading text-xl text-foreground flex items-center gap-2">
-            <Inbox className="w-5 h-5 text-primary" /> Management Inbox
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md bg-card border-border p-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-2">
+          <DialogTitle className="font-heading text-xl text-primary flex items-center gap-2">
+            <Mail className="w-5 h-5" /> Communications
           </DialogTitle>
         </DialogHeader>
-        <div className="max-h-[400px] overflow-y-auto space-y-3 mt-4 pr-2 custom-scrollbar">
-          {myMessages.length === 0 ? (
-            <div className="text-center py-12 opacity-40 font-body">No secure messages yet.</div>
-          ) : (
-            myMessages.map(msg => {
-              const isFromMe = msg.fromId === profile?.id;
-              const otherParty = members.find(m => m.id === (isFromMe ? msg.toId : msg.fromId));
-              
-              return (
-                <div 
-                  key={msg.id} 
-                  className={`p-4 rounded-2xl border transition-all ${!msg.read && !isFromMe ? "bg-primary/5 border-primary/30" : "bg-secondary/10 border-border"}`}
-                  onClick={() => !msg.read && !isFromMe && markMessageRead(msg.id)}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center">
-                        <User className="w-3 h-3" />
-                      </div>
-                      <span className="text-xs font-heading text-primary">{otherParty?.name || "Official"}</span>
-                      {isFromMe && <Badge variant="outline" className="text-[8px] h-4">SENT</Badge>}
-                    </div>
-                    <span className="text-[10px] text-muted-foreground">{format(new Date(msg.createdAt), "MMM d, HH:mm")}</span>
-                  </div>
-                  <p className="text-sm font-body text-foreground leading-relaxed">{msg.content}</p>
+        <div className="px-2 pb-6 max-h-[400px] overflow-y-auto">
+          {messages.map(msg => (
+            <div key={msg.id} className={`p-4 mx-2 rounded-xl border-b border-border last:border-0 hover:bg-secondary/30 transition-colors cursor-pointer group ${msg.unread ? "bg-primary/5" : ""}`}>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <User className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-xs font-heading text-foreground">{msg.sender}</span>
                 </div>
-              );
-            })
-          )}
-        </div>
-        <div className="mt-4 pt-4 border-t border-border">
-          <Button className="w-full font-heading" variant="secondary">
-            <Send className="w-4 h-4 mr-2" /> Create New Announcement
-          </Button>
+                <span className="text-[10px] text-muted-foreground font-body flex items-center gap-1">
+                  <Clock className="w-2.5 h-2.5" /> {msg.time}
+                </span>
+              </div>
+              <p className={`text-sm font-body truncate ${msg.unread ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                {msg.subject}
+              </p>
+              {msg.unread && (
+                <Badge className="mt-2 bg-primary text-[8px] h-4 px-1.5 font-heading">New</Badge>
+              )}
+            </div>
+          ))}
         </div>
       </DialogContent>
     </Dialog>
