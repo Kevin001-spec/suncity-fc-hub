@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeamData } from "@/contexts/TeamDataContext";
-import Navbar from "@/components/Navbar";
+import { Layout } from "@/components/layout/Layout";
 import {
   Trophy, Calendar, BookOpen, Download,
   Flame, Shield, Star, Heart, Swords,
@@ -131,12 +131,11 @@ const Dashboard = () => {
   }, [calendarEvents]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <Layout>
       <Helmet>
         <title>SunCity FC Dashboard | Team Updates & Results</title>
         <meta name="description" content="SunCity FC dashboard — view recent results, upcoming events, team gallery and our story. Based at Karatina University, Nyeri County, Kenya." />
       </Helmet>
-      <Navbar />
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-8">
         <motion.section {...fadeUp} className="text-center py-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white border-2 border-primary/40 mb-4 overflow-hidden shadow-md">
@@ -215,7 +214,7 @@ const Dashboard = () => {
           </Card>
         </motion.div>
       </main>
-    </div>
+    </Layout>
   );
 };
 
