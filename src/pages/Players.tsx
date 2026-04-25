@@ -1,151 +1,74 @@
-import { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Helmet } from "react-helmet-async";
-import { useAuth } from "@/contexts/AuthContext";
+import { Layout } from "@/components/layout/Layout";
 import { useTeamData } from "@/contexts/TeamDataContext";
-import { Navigate } from "react-router-dom";
-import Navbar from "@/components/Navbar";
+import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { type TeamMember, getFullPositionName, getPositionGroup } from "@/data/team-data";
-import { getStatsForPosition } from "@/lib/position-stats";
-import LottieCarousel from "@/components/LottieCarousel";
-import playersAnimation from "@/assets/animations/playersanimation.json";
-import statsnplayerspagec1 from "@/assets/animations/statsnplayerspagec1.json";
-import statsnplayerspagec2 from "@/assets/animations/statsnplayerspagec2.json";
-
-const playersCarousel = [playersAnimation, statsnplayerspagec1, statsnplayerspagec2];
-
-const positionGroupOrder: Record<string, number> = { "GK": 1, "DEF": 2, "MID": 3, "ATT": 4 };
-const positionGroupLabels: Record<string, string> = { "GK": "Goalkeepers", "DEF": "Defenders", "MID": "Midfielders", "ATT": "Attackers" };
-
-const PlayerCard = ({ member, profilePic, onClose }: { member: TeamMember; profilePic?: string; onClose: () => void }) => {
-  const statFields = getStatsForPosition(member.position);
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="bg-card border border-border rounded-xl p-6 w-full max-w-sm card-glow" onClick={(e) => e.stopPropagation()}>
-        <div className="text-center">
-          <Avatar className="w-20 h-20 mx-auto mb-4 border-2 border-primary">
-            {profilePic && <AvatarImage src={profilePic} className="aspect-square object-cover object-center" />}
-            <AvatarFallback className="bg-secondary text-primary font-heading text-xl">{member.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <h3 className="font-heading text-lg text-foreground">{member.name}</h3>
-          {member.role === "captain" && <Badge className="bg-primary text-primary-foreground font-body mt-1">Field Captain</Badge>}
-           {member.position && <p className="text-muted-foreground font-body text-sm mt-1">{getFullPositionName(member.position)}</p>}
-          <div className={`grid gap-3 mt-4 pt-4 border-t border-border`} style={{ gridTemplateColumns: `repeat(${Math.min(statFields.length, 5)}, 1fr)` }}>
-            {statFields.map(sf => (
-              <div key={sf.key}>
-                <p className="text-xl font-heading text-primary">{(member as any)[sf.key] || 0}</p>
-                <p className="text-xs text-muted-foreground font-body">{sf.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-};
+import { Helmet } from "react-helmet-async";
+import { getFullPositionName } from "@/data/team-data";
+import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
 const Players = () => {
-  const { user } = useAuth();
   const { members, profilePics } = useTeamData();
-  const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
+  const navigate = useNavigate();
 
-  const playerMembers = members.filter((m) => m.role === "player" || m.role === "captain");
-
-  const sortedPlayers = useMemo(() => {
-    return [...playerMembers].sort((a, b) => {
-      if (a.role === "captain" && b.role !== "captain") return -1;
-      if (a.role !== "captain" && b.role === "captain") return 1;
-      const aGroup = positionGroupOrder[getPositionGroup(a.position)] || 5;
-      const bGroup = positionGroupOrder[getPositionGroup(b.position)] || 5;
-      return aGroup - bGroup;
-    });
-  }, [playerMembers]);
-
-  const sections = useMemo(() => {
-    const groups: { label: string; players: typeof sortedPlayers }[] = [];
-    const captains = sortedPlayers.filter(m => m.role === "captain");
-    if (captains.length > 0) groups.push({ label: "Field Captains", players: captains });
-    const nonCaptains = sortedPlayers.filter(m => m.role !== "captain");
-    for (const pg of ["GK", "DEF", "MID", "ATT"]) {
-      const inGroup = nonCaptains.filter(m => getPositionGroup(m.position) === pg);
-      if (inGroup.length > 0) groups.push({ label: positionGroupLabels[pg], players: inGroup });
-    }
-    return groups;
-  }, [sortedPlayers]);
-
-  // Page is now public — no auth redirect
+  const playersOnly = members.filter((m) => 
+    m.role === "player" || m.role === "captain" || m.role === "finance"
+  );
 
   return (
-    <div className="min-h-screen bg-background">
+    <Layout>
       <Helmet>
-        <title>SunCity FC Squad | Player Profiles & Stats</title>
-        <meta name="description" content="Meet the SunCity FC squad based at Karatina University — view all player profiles, positions, and performance stats." />
+        <title>SunCity FC Squad | Meet the Players</title>
       </Helmet>
-      <Navbar />
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        <LottieCarousel animations={playersCarousel} className="h-44 mb-2" />
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-          <h1 className="font-heading text-2xl gold-text">Players</h1>
-          <p className="text-muted-foreground text-sm font-body mt-1">{playerMembers.length} squad members</p>
-        </motion.div>
+      <div className="max-w-7xl mx-auto py-8 px-4 space-y-8">
+        <div className="text-center">
+          <h1 className="text-3xl font-heading font-bold gold-text">Our Squad</h1>
+          <p className="text-muted-foreground font-body mt-2">The talent behind SunCity FC's success</p>
+        </div>
 
-        {sections.map((section, si) => (
-          <div key={section.label}>
-            <motion.h3 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: si * 0.05 }}
-              className="font-heading text-xs text-primary tracking-wider uppercase mb-3 mt-4">{section.label}</motion.h3>
-            <div className="space-y-3">
-              {section.players.map((member, i) => (
-                <motion.button
-                  key={member.id}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: (si * 0.05) + (i * 0.02) }}
-                  onClick={() => setSelectedMember(member)}
-                  className="w-full flex items-center justify-between p-4 rounded-xl player-card-glow bg-card hover:bg-secondary/50 transition-all text-left"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-heading text-sm text-foreground font-bold">{member.name}</p>
-                    <p className="text-xs text-muted-foreground font-body">
-                      {member.role === "captain" ? "Field Captain • " : ""}
-                      {getFullPositionName(member.position)}
-                    </p>
-                  </div>
-                  <Avatar className="w-12 h-12 border border-primary/20 ml-3">
-                    {profilePics[member.id] && <AvatarImage src={profilePics[member.id]} className="aspect-square object-cover object-center" />}
-                    <AvatarFallback className="bg-secondary text-primary font-heading text-sm">{member.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                </motion.button>
-              ))}
-            </div>
-            {/* Category divider animation — between sections */}
-            {si < sections.length - 1 && (
-              <LottieCarousel animations={playersCarousel} className="h-16 w-[150px] md:w-[250px] mx-auto my-3" />
-            )}
-          </div>
-        ))}
-
-        {/* Join Team WhatsApp — logged-in only */}
-        <motion.a
-          href="https://chat.whatsapp.com/FF9oZ8H8oXPA1jny5Kacs2"
-          target="_blank" rel="noopener noreferrer"
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          className="block mt-6 p-4 rounded-xl border-2 text-center transition-all hover:brightness-110"
-          style={{ borderColor: "#25D366", backgroundColor: "rgba(37,211,102,0.08)" }}
-        >
-          <p className="font-heading text-sm" style={{ color: "#25D366" }}>💬 Join Team WhatsApp Group</p>
-          <p className="text-xs text-muted-foreground font-body mt-1">Stay connected with the squad</p>
-        </motion.a>
-      </main>
-
-      <AnimatePresence>
-        {selectedMember && <PlayerCard member={selectedMember} profilePic={profilePics[selectedMember.id]} onClose={() => setSelectedMember(null)} />}
-      </AnimatePresence>
-    </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {playersOnly.map((player, index) => {
+            const pic = profilePics[player.id];
+            return (
+              <motion.div
+                key={player.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                onClick={() => navigate(`/player/${player.id}`)}
+                className="cursor-pointer"
+              >
+                <Card className="bg-card border-border hover:border-primary/40 transition-all card-glow h-full overflow-hidden group">
+                  <div className="h-24 bg-primary/10 w-full group-hover:bg-primary/20 transition-colors" />
+                  <CardContent className="relative pt-0 pb-6 flex flex-col items-center">
+                    <Avatar className="w-24 h-24 border-4 border-card -mt-12 shadow-lg group-hover:scale-105 transition-transform">
+                      {pic && <AvatarImage src={pic} className="aspect-square object-cover object-center" />}
+                      <AvatarFallback className="bg-secondary text-primary font-heading text-2xl">
+                        {player.name.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="mt-4 text-center">
+                      <h3 className="font-heading font-bold text-foreground group-hover:text-primary transition-colors">
+                        {player.name}
+                      </h3>
+                      <p className="text-xs text-muted-foreground font-body mt-1">
+                        {getFullPositionName(player.position)}
+                      </p>
+                      {player.squadNumber && (
+                        <Badge className="mt-3 bg-primary/10 text-primary border-primary/20 font-heading">
+                          #{player.squadNumber}
+                        </Badge>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+    </Layout>
   );
 };
 
